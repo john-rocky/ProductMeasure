@@ -44,7 +44,6 @@ class MeasurementCalculator {
     private let segmentationService = InstanceSegmentationService()
     private let pointCloudGenerator = PointCloudGenerator()
     private let boundingBoxEstimator = BoundingBoxEstimator()
-    private let depthProcessor = DepthProcessor()
 
     // MARK: - Public Methods
 
@@ -66,103 +65,121 @@ class MeasurementCalculator {
         print("[Calculator] Starting measurement")
         print("[Calculator] Tap point: \(tapPoint), View size: \(viewSize)")
 
+        // Convert tap point to normalized image coordinates (0-1)
+        // Note: ARKit camera image is in landscape orientation
         let imageSize = CGSize(
             width: CVPixelBufferGetWidth(frame.capturedImage),
             height: CVPixelBufferGetHeight(frame.capturedImage)
         )
         print("[Calculator] Image size: \(imageSize)")
 
-        var pointCloud: PointCloudGenerator.PointCloud
-        var debugMaskImage: UIImage? = nil
+        // Convert screen coordinates to image coordinates
+        // The AR view displays the camera in portrait, but the pixel buffer is landscape
+        let normalizedTap = convertScreenToImageCoordinates(
+            screenPoint: tapPoint,
+            viewSize: viewSize,
+            imageSize: imageSize
+        )
+        print("[Calculator] Normalized tap point: \(normalizedTap)")
 
-        // PRIMARY APPROACH: Use depth-based region growing from raycast hit position
-        // This is more reliable than Vision segmentation because it directly uses the tap location
-        if let hitPosition = raycastHitPosition,
-           let depthCoords = depthProcessor.worldPositionToDepthMapCoords(worldPosition: hitPosition, frame: frame) {
+        // 1. Perform instance segmentation
+        guard let segmentation = try await segmentationService.segmentInstance(
+            in: frame.capturedImage,
+            at: normalizedTap
+        ) else {
+            print("[Calculator] Segmentation failed - no instance found")
+            return nil
+        }
+        print("[Calculator] Segmentation successful, mask size: \(segmentation.maskSize)")
 
-            print("[Calculator] Using depth-based region growing from raycast hit")
-            print("[Calculator] Raycast hit: \(hitPosition) -> depth coords: \(depthCoords)")
+        // 2. Get masked pixels
+        let maskedPixels = segmentationService.getMaskedPixels(
+            mask: segmentation.mask,
+            imageSize: imageSize
+        )
 
-            // Get region using flood-fill from tap point
-            let depthData = depthProcessor.regionGrowingFromTapPoint(
-                frame: frame,
-                tapPointInDepthMap: depthCoords,
-                maxDepthDifference: 0.05  // 5cm threshold
-            )
+        guard !maskedPixels.isEmpty else {
+            print("[Calculator] No masked pixels found")
+            return nil
+        }
+        print("[Calculator] Found \(maskedPixels.count) masked pixels before depth filtering")
 
-            guard depthData.count >= 50 else {
-                print("[Calculator] Region growing found too few pixels: \(depthData.count)")
-                // Fall back to Vision segmentation
-                return try await measureWithVisionSegmentation(
-                    frame: frame,
-                    tapPoint: tapPoint,
-                    viewSize: viewSize,
-                    mode: mode,
-                    raycastHitPosition: hitPosition
-                )
-            }
+        // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
+        let filteredPixels = filterMaskedPixelsByDepth(
+            maskedPixels: maskedPixels,
+            frame: frame,
+            tapPoint: normalizedTap,
+            imageSize: imageSize
+        )
 
-            // Convert depth data to image pixels for point cloud generation
-            guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
-                return nil
-            }
-            let depthWidth = CVPixelBufferGetWidth(depthMap)
-            let depthHeight = CVPixelBufferGetHeight(depthMap)
+        guard !filteredPixels.isEmpty else {
+            print("[Calculator] No pixels after depth filtering")
+            return nil
+        }
+        print("[Calculator] Found \(filteredPixels.count) masked pixels after depth filtering")
 
-            let scaleX = imageSize.width / CGFloat(depthWidth)
-            let scaleY = imageSize.height / CGFloat(depthHeight)
+        // Create debug mask image (memory-optimized version)
+        let debugMaskImage = DebugVisualization.visualizeMask(
+            mask: segmentation.mask,
+            cameraImage: frame.capturedImage,
+            tapPoint: normalizedTap
+        )
 
-            let maskedPixels = depthData.map { data in
-                (x: Int(CGFloat(data.pixelX) * scaleX), y: Int(CGFloat(data.pixelY) * scaleY))
-            }
+        // Skip depth image to save memory
+        let debugDepthImage: UIImage? = nil
 
-            print("[Calculator] Converted \(maskedPixels.count) depth pixels to image pixels")
+        // 4. Generate point cloud from filtered pixels
+        var pointCloud = pointCloudGenerator.generatePointCloud(
+            frame: frame,
+            maskedPixels: filteredPixels,
+            imageSize: imageSize
+        )
 
-            // Generate point cloud
-            pointCloud = pointCloudGenerator.generatePointCloud(
-                frame: frame,
-                maskedPixels: maskedPixels,
-                imageSize: imageSize
-            )
+        guard !pointCloud.isEmpty else {
+            print("[Calculator] Point cloud is empty")
+            return nil
+        }
+        print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
 
-            guard !pointCloud.isEmpty else {
-                print("[Calculator] Point cloud from region growing is empty")
-                return nil
-            }
-            print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
-
-            // Additional 3D filtering around hit position
+        // 5. Filter point cloud by 3D distance from raycast hit position
+        // This is more reliable than 2D filtering because raycast handles coordinate transforms internally
+        if let hitPosition = raycastHitPosition {
+            // Use adaptive radius based on distance - closer objects get tighter filtering
             let distanceToCamera = simd_length(hitPosition - SIMD3<Float>(
                 frame.camera.transform.columns.3.x,
                 frame.camera.transform.columns.3.y,
                 frame.camera.transform.columns.3.z
             ))
-            let adaptiveRadius = min(max(distanceToCamera * 0.25, 0.15), 0.5)
+            // Adaptive radius: 20% of distance, clamped between 0.15m and 0.4m
+            let adaptiveRadius = min(max(distanceToCamera * 0.20, 0.15), 0.4)
+            print("[Calculator] Distance to camera: \(distanceToCamera)m, using radius: \(adaptiveRadius)m")
 
             var filteredPoints = filterPointsByProximity(
                 points: pointCloud.points,
                 center: hitPosition,
                 maxDistance: adaptiveRadius
             )
+            print("[Calculator] After 3D proximity filter: \(filteredPoints.count) points (from \(pointCloud.points.count))")
 
-            if filteredPoints.count >= 30 {
+            // If we still have too many points, use clustering to find the main object
+            if filteredPoints.count >= 50 {
                 filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                print("[Calculator] After clustering: \(filteredPoints.count) points")
+
+                // Create new point cloud with filtered points
                 pointCloud = PointCloudGenerator.PointCloud(
                     points: filteredPoints,
                     quality: pointCloud.quality
                 )
+            } else if filteredPoints.count >= 20 {
+                // Fewer points but still usable
+                pointCloud = PointCloudGenerator.PointCloud(
+                    points: filteredPoints,
+                    quality: pointCloud.quality
+                )
+            } else {
+                print("[Calculator] Too few points after 3D filter, using original point cloud")
             }
-
-        } else {
-            // FALLBACK: Use Vision segmentation if no raycast hit
-            print("[Calculator] No raycast hit, falling back to Vision segmentation")
-            return try await measureWithVisionSegmentation(
-                frame: frame,
-                tapPoint: tapPoint,
-                viewSize: viewSize,
-                mode: mode,
-                raycastHitPosition: nil
-            )
         }
 
         // 6. Estimate bounding box
@@ -198,118 +215,7 @@ class MeasurementCalculator {
 
         // Attach debug info (images only, not point cloud to save memory)
         result.debugMaskImage = debugMaskImage
-        result.debugDepthImage = nil
-
-        return result
-    }
-
-    /// Fallback measurement using Vision segmentation
-    private func measureWithVisionSegmentation(
-        frame: ARFrame,
-        tapPoint: CGPoint,
-        viewSize: CGSize,
-        mode: MeasurementMode,
-        raycastHitPosition: SIMD3<Float>?
-    ) async throws -> MeasurementResult? {
-        print("[Calculator] Using Vision segmentation fallback")
-
-        let imageSize = CGSize(
-            width: CVPixelBufferGetWidth(frame.capturedImage),
-            height: CVPixelBufferGetHeight(frame.capturedImage)
-        )
-
-        let normalizedTap = convertScreenToImageCoordinates(
-            screenPoint: tapPoint,
-            viewSize: viewSize,
-            imageSize: imageSize
-        )
-
-        guard let segmentation = try await segmentationService.segmentInstance(
-            in: frame.capturedImage,
-            at: normalizedTap
-        ) else {
-            print("[Calculator] Vision segmentation failed")
-            return nil
-        }
-
-        let maskedPixels = segmentationService.getMaskedPixels(
-            mask: segmentation.mask,
-            imageSize: imageSize
-        )
-
-        guard !maskedPixels.isEmpty else {
-            print("[Calculator] No masked pixels")
-            return nil
-        }
-
-        let filteredPixels = filterMaskedPixelsByDepth(
-            maskedPixels: maskedPixels,
-            frame: frame,
-            tapPoint: normalizedTap,
-            imageSize: imageSize
-        )
-
-        guard !filteredPixels.isEmpty else {
-            return nil
-        }
-
-        let debugMaskImage = DebugVisualization.visualizeMask(
-            mask: segmentation.mask,
-            cameraImage: frame.capturedImage,
-            tapPoint: normalizedTap
-        )
-
-        var pointCloud = pointCloudGenerator.generatePointCloud(
-            frame: frame,
-            maskedPixels: filteredPixels,
-            imageSize: imageSize
-        )
-
-        guard !pointCloud.isEmpty else {
-            return nil
-        }
-
-        // Apply 3D filtering if we have raycast hit
-        if let hitPosition = raycastHitPosition {
-            let distanceToCamera = simd_length(hitPosition - SIMD3<Float>(
-                frame.camera.transform.columns.3.x,
-                frame.camera.transform.columns.3.y,
-                frame.camera.transform.columns.3.z
-            ))
-            let adaptiveRadius = min(max(distanceToCamera * 0.25, 0.15), 0.5)
-
-            var filteredPoints = filterPointsByProximity(
-                points: pointCloud.points,
-                center: hitPosition,
-                maxDistance: adaptiveRadius
-            )
-
-            if filteredPoints.count >= 30 {
-                filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
-                pointCloud = PointCloudGenerator.PointCloud(
-                    points: filteredPoints,
-                    quality: pointCloud.quality
-                )
-            }
-        }
-
-        guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
-            points: pointCloud.points,
-            mode: mode
-        ) else {
-            return nil
-        }
-
-        let sorted = boundingBox.sortedDimensions
-        var result = MeasurementResult(
-            boundingBox: boundingBox,
-            length: sorted[0].dimension,
-            width: sorted[1].dimension,
-            height: sorted[2].dimension,
-            volume: boundingBox.volume,
-            quality: pointCloud.quality
-        )
-        result.debugMaskImage = debugMaskImage
+        result.debugDepthImage = debugDepthImage
 
         return result
     }
