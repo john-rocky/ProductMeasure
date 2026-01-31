@@ -65,15 +65,13 @@ class InstanceSegmentationService {
             return nil
         }
 
-        // Use the first detected instance - depth filtering will isolate the tapped object
-        let selectedInstance = allInstances.first!
-        print("[Segmentation] Using instance: \(selectedInstance) (will filter by depth later)")
+        // Use ALL instances - the 3D filtering will isolate the correct one based on raycast hit
+        print("[Segmentation] Using ALL \(allInstances.count) instances (3D filtering will select correct one)")
 
-        // Generate the mask for the selected instance
-        // Use the same handler with .right orientation
+        // Generate combined mask for all instances
         do {
             let instanceMask = try observation.generateMaskedImage(
-                ofInstances: IndexSet(integer: selectedInstance),
+                ofInstances: IndexSet(allInstances),
                 from: handler,
                 croppedToInstancesExtent: false
             )

@@ -142,43 +142,57 @@ class MeasurementCalculator {
         print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
 
         // 5. Filter point cloud by 3D distance from raycast hit position
-        // This is more reliable than 2D filtering because raycast handles coordinate transforms internally
+        // This is CRITICAL - if no points are near the tap, the mask is wrong
         if let hitPosition = raycastHitPosition {
-            // Use adaptive radius based on distance - closer objects get tighter filtering
-            let distanceToCamera = simd_length(hitPosition - SIMD3<Float>(
-                frame.camera.transform.columns.3.x,
-                frame.camera.transform.columns.3.y,
-                frame.camera.transform.columns.3.z
-            ))
-            // Adaptive radius: 20% of distance, clamped between 0.15m and 0.4m
-            let adaptiveRadius = min(max(distanceToCamera * 0.20, 0.15), 0.4)
-            print("[Calculator] Distance to camera: \(distanceToCamera)m, using radius: \(adaptiveRadius)m")
+            // First check: is the raycast hit anywhere near the point cloud?
+            let nearestDistance = pointCloud.points.map { simd_distance($0, hitPosition) }.min() ?? Float.infinity
+            print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
+
+            // If the nearest point is more than 30cm away, the mask is completely wrong
+            if nearestDistance > 0.3 {
+                print("[Calculator] ERROR: Mask does not contain tapped location. Nearest point is \(nearestDistance)m away.")
+                print("[Calculator] This means Vision segmented a different object than what was tapped.")
+                return nil
+            }
+
+            // Use tight radius - 15cm fixed for now
+            let filterRadius: Float = 0.15
+            print("[Calculator] Using filter radius: \(filterRadius)m")
 
             var filteredPoints = filterPointsByProximity(
                 points: pointCloud.points,
                 center: hitPosition,
-                maxDistance: adaptiveRadius
+                maxDistance: filterRadius
             )
             print("[Calculator] After 3D proximity filter: \(filteredPoints.count) points (from \(pointCloud.points.count))")
 
-            // If we still have too many points, use clustering to find the main object
-            if filteredPoints.count >= 50 {
+            // If too few points with tight radius, try slightly larger
+            if filteredPoints.count < 30 {
+                filteredPoints = filterPointsByProximity(
+                    points: pointCloud.points,
+                    center: hitPosition,
+                    maxDistance: 0.25
+                )
+                print("[Calculator] Retry with 25cm radius: \(filteredPoints.count) points")
+            }
+
+            // Use clustering to find the connected object
+            if filteredPoints.count >= 30 {
                 filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
                 print("[Calculator] After clustering: \(filteredPoints.count) points")
 
-                // Create new point cloud with filtered points
                 pointCloud = PointCloudGenerator.PointCloud(
                     points: filteredPoints,
                     quality: pointCloud.quality
                 )
-            } else if filteredPoints.count >= 20 {
-                // Fewer points but still usable
+            } else if filteredPoints.count >= 15 {
                 pointCloud = PointCloudGenerator.PointCloud(
                     points: filteredPoints,
                     quality: pointCloud.quality
                 )
             } else {
-                print("[Calculator] Too few points after 3D filter, using original point cloud")
+                print("[Calculator] Too few points near tap location (\(filteredPoints.count))")
+                return nil
             }
         }
 
