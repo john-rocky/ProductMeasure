@@ -1,0 +1,203 @@
+//
+//  BoundingBox3D.swift
+//  ProductMeasure
+//
+
+import Foundation
+import simd
+
+/// Represents an oriented 3D bounding box
+struct BoundingBox3D: Codable {
+    /// Center point of the box in world coordinates
+    var center: SIMD3<Float>
+
+    /// Half-extents (half the size) along each local axis
+    var extents: SIMD3<Float>
+
+    /// Rotation of the box as a quaternion
+    var rotation: simd_quatf
+
+    /// Full dimensions (width, height, depth)
+    var dimensions: SIMD3<Float> {
+        extents * 2
+    }
+
+    /// Volume of the box in cubic meters
+    var volume: Float {
+        dimensions.x * dimensions.y * dimensions.z
+    }
+
+    /// The 8 corners of the box in world coordinates
+    var corners: [SIMD3<Float>] {
+        let localCorners: [SIMD3<Float>] = [
+            SIMD3(-1, -1, -1),
+            SIMD3( 1, -1, -1),
+            SIMD3( 1,  1, -1),
+            SIMD3(-1,  1, -1),
+            SIMD3(-1, -1,  1),
+            SIMD3( 1, -1,  1),
+            SIMD3( 1,  1,  1),
+            SIMD3(-1,  1,  1)
+        ]
+
+        return localCorners.map { localCorner in
+            let scaled = localCorner * extents
+            let rotated = rotation.act(scaled)
+            return center + rotated
+        }
+    }
+
+    /// The 12 edges of the box as pairs of corner indices
+    static let edgeIndices: [(Int, Int)] = [
+        // Bottom face
+        (0, 1), (1, 2), (2, 3), (3, 0),
+        // Top face
+        (4, 5), (5, 6), (6, 7), (7, 4),
+        // Vertical edges
+        (0, 4), (1, 5), (2, 6), (3, 7)
+    ]
+
+    /// Get the edges as pairs of world-space points
+    var edges: [(SIMD3<Float>, SIMD3<Float>)] {
+        let boxCorners = corners
+        return Self.edgeIndices.map { (boxCorners[$0.0], boxCorners[$0.1]) }
+    }
+
+    /// Get the local axes of the box
+    var localAxes: (x: SIMD3<Float>, y: SIMD3<Float>, z: SIMD3<Float>) {
+        let x = rotation.act(SIMD3<Float>(1, 0, 0))
+        let y = rotation.act(SIMD3<Float>(0, 1, 0))
+        let z = rotation.act(SIMD3<Float>(0, 0, 1))
+        return (x, y, z)
+    }
+
+    /// Get the sorted dimensions (length >= width >= height) with their corresponding axes
+    var sortedDimensions: [(dimension: Float, axis: SIMD3<Float>)] {
+        let axes = localAxes
+        let dims = [
+            (dimensions.x, axes.x),
+            (dimensions.y, axes.y),
+            (dimensions.z, axes.z)
+        ]
+        return dims.sorted { $0.0 > $1.0 }
+    }
+
+    /// Length (longest dimension)
+    var length: Float {
+        sortedDimensions[0].dimension
+    }
+
+    /// Width (middle dimension)
+    var width: Float {
+        sortedDimensions[1].dimension
+    }
+
+    /// Height (shortest dimension)
+    var height: Float {
+        sortedDimensions[2].dimension
+    }
+
+    init(center: SIMD3<Float>, extents: SIMD3<Float>, rotation: simd_quatf) {
+        self.center = center
+        self.extents = extents
+        self.rotation = rotation
+    }
+
+    /// Create from center, full dimensions, and rotation matrix
+    init(center: SIMD3<Float>, dimensions: SIMD3<Float>, rotationMatrix: simd_float3x3) {
+        self.center = center
+        self.extents = dimensions / 2
+        self.rotation = simd_quatf(rotationMatrix: rotationMatrix)
+    }
+
+    /// Create an axis-aligned bounding box
+    static func axisAligned(min: SIMD3<Float>, max: SIMD3<Float>) -> BoundingBox3D {
+        let center = (min + max) / 2
+        let extents = (max - min) / 2
+        return BoundingBox3D(center: center, extents: extents, rotation: simd_quatf(ix: 0, iy: 0, iz: 0, r: 1))
+    }
+
+    /// Transform a point from world space to local box space
+    func worldToLocal(_ worldPoint: SIMD3<Float>) -> SIMD3<Float> {
+        let centered = worldPoint - center
+        return rotation.inverse.act(centered)
+    }
+
+    /// Transform a point from local box space to world space
+    func localToWorld(_ localPoint: SIMD3<Float>) -> SIMD3<Float> {
+        let rotated = rotation.act(localPoint)
+        return rotated + center
+    }
+
+    /// Check if a world-space point is inside the box
+    func contains(_ worldPoint: SIMD3<Float>) -> Bool {
+        let local = worldToLocal(worldPoint)
+        return abs(local.x) <= extents.x &&
+               abs(local.y) <= extents.y &&
+               abs(local.z) <= extents.z
+    }
+
+    /// Translate the box
+    mutating func translate(by offset: SIMD3<Float>) {
+        center += offset
+    }
+
+    /// Scale the box uniformly
+    mutating func scale(by factor: Float) {
+        extents *= factor
+    }
+
+    /// Scale the box along a specific local axis
+    mutating func scale(alongAxis axisIndex: Int, by factor: Float) {
+        switch axisIndex {
+        case 0: extents.x *= factor
+        case 1: extents.y *= factor
+        case 2: extents.z *= factor
+        default: break
+        }
+    }
+
+    /// Rotate the box around the world Y axis
+    mutating func rotateAroundY(by angle: Float) {
+        let yRotation = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
+        rotation = yRotation * rotation
+    }
+}
+
+// MARK: - Codable for simd types
+
+extension SIMD3: Codable where Scalar == Float {
+    public init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        let x = try container.decode(Float.self)
+        let y = try container.decode(Float.self)
+        let z = try container.decode(Float.self)
+        self.init(x, y, z)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(x)
+        try container.encode(y)
+        try container.encode(z)
+    }
+}
+
+extension simd_quatf: Codable {
+    public init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        let x = try container.decode(Float.self)
+        let y = try container.decode(Float.self)
+        let z = try container.decode(Float.self)
+        let w = try container.decode(Float.self)
+        self.init(ix: x, iy: y, iz: z, r: w)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(imag.x)
+        try container.encode(imag.y)
+        try container.encode(imag.z)
+        try container.encode(real)
+    }
+}

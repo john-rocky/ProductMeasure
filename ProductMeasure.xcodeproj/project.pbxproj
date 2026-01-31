@@ -1,0 +1,521 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		001000001 /* ProductMeasureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000002 /* ProductMeasureApp.swift */; };
+		001000003 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000004 /* MainTabView.swift */; };
+		001000005 /* ARMeasurementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000006 /* ARMeasurementView.swift */; };
+		001000007 /* ARViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000008 /* ARViewContainer.swift */; };
+		001000009 /* BoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000010 /* BoxVisualization.swift */; };
+		001000011 /* MeasurementOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000012 /* MeasurementOverlay.swift */; };
+		001000013 /* BoxEditingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000014 /* BoxEditingView.swift */; };
+		001000015 /* HistoryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000016 /* HistoryListView.swift */; };
+		001000017 /* HistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000018 /* HistoryDetailView.swift */; };
+		001000019 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000020 /* SettingsView.swift */; };
+		001000021 /* Measurement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000022 /* Measurement.swift */; };
+		001000023 /* BoundingBox3D.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000024 /* BoundingBox3D.swift */; };
+		001000025 /* MeasurementQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000026 /* MeasurementQuality.swift */; };
+		001000027 /* ARSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000028 /* ARSessionManager.swift */; };
+		001000029 /* InstanceSegmentationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000030 /* InstanceSegmentationService.swift */; };
+		001000031 /* DepthProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000032 /* DepthProcessor.swift */; };
+		001000033 /* PointCloudGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000034 /* PointCloudGenerator.swift */; };
+		001000035 /* BoundingBoxEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000036 /* BoundingBoxEstimator.swift */; };
+		001000037 /* MeasurementCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000038 /* MeasurementCalculator.swift */; };
+		001000039 /* MeasurementStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000040 /* MeasurementStore.swift */; };
+		001000041 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000042 /* ExportService.swift */; };
+		001000043 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000044 /* Constants.swift */; };
+		001000045 /* LiDARChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000046 /* LiDARChecker.swift */; };
+		001000047 /* simd+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000048 /* simd+Extensions.swift */; };
+		001000049 /* ARFrame+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000050 /* ARFrame+Extensions.swift */; };
+		001000051 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 001000052 /* Assets.xcassets */; };
+		001000078 /* DebugVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000079 /* DebugVisualization.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		001000002 /* ProductMeasureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductMeasureApp.swift; sourceTree = "<group>"; };
+		001000004 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		001000006 /* ARMeasurementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementView.swift; sourceTree = "<group>"; };
+		001000008 /* ARViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARViewContainer.swift; sourceTree = "<group>"; };
+		001000010 /* BoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxVisualization.swift; sourceTree = "<group>"; };
+		001000012 /* MeasurementOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementOverlay.swift; sourceTree = "<group>"; };
+		001000014 /* BoxEditingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxEditingView.swift; sourceTree = "<group>"; };
+		001000016 /* HistoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryListView.swift; sourceTree = "<group>"; };
+		001000018 /* HistoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryDetailView.swift; sourceTree = "<group>"; };
+		001000020 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		001000022 /* Measurement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Measurement.swift; sourceTree = "<group>"; };
+		001000024 /* BoundingBox3D.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundingBox3D.swift; sourceTree = "<group>"; };
+		001000026 /* MeasurementQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementQuality.swift; sourceTree = "<group>"; };
+		001000028 /* ARSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARSessionManager.swift; sourceTree = "<group>"; };
+		001000030 /* InstanceSegmentationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstanceSegmentationService.swift; sourceTree = "<group>"; };
+		001000032 /* DepthProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepthProcessor.swift; sourceTree = "<group>"; };
+		001000034 /* PointCloudGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointCloudGenerator.swift; sourceTree = "<group>"; };
+		001000036 /* BoundingBoxEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundingBoxEstimator.swift; sourceTree = "<group>"; };
+		001000038 /* MeasurementCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementCalculator.swift; sourceTree = "<group>"; };
+		001000040 /* MeasurementStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementStore.swift; sourceTree = "<group>"; };
+		001000042 /* ExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportService.swift; sourceTree = "<group>"; };
+		001000044 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		001000046 /* LiDARChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiDARChecker.swift; sourceTree = "<group>"; };
+		001000048 /* simd+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "simd+Extensions.swift"; sourceTree = "<group>"; };
+		001000050 /* ARFrame+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ARFrame+Extensions.swift"; sourceTree = "<group>"; };
+		001000052 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		001000053 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		001000054 /* ProductMeasure.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ProductMeasure.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		001000079 /* DebugVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugVisualization.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		001000055 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		001000056 = {
+			isa = PBXGroup;
+			children = (
+				001000057 /* ProductMeasure */,
+				001000058 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		001000057 /* ProductMeasure */ = {
+			isa = PBXGroup;
+			children = (
+				001000002 /* ProductMeasureApp.swift */,
+				001000053 /* Info.plist */,
+				001000052 /* Assets.xcassets */,
+				001000059 /* Models */,
+				001000060 /* Views */,
+				001000061 /* Services */,
+				001000062 /* Persistence */,
+				001000063 /* Utilities */,
+			);
+			path = ProductMeasure;
+			sourceTree = "<group>";
+		};
+		001000058 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				001000054 /* ProductMeasure.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		001000059 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				001000022 /* Measurement.swift */,
+				001000024 /* BoundingBox3D.swift */,
+				001000026 /* MeasurementQuality.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		001000060 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				001000004 /* MainTabView.swift */,
+				001000064 /* Measurement */,
+				001000065 /* History */,
+				001000066 /* Settings */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		001000061 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				001000028 /* ARSessionManager.swift */,
+				001000030 /* InstanceSegmentationService.swift */,
+				001000032 /* DepthProcessor.swift */,
+				001000034 /* PointCloudGenerator.swift */,
+				001000036 /* BoundingBoxEstimator.swift */,
+				001000038 /* MeasurementCalculator.swift */,
+				001000079 /* DebugVisualization.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		001000062 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				001000040 /* MeasurementStore.swift */,
+				001000042 /* ExportService.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		001000063 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				001000044 /* Constants.swift */,
+				001000046 /* LiDARChecker.swift */,
+				001000067 /* Extensions */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		001000064 /* Measurement */ = {
+			isa = PBXGroup;
+			children = (
+				001000006 /* ARMeasurementView.swift */,
+				001000008 /* ARViewContainer.swift */,
+				001000010 /* BoxVisualization.swift */,
+				001000012 /* MeasurementOverlay.swift */,
+				001000014 /* BoxEditingView.swift */,
+			);
+			path = Measurement;
+			sourceTree = "<group>";
+		};
+		001000065 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				001000016 /* HistoryListView.swift */,
+				001000018 /* HistoryDetailView.swift */,
+			);
+			path = History;
+			sourceTree = "<group>";
+		};
+		001000066 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				001000020 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		001000067 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				001000048 /* simd+Extensions.swift */,
+				001000050 /* ARFrame+Extensions.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		001000068 /* ProductMeasure */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 001000069 /* Build configuration list for PBXNativeTarget "ProductMeasure" */;
+			buildPhases = (
+				001000070 /* Sources */,
+				001000055 /* Frameworks */,
+				001000071 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ProductMeasure;
+			productName = ProductMeasure;
+			productReference = 001000054 /* ProductMeasure.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		001000072 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					001000068 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 001000073 /* Build configuration list for PBXProject "ProductMeasure" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 001000056;
+			productRefGroup = 001000058 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				001000068 /* ProductMeasure */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		001000071 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001000051 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		001000070 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				001000001 /* ProductMeasureApp.swift in Sources */,
+				001000003 /* MainTabView.swift in Sources */,
+				001000005 /* ARMeasurementView.swift in Sources */,
+				001000007 /* ARViewContainer.swift in Sources */,
+				001000009 /* BoxVisualization.swift in Sources */,
+				001000011 /* MeasurementOverlay.swift in Sources */,
+				001000013 /* BoxEditingView.swift in Sources */,
+				001000015 /* HistoryListView.swift in Sources */,
+				001000017 /* HistoryDetailView.swift in Sources */,
+				001000019 /* SettingsView.swift in Sources */,
+				001000021 /* Measurement.swift in Sources */,
+				001000023 /* BoundingBox3D.swift in Sources */,
+				001000025 /* MeasurementQuality.swift in Sources */,
+				001000027 /* ARSessionManager.swift in Sources */,
+				001000029 /* InstanceSegmentationService.swift in Sources */,
+				001000031 /* DepthProcessor.swift in Sources */,
+				001000033 /* PointCloudGenerator.swift in Sources */,
+				001000035 /* BoundingBoxEstimator.swift in Sources */,
+				001000037 /* MeasurementCalculator.swift in Sources */,
+				001000039 /* MeasurementStore.swift in Sources */,
+				001000041 /* ExportService.swift in Sources */,
+				001000043 /* Constants.swift in Sources */,
+				001000045 /* LiDARChecker.swift in Sources */,
+				001000047 /* simd+Extensions.swift in Sources */,
+				001000049 /* ARFrame+Extensions.swift in Sources */,
+				001000078 /* DebugVisualization.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		001000074 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		001000075 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		001000076 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = MFN25KNUGJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ProductMeasure/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Product Measure";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to measure objects using AR and LiDAR.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = arkit;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UIStatusBarHidden = NO;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ProductMeasure;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		001000077 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = MFN25KNUGJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ProductMeasure/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Product Measure";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to measure objects using AR and LiDAR.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = arkit;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UIStatusBarHidden = NO;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.ProductMeasure;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		001000069 /* Build configuration list for PBXNativeTarget "ProductMeasure" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				001000076 /* Debug */,
+				001000077 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		001000073 /* Build configuration list for PBXProject "ProductMeasure" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				001000074 /* Debug */,
+				001000075 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 001000072 /* Project object */;
+}
