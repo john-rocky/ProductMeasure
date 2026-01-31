@@ -148,35 +148,22 @@ class MeasurementCalculator {
             let nearestDistance = pointCloud.points.map { simd_distance($0, hitPosition) }.min() ?? Float.infinity
             print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
 
-            // If the nearest point is more than 30cm away, the mask is completely wrong
-            if nearestDistance > 0.3 {
+            // If the nearest point is more than 50cm away, the mask is completely wrong
+            if nearestDistance > 0.5 {
                 print("[Calculator] ERROR: Mask does not contain tapped location. Nearest point is \(nearestDistance)m away.")
-                print("[Calculator] This means Vision segmented a different object than what was tapped.")
                 return nil
             }
 
-            // Use tight radius - 15cm fixed for now
-            let filterRadius: Float = 0.15
-            print("[Calculator] Using filter radius: \(filterRadius)m")
-
+            // Start with larger radius (50cm) then use clustering to find connected object
+            let initialRadius: Float = 0.5
             var filteredPoints = filterPointsByProximity(
                 points: pointCloud.points,
                 center: hitPosition,
-                maxDistance: filterRadius
+                maxDistance: initialRadius
             )
-            print("[Calculator] After 3D proximity filter: \(filteredPoints.count) points (from \(pointCloud.points.count))")
+            print("[Calculator] After initial 50cm filter: \(filteredPoints.count) points")
 
-            // If too few points with tight radius, try slightly larger
-            if filteredPoints.count < 30 {
-                filteredPoints = filterPointsByProximity(
-                    points: pointCloud.points,
-                    center: hitPosition,
-                    maxDistance: 0.25
-                )
-                print("[Calculator] Retry with 25cm radius: \(filteredPoints.count) points")
-            }
-
-            // Use clustering to find the connected object
+            // Use clustering to find the connected object - this separates the tapped object from others
             if filteredPoints.count >= 30 {
                 filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
                 print("[Calculator] After clustering: \(filteredPoints.count) points")
@@ -185,7 +172,7 @@ class MeasurementCalculator {
                     points: filteredPoints,
                     quality: pointCloud.quality
                 )
-            } else if filteredPoints.count >= 15 {
+            } else if filteredPoints.count >= 10 {
                 pointCloud = PointCloudGenerator.PointCloud(
                     points: filteredPoints,
                     quality: pointCloud.quality
@@ -447,7 +434,8 @@ class MeasurementCalculator {
         }
 
         // Neighbor distance threshold - points within this distance are connected
-        let neighborThreshold: Float = 0.05  // 5cm
+        // Use larger threshold because point cloud can be sparse
+        let neighborThreshold: Float = 0.08  // 8cm
 
         while !frontier.isEmpty {
             let currentIdx = frontier.removeFirst()
