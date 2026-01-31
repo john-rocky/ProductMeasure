@@ -144,15 +144,35 @@ class MeasurementCalculator {
         // 5. Filter point cloud by 3D distance from raycast hit position
         // This is more reliable than 2D filtering because raycast handles coordinate transforms internally
         if let hitPosition = raycastHitPosition {
-            let filteredPoints = filterPointsByProximity(
+            // Use adaptive radius based on distance - closer objects get tighter filtering
+            let distanceToCamera = simd_length(hitPosition - SIMD3<Float>(
+                frame.camera.transform.columns.3.x,
+                frame.camera.transform.columns.3.y,
+                frame.camera.transform.columns.3.z
+            ))
+            // Adaptive radius: 20% of distance, clamped between 0.15m and 0.4m
+            let adaptiveRadius = min(max(distanceToCamera * 0.20, 0.15), 0.4)
+            print("[Calculator] Distance to camera: \(distanceToCamera)m, using radius: \(adaptiveRadius)m")
+
+            var filteredPoints = filterPointsByProximity(
                 points: pointCloud.points,
                 center: hitPosition,
-                maxDistance: 0.5  // 50cm radius - objects should be within this of tap point
+                maxDistance: adaptiveRadius
             )
             print("[Calculator] After 3D proximity filter: \(filteredPoints.count) points (from \(pointCloud.points.count))")
 
+            // If we still have too many points, use clustering to find the main object
             if filteredPoints.count >= 50 {
+                filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                print("[Calculator] After clustering: \(filteredPoints.count) points")
+
                 // Create new point cloud with filtered points
+                pointCloud = PointCloudGenerator.PointCloud(
+                    points: filteredPoints,
+                    quality: pointCloud.quality
+                )
+            } else if filteredPoints.count >= 20 {
+                // Fewer points but still usable
                 pointCloud = PointCloudGenerator.PointCloud(
                     points: filteredPoints,
                     quality: pointCloud.quality
@@ -374,5 +394,74 @@ class MeasurementCalculator {
         print("[ProximityFilter] Kept \(filteredPoints.count) of \(points.count) points")
 
         return filteredPoints
+    }
+
+    /// Extract the main cluster of points around the center using density-based clustering
+    /// This helps isolate the tapped object from other nearby objects
+    private func extractMainCluster(points: [SIMD3<Float>], center: SIMD3<Float>) -> [SIMD3<Float>] {
+        guard points.count > 20 else { return points }
+
+        print("[Clustering] Starting with \(points.count) points")
+
+        // Simple grid-based clustering
+        // Divide space into cells and find the densest region around center
+        let cellSize: Float = 0.03  // 3cm cells
+
+        // Find the point closest to center as seed
+        var seedPoint = points[0]
+        var minDist = simd_distance(seedPoint, center)
+        for point in points {
+            let dist = simd_distance(point, center)
+            if dist < minDist {
+                minDist = dist
+                seedPoint = point
+            }
+        }
+        print("[Clustering] Seed point at distance \(minDist)m from center")
+
+        // Grow cluster from seed using flood-fill approach
+        var cluster: Set<Int> = []
+        var frontier: [Int] = []
+
+        // Find index of seed point
+        for (i, point) in points.enumerated() {
+            if simd_distance(point, seedPoint) < 0.001 {
+                cluster.insert(i)
+                frontier.append(i)
+                break
+            }
+        }
+
+        // Neighbor distance threshold - points within this distance are connected
+        let neighborThreshold: Float = 0.05  // 5cm
+
+        while !frontier.isEmpty {
+            let currentIdx = frontier.removeFirst()
+            let currentPoint = points[currentIdx]
+
+            for (i, point) in points.enumerated() {
+                if cluster.contains(i) { continue }
+
+                let dist = simd_distance(point, currentPoint)
+                if dist <= neighborThreshold {
+                    cluster.insert(i)
+                    frontier.append(i)
+                }
+            }
+
+            // Stop if cluster is getting too large (performance)
+            if cluster.count > 2000 { break }
+        }
+
+        let clusterPoints = cluster.map { points[$0] }
+        print("[Clustering] Extracted cluster with \(clusterPoints.count) points")
+
+        // If cluster is too small, return original
+        if clusterPoints.count < 20 {
+            print("[Clustering] Cluster too small, returning original points")
+            return points
+        }
+
+        return clusterPoints
     }
 }
