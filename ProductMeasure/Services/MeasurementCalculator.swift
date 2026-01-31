@@ -100,34 +100,36 @@ class MeasurementCalculator {
             print("[Calculator] No masked pixels found")
             return nil
         }
-        print("[Calculator] Found \(maskedPixels.count) masked pixels")
+        print("[Calculator] Found \(maskedPixels.count) masked pixels before depth filtering")
 
-        // Debug images disabled to save memory
-        // Set enableDebugImages = true only when debugging coordinate issues
-        let enableDebugImages = false
-        var debugMaskImage: UIImage?
-        var debugDepthImage: UIImage?
+        // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
+        let filteredPixels = filterMaskedPixelsByDepth(
+            maskedPixels: maskedPixels,
+            frame: frame,
+            tapPoint: normalizedTap,
+            imageSize: imageSize
+        )
 
-        if enableDebugImages {
-            debugMaskImage = DebugVisualization.visualizeMask(
-                mask: segmentation.mask,
-                cameraImage: frame.capturedImage,
-                tapPoint: normalizedTap
-            )
-
-            if let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap {
-                debugDepthImage = DebugVisualization.visualizeDepthMap(
-                    depthMap: depthMap,
-                    maskedPixels: maskedPixels,
-                    imageSize: imageSize
-                )
-            }
+        guard !filteredPixels.isEmpty else {
+            print("[Calculator] No pixels after depth filtering")
+            return nil
         }
+        print("[Calculator] Found \(filteredPixels.count) masked pixels after depth filtering")
 
-        // 3. Generate point cloud
+        // Create debug mask image (memory-optimized version)
+        let debugMaskImage = DebugVisualization.visualizeMask(
+            mask: segmentation.mask,
+            cameraImage: frame.capturedImage,
+            tapPoint: normalizedTap
+        )
+
+        // Skip depth image to save memory
+        let debugDepthImage: UIImage? = nil
+
+        // 4. Generate point cloud from filtered pixels
         let pointCloud = pointCloudGenerator.generatePointCloud(
             frame: frame,
-            maskedPixels: maskedPixels,
+            maskedPixels: filteredPixels,
             imageSize: imageSize
         )
 
@@ -218,6 +220,95 @@ class MeasurementCalculator {
     static func calculateDimensions(from box: BoundingBox3D) -> (length: Float, width: Float, height: Float) {
         let sorted = box.sortedDimensions
         return (sorted[0].dimension, sorted[1].dimension, sorted[2].dimension)
+    }
+
+    /// Filter masked pixels to only include those at similar depth to the tap point
+    private func filterMaskedPixelsByDepth(
+        maskedPixels: [(x: Int, y: Int)],
+        frame: ARFrame,
+        tapPoint: CGPoint,
+        imageSize: CGSize
+    ) -> [(x: Int, y: Int)] {
+        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
+            print("[DepthFilter] No depth map available, returning all pixels")
+            return maskedPixels
+        }
+
+        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
+
+        let depthWidth = CVPixelBufferGetWidth(depthMap)
+        let depthHeight = CVPixelBufferGetHeight(depthMap)
+
+        guard let depthBase = CVPixelBufferGetBaseAddress(depthMap) else {
+            return maskedPixels
+        }
+
+        let depthBytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
+        let depthPtr = depthBase.assumingMemoryBound(to: Float32.self)
+
+        // Scale factors from image to depth coordinates
+        let scaleX = CGFloat(depthWidth) / imageSize.width
+        let scaleY = CGFloat(depthHeight) / imageSize.height
+
+        // Get depth at tap point
+        let tapDepthX = Int(tapPoint.x * imageSize.width * scaleX)
+        let tapDepthY = Int(tapPoint.y * imageSize.height * scaleY)
+
+        guard tapDepthX >= 0 && tapDepthX < depthWidth && tapDepthY >= 0 && tapDepthY < depthHeight else {
+            print("[DepthFilter] Tap point out of depth map bounds")
+            return maskedPixels
+        }
+
+        let tapDepthIndex = tapDepthY * (depthBytesPerRow / MemoryLayout<Float32>.size) + tapDepthX
+        let tapDepth = depthPtr[tapDepthIndex]
+
+        print("[DepthFilter] Tap depth: \(tapDepth)m at depth pixel (\(tapDepthX), \(tapDepthY))")
+
+        guard tapDepth.isFinite && tapDepth > 0 else {
+            print("[DepthFilter] Invalid tap depth, returning all pixels")
+            return maskedPixels
+        }
+
+        // Filter pixels by depth - keep those within a tolerance of tap depth
+        // Use a percentage-based tolerance (e.g., ±30% of tap depth or ±0.15m, whichever is larger)
+        let percentTolerance = tapDepth * 0.3
+        let minTolerance: Float = 0.15
+        let depthTolerance = max(percentTolerance, minTolerance)
+
+        print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m")
+
+        var filteredPixels: [(x: Int, y: Int)] = []
+        filteredPixels.reserveCapacity(maskedPixels.count / 2)
+
+        for pixel in maskedPixels {
+            let depthX = Int(CGFloat(pixel.x) * scaleX)
+            let depthY = Int(CGFloat(pixel.y) * scaleY)
+
+            guard depthX >= 0 && depthX < depthWidth && depthY >= 0 && depthY < depthHeight else {
+                continue
+            }
+
+            let depthIndex = depthY * (depthBytesPerRow / MemoryLayout<Float32>.size) + depthX
+            let pixelDepth = depthPtr[depthIndex]
+
+            if pixelDepth.isFinite && pixelDepth > 0 {
+                let depthDiff = abs(pixelDepth - tapDepth)
+                if depthDiff <= depthTolerance {
+                    filteredPixels.append(pixel)
+                }
+            }
+        }
+
+        print("[DepthFilter] Filtered from \(maskedPixels.count) to \(filteredPixels.count) pixels")
+
+        // If filtering removed too many pixels, return original
+        if filteredPixels.count < 100 {
+            print("[DepthFilter] Too few pixels after filtering, returning original")
+            return maskedPixels
+        }
+
+        return filteredPixels
     }
 
     /// Calculate volume from dimensions
