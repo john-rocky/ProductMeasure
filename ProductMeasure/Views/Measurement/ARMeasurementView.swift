@@ -414,21 +414,11 @@ class ARMeasurementViewModel: ObservableObject {
             return
         }
 
-        // Debug: Try raycast at tap location to get reference world position
-        if let raycastResult = sessionManager.raycast(from: location) {
-            let hitPosition = SIMD3<Float>(
-                raycastResult.worldTransform.columns.3.x,
-                raycastResult.worldTransform.columns.3.y,
-                raycastResult.worldTransform.columns.3.z
-            )
-            print("[ViewModel] Raycast hit at world position: \(hitPosition)")
-
-            // Show raycast hit marker
-            let marker = DebugVisualization.createTapMarker(at: hitPosition)
-            sessionManager.addEntity(marker)
-        } else {
-            print("[ViewModel] Raycast did not hit any surface")
-        }
+        // Clean up previous measurement to free memory
+        removeAllVisualizations()
+        currentMeasurement = nil
+        debugMaskImage = nil
+        debugDepthImage = nil
 
         isProcessing = true
         print("[ViewModel] Starting measurement...")
@@ -447,19 +437,12 @@ class ARMeasurementViewModel: ObservableObject {
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
                 currentMeasurement = result
 
-                // Store debug images
+                // Store debug images (only if available)
                 debugMaskImage = result.debugMaskImage
                 debugDepthImage = result.debugDepthImage
 
-                // Show point cloud for debugging
-                if let points = result.debugPointCloud {
-                    showPointCloudVisualization(points: points)
-                }
-
+                // Show bounding box visualization
                 showBoxVisualization(for: result.boundingBox)
-
-                // Show camera axes for reference
-                showCameraAxes(transform: frame.camera.transform)
             } else {
                 print("[ViewModel] Measurement returned nil")
             }

@@ -37,17 +37,20 @@ class DebugVisualization {
             return nil
         }
 
-        // Create the image in landscape, then rotate for display
-        // First, draw everything in landscape coordinates
-        let landscapeSize = CGSize(width: imageWidth, height: imageHeight)
+        // Use reduced resolution to save memory (1/4 size)
+        let scale: CGFloat = 0.25
+        let drawWidth = CGFloat(imageWidth) * scale
+        let drawHeight = CGFloat(imageHeight) * scale
+        let landscapeSize = CGSize(width: drawWidth, height: drawHeight)
+
         UIGraphicsBeginImageContextWithOptions(landscapeSize, false, 1.0)
         guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
 
         // Draw camera image - need to flip because CGContext has flipped Y
         ctx.saveGState()
-        ctx.translateBy(x: 0, y: CGFloat(imageHeight))
+        ctx.translateBy(x: 0, y: drawHeight)
         ctx.scaleBy(x: 1, y: -1)
-        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: imageWidth, height: imageHeight))
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: drawWidth, height: drawHeight))
         ctx.restoreGState()
 
         // Read and overlay mask (mask is in same landscape coordinates as camera)
@@ -58,9 +61,9 @@ class DebugVisualization {
         let maskBytesPerRow = CVPixelBufferGetBytesPerRow(mask)
         let maskPtr = maskBase.assumingMemoryBound(to: UInt8.self)
 
-        // Scale from mask to image coordinates
-        let scaleX = CGFloat(imageWidth) / CGFloat(maskWidth)
-        let scaleY = CGFloat(imageHeight) / CGFloat(maskHeight)
+        // Scale from mask to draw coordinates
+        let scaleX = drawWidth / CGFloat(maskWidth)
+        let scaleY = drawHeight / CGFloat(maskHeight)
 
         // Draw mask overlay - sample every few pixels for performance
         ctx.setFillColor(UIColor.green.withAlphaComponent(0.4).cgColor)
@@ -75,11 +78,10 @@ class DebugVisualization {
         }
 
         var maskedPixelCount = 0
-        let sampleStep = max(1, min(maskWidth, maskHeight) / 200)  // Sample for performance
+        let sampleStep = max(4, min(maskWidth, maskHeight) / 100)  // Larger step for memory efficiency
         for my in Swift.stride(from: 0, to: maskHeight, by: sampleStep) {
             for mx in Swift.stride(from: 0, to: maskWidth, by: sampleStep) {
                 let pixelOffset = my * maskBytesPerRow + mx * bytesPerPixel
-                // For BGRA, check alpha channel (offset +3)
                 let value: UInt8
                 if bytesPerPixel == 4 {
                     value = maskPtr[pixelOffset + 3]  // Alpha channel
@@ -100,23 +102,20 @@ class DebugVisualization {
             }
         }
 
-        print("[DebugViz] Masked pixels in mask: \(maskedPixelCount)")
+        print("[DebugViz] Masked pixels sampled: \(maskedPixelCount)")
 
         // Draw tap point if provided (in landscape normalized coordinates)
-        // The tap is drawn in landscape canvas, then rotated to portrait with the whole image
         if let tap = tapPoint {
-            let tapX = tap.x * CGFloat(imageWidth)
-            let tapY = tap.y * CGFloat(imageHeight)
+            let tapX = tap.x * drawWidth
+            let tapY = tap.y * drawHeight
+            let markerSize: CGFloat = 10 * scale
 
             ctx.setFillColor(UIColor.red.cgColor)
-            ctx.fillEllipse(in: CGRect(x: tapX - 20, y: tapY - 20, width: 40, height: 40))
+            ctx.fillEllipse(in: CGRect(x: tapX - markerSize, y: tapY - markerSize, width: markerSize * 2, height: markerSize * 2))
 
             ctx.setStrokeColor(UIColor.white.cgColor)
-            ctx.setLineWidth(3)
-            ctx.strokeEllipse(in: CGRect(x: tapX - 20, y: tapY - 20, width: 40, height: 40))
-
-            print("[DebugViz] Tap point in landscape canvas: (\(tapX), \(tapY))")
-            print("[DebugViz] Tap point normalized: (\(tap.x), \(tap.y))")
+            ctx.setLineWidth(2)
+            ctx.strokeEllipse(in: CGRect(x: tapX - markerSize, y: tapY - markerSize, width: markerSize * 2, height: markerSize * 2))
         }
 
         guard let landscapeImage = UIGraphicsGetImageFromCurrentImageContext() else {
@@ -126,8 +125,7 @@ class DebugVisualization {
         UIGraphicsEndImageContext()
 
         // Rotate the landscape image to portrait for display
-        // Rotate 90 degrees clockwise
-        let portraitSize = CGSize(width: imageHeight, height: imageWidth)
+        let portraitSize = CGSize(width: drawHeight, height: drawWidth)
         UIGraphicsBeginImageContextWithOptions(portraitSize, false, 1.0)
         guard let portraitCtx = UIGraphicsGetCurrentContext() else { return nil }
 
@@ -153,8 +151,8 @@ class DebugVisualization {
     ) -> Entity {
         let parentEntity = Entity()
 
-        // Limit points for performance
-        let maxPoints = min(points.count, 500)
+        // Limit points for performance - reduce to 100 max to save memory
+        let maxPoints = min(points.count, 100)
         let stepSize = max(1, points.count / maxPoints)
 
         print("[DebugViz] Creating point cloud with \(maxPoints) points (step: \(stepSize))")
@@ -208,12 +206,13 @@ class DebugVisualization {
         let bytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
         let depthPtr = baseAddress.assumingMemoryBound(to: Float32.self)
 
-        // Find min/max depth for normalization
+        // Sample to find min/max depth
         var minDepth: Float = .infinity
         var maxDepth: Float = 0
+        let sampleStep = 4
 
-        for y in 0..<height {
-            for x in 0..<width {
+        for y in Swift.stride(from: 0, to: height, by: sampleStep) {
+            for x in Swift.stride(from: 0, to: width, by: sampleStep) {
                 let index = y * (bytesPerRow / MemoryLayout<Float32>.size) + x
                 let depth = depthPtr[index]
                 if depth.isFinite && depth > 0 {
@@ -226,14 +225,23 @@ class DebugVisualization {
         print("[DebugViz] Depth map size: \(width)x\(height)")
         print("[DebugViz] Depth range: \(minDepth)m - \(maxDepth)m")
 
-        // First create in landscape orientation
-        let landscapeSize = CGSize(width: width, height: height)
+        // Use reduced resolution
+        let scale: CGFloat = 0.5
+        let drawWidth = CGFloat(width) * scale
+        let drawHeight = CGFloat(height) * scale
+        let landscapeSize = CGSize(width: drawWidth, height: drawHeight)
+
         UIGraphicsBeginImageContextWithOptions(landscapeSize, false, 1.0)
         guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
 
-        // Draw depth as grayscale (closer = brighter)
-        for y in 0..<height {
-            for x in 0..<width {
+        // Draw depth as grayscale with sampling
+        let drawStep = 2
+        for dy in Swift.stride(from: 0, to: Int(drawHeight), by: drawStep) {
+            for dx in Swift.stride(from: 0, to: Int(drawWidth), by: drawStep) {
+                let x = Int(CGFloat(dx) / scale)
+                let y = Int(CGFloat(dy) / scale)
+                guard x < width && y < height else { continue }
+
                 let index = y * (bytesPerRow / MemoryLayout<Float32>.size) + x
                 let depth = depthPtr[index]
 
@@ -243,24 +251,25 @@ class DebugVisualization {
                 }
 
                 ctx.setFillColor(UIColor(white: brightness, alpha: 1.0).cgColor)
-                ctx.fill(CGRect(x: x, y: y, width: 1, height: 1))
+                ctx.fill(CGRect(x: dx, y: dy, width: drawStep, height: drawStep))
             }
         }
 
-        // Overlay masked pixels if provided (in image coordinates, need to scale to depth coords)
+        // Overlay masked pixels if provided
         if let pixels = maskedPixels {
-            let scaleX = CGFloat(width) / imageSize.width
-            let scaleY = CGFloat(height) / imageSize.height
+            let scaleToDepth = CGFloat(width) / imageSize.width
+            let scaleToDraw = scale
 
             ctx.setFillColor(UIColor.green.withAlphaComponent(0.6).cgColor)
 
-            for pixel in pixels {
-                let depthX = Int(CGFloat(pixel.x) * scaleX)
-                let depthY = Int(CGFloat(pixel.y) * scaleY)
-                ctx.fill(CGRect(x: depthX, y: depthY, width: 3, height: 3))
+            // Sample masked pixels for performance
+            let pixelStep = max(1, pixels.count / 500)
+            for i in Swift.stride(from: 0, to: pixels.count, by: pixelStep) {
+                let pixel = pixels[i]
+                let depthX = CGFloat(pixel.x) * scaleToDepth * scaleToDraw
+                let depthY = CGFloat(pixel.y) * scaleToDepth * scaleToDraw
+                ctx.fill(CGRect(x: depthX - 1, y: depthY - 1, width: 3, height: 3))
             }
-
-            print("[DebugViz] Overlaid \(pixels.count) masked pixels on depth map")
         }
 
         guard let landscapeImage = UIGraphicsGetImageFromCurrentImageContext() else {
@@ -270,7 +279,7 @@ class DebugVisualization {
         UIGraphicsEndImageContext()
 
         // Rotate to portrait for display
-        let portraitSize = CGSize(width: height, height: width)
+        let portraitSize = CGSize(width: drawHeight, height: drawWidth)
         UIGraphicsBeginImageContextWithOptions(portraitSize, false, 1.0)
         guard let portraitCtx = UIGraphicsGetCurrentContext() else { return nil }
 

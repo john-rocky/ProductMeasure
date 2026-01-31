@@ -90,13 +90,6 @@ class MeasurementCalculator {
         }
         print("[Calculator] Segmentation successful, mask size: \(segmentation.maskSize)")
 
-        // Debug: Create mask visualization
-        let debugMaskImage = DebugVisualization.visualizeMask(
-            mask: segmentation.mask,
-            cameraImage: frame.capturedImage,
-            tapPoint: normalizedTap
-        )
-
         // 2. Get masked pixels
         let maskedPixels = segmentationService.getMaskedPixels(
             mask: segmentation.mask,
@@ -109,14 +102,26 @@ class MeasurementCalculator {
         }
         print("[Calculator] Found \(maskedPixels.count) masked pixels")
 
-        // Debug: Create depth visualization
+        // Debug images disabled to save memory
+        // Set enableDebugImages = true only when debugging coordinate issues
+        let enableDebugImages = false
+        var debugMaskImage: UIImage?
         var debugDepthImage: UIImage?
-        if let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap {
-            debugDepthImage = DebugVisualization.visualizeDepthMap(
-                depthMap: depthMap,
-                maskedPixels: maskedPixels,
-                imageSize: imageSize
+
+        if enableDebugImages {
+            debugMaskImage = DebugVisualization.visualizeMask(
+                mask: segmentation.mask,
+                cameraImage: frame.capturedImage,
+                tapPoint: normalizedTap
             )
+
+            if let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap {
+                debugDepthImage = DebugVisualization.visualizeDepthMap(
+                    depthMap: depthMap,
+                    maskedPixels: maskedPixels,
+                    imageSize: imageSize
+                )
+            }
         }
 
         // 3. Generate point cloud
@@ -163,10 +168,9 @@ class MeasurementCalculator {
             quality: pointCloud.quality
         )
 
-        // Attach debug info
+        // Attach debug info (images only, not point cloud to save memory)
         result.debugMaskImage = debugMaskImage
         result.debugDepthImage = debugDepthImage
-        result.debugPointCloud = pointCloud.points
 
         return result
     }
