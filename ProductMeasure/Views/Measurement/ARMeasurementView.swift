@@ -423,6 +423,14 @@ class ARMeasurementViewModel: ObservableObject {
         isProcessing = true
         print("[ViewModel] Starting measurement...")
 
+        // Get 3D world position from raycast - this is reliable for filtering
+        let raycastHitPosition = sessionManager.raycastWorldPosition(from: location)
+        if let pos = raycastHitPosition {
+            print("[ViewModel] Raycast hit position: \(pos)")
+        } else {
+            print("[ViewModel] Raycast did not hit any surface")
+        }
+
         do {
             let viewSize = sessionManager.arView.bounds.size
             print("[ViewModel] View size: \(viewSize)")
@@ -431,7 +439,8 @@ class ARMeasurementViewModel: ObservableObject {
                 frame: frame,
                 tapPoint: location,
                 viewSize: viewSize,
-                mode: mode
+                mode: mode,
+                raycastHitPosition: raycastHitPosition
             ) {
                 print("[ViewModel] Measurement successful!")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")

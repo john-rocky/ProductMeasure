@@ -53,12 +53,14 @@ class MeasurementCalculator {
     ///   - tapPoint: Tap location in view coordinates
     ///   - viewSize: Size of the view
     ///   - mode: Measurement mode
+    ///   - raycastHitPosition: 3D world position from ARKit raycast (optional, for filtering)
     /// - Returns: MeasurementResult if successful
     func measure(
         frame: ARFrame,
         tapPoint: CGPoint,
         viewSize: CGSize,
-        mode: MeasurementMode
+        mode: MeasurementMode,
+        raycastHitPosition: SIMD3<Float>? = nil
     ) async throws -> MeasurementResult? {
         print("[Calculator] Starting measurement")
         print("[Calculator] Tap point: \(tapPoint), View size: \(viewSize)")
@@ -127,7 +129,7 @@ class MeasurementCalculator {
         let debugDepthImage: UIImage? = nil
 
         // 4. Generate point cloud from filtered pixels
-        let pointCloud = pointCloudGenerator.generatePointCloud(
+        var pointCloud = pointCloudGenerator.generatePointCloud(
             frame: frame,
             maskedPixels: filteredPixels,
             imageSize: imageSize
@@ -139,7 +141,28 @@ class MeasurementCalculator {
         }
         print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
 
-        // 4. Estimate bounding box
+        // 5. Filter point cloud by 3D distance from raycast hit position
+        // This is more reliable than 2D filtering because raycast handles coordinate transforms internally
+        if let hitPosition = raycastHitPosition {
+            let filteredPoints = filterPointsByProximity(
+                points: pointCloud.points,
+                center: hitPosition,
+                maxDistance: 0.5  // 50cm radius - objects should be within this of tap point
+            )
+            print("[Calculator] After 3D proximity filter: \(filteredPoints.count) points (from \(pointCloud.points.count))")
+
+            if filteredPoints.count >= 50 {
+                // Create new point cloud with filtered points
+                pointCloud = PointCloudGenerator.PointCloud(
+                    points: filteredPoints,
+                    quality: pointCloud.quality
+                )
+            } else {
+                print("[Calculator] Too few points after 3D filter, using original point cloud")
+            }
+        }
+
+        // 6. Estimate bounding box
         guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
             points: pointCloud.points,
             mode: mode
@@ -151,7 +174,7 @@ class MeasurementCalculator {
         print("[Calculator] Box center: \(boundingBox.center)")
         print("[Calculator] Box extents: \(boundingBox.extents)")
 
-        // 5. Calculate dimensions
+        // 7. Calculate dimensions
         let sorted = boundingBox.sortedDimensions
         let length = sorted[0].dimension
         let width = sorted[1].dimension
@@ -314,5 +337,42 @@ class MeasurementCalculator {
     /// Calculate volume from dimensions
     static func calculateVolume(length: Float, width: Float, height: Float) -> Float {
         length * width * height
+    }
+
+    /// Filter 3D points by proximity to a center point
+    /// This uses world coordinates, bypassing problematic 2D coordinate conversions
+    private func filterPointsByProximity(
+        points: [SIMD3<Float>],
+        center: SIMD3<Float>,
+        maxDistance: Float
+    ) -> [SIMD3<Float>] {
+        print("[ProximityFilter] Filtering \(points.count) points around center: \(center)")
+        print("[ProximityFilter] Max distance: \(maxDistance)m")
+
+        var filteredPoints: [SIMD3<Float>] = []
+        filteredPoints.reserveCapacity(points.count)
+
+        var distanceStats: [Float] = []
+
+        for point in points {
+            let distance = simd_distance(point, center)
+            distanceStats.append(distance)
+
+            if distance <= maxDistance {
+                filteredPoints.append(point)
+            }
+        }
+
+        // Log distance statistics
+        if !distanceStats.isEmpty {
+            let minDist = distanceStats.min()!
+            let maxDist = distanceStats.max()!
+            let avgDist = distanceStats.reduce(0, +) / Float(distanceStats.count)
+            print("[ProximityFilter] Distance stats - min: \(minDist)m, max: \(maxDist)m, avg: \(avgDist)m")
+        }
+
+        print("[ProximityFilter] Kept \(filteredPoints.count) of \(points.count) points")
+
+        return filteredPoints
     }
 }
