@@ -280,7 +280,7 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
                 case .faceHandle(let handleType):
                     viewModel.handleFaceDrag(handleType: handleType, screenDelta: delta, mode: measurementMode)
                 case .rotationRing:
-                    viewModel.handleRotationDrag(screenDelta: delta)
+                    viewModel.handleRotationDrag(screenDelta: delta, touchLocation: location)
                 }
 
                 lastPanLocation = location
@@ -944,7 +944,7 @@ class ARMeasurementViewModel: ObservableObject {
         }
     }
 
-    func handleRotationDrag(screenDelta: CGPoint) {
+    func handleRotationDrag(screenDelta: CGPoint, touchLocation: CGPoint) {
         guard let result = currentMeasurement else { return }
 
         isDragging = true
@@ -952,10 +952,35 @@ class ARMeasurementViewModel: ObservableObject {
         // Highlight the rotation handle
         boxVisualization?.highlightRotationHandle()
 
-        // Convert horizontal screen movement to Yaw rotation
-        // Positive X movement = clockwise rotation (negative yaw)
-        let rotationSensitivity: Float = 0.005
-        let yawAngle = Float(-screenDelta.x) * rotationSensitivity
+        // Project box center to screen
+        guard let boxCenterScreenPos = sessionManager.projectToScreen(worldPosition: result.boundingBox.center) else {
+            return
+        }
+
+        // Calculate vector from box center to touch location
+        let toTouch = SIMD2<Float>(
+            Float(touchLocation.x - boxCenterScreenPos.x),
+            Float(touchLocation.y - boxCenterScreenPos.y)
+        )
+        let touchDistance = simd_length(toTouch)
+
+        // If touch is too close to center, can't determine rotation
+        guard touchDistance > 10 else { return }
+
+        // Calculate tangent direction (perpendicular to radial, clockwise)
+        // For screen coordinates (Y down), clockwise tangent is (toTouch.y, -toTouch.x)
+        let tangent = SIMD2<Float>(toTouch.y, -toTouch.x) / touchDistance
+
+        // Project screen delta onto tangent direction
+        // Positive = clockwise rotation on screen
+        let screenDelta2D = SIMD2<Float>(Float(screenDelta.x), Float(screenDelta.y))
+        let tangentialDelta = simd_dot(screenDelta2D, tangent)
+
+        // Convert to world Y rotation
+        // When looking from above (camera Y+), clockwise screen rotation = negative Y rotation
+        // Scale by distance to get consistent angular speed
+        let angularScale: Float = 1.0 / touchDistance
+        let yawAngle = tangentialDelta * angularScale
 
         // Apply rotation
         var newBox = result.boundingBox

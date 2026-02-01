@@ -50,10 +50,10 @@ class BoxVisualization {
     private let handleRadius: Float = 0.004      // Radius of capsule (4mm)
     private let handleCollisionRadius: Float = 0.015  // Larger for easy touch
 
-    // Rotation handle (small arc at bottom corner)
-    private let rotationArcRadius: Float = 0.025     // Arc radius (25mm)
-    private let rotationArcThickness: Float = 0.004  // Arc thickness (4mm)
-    private let rotationArcAngle: Float = .pi / 3    // 60 degree arc
+    // Rotation handle (circular arrow at bottom corner)
+    private let rotationArcRadius: Float = 0.014     // Arc radius (14mm)
+    private let rotationArcThickness: Float = 0.002  // Arc thickness (2mm)
+    private let rotationArcAngle: Float = .pi * 1.2  // 216 degree arc
 
     // MARK: - Initialization
 
@@ -289,68 +289,54 @@ class BoxVisualization {
         return calculateOrientation(direction: targetDirection)
     }
 
-    // MARK: - Rotation Handle Creation (Arc at bottom corner)
+    // MARK: - Rotation Handle Creation (Smooth torus arc at bottom corner)
 
     private func createRotationRing() {
         let handleEntity = Entity()
         handleEntity.name = "rotation_ring"
 
-        // Create small arc segments at bottom corner
-        let segmentCount = 5
-        let startAngle: Float = -.pi / 6  // Start angle
-        let angleStep = rotationArcAngle / Float(segmentCount)
-
         var material = SimpleMaterial()
-        material.color = .init(tint: handleColor)
+        material.color = .init(tint: UIColor(white: 1.0, alpha: 0.5))  // Lighter, more transparent
 
-        for i in 0..<segmentCount {
-            let angle = startAngle + Float(i) * angleStep
-            let nextAngle = startAngle + Float(i + 1) * angleStep
-
-            let segmentLength = rotationArcRadius * angleStep * 1.1
-            let segmentMesh = MeshResource.generateBox(
-                size: [rotationArcThickness, rotationArcThickness, segmentLength],
-                cornerRadius: rotationArcThickness / 2
-            )
-
-            let segmentEntity = ModelEntity(mesh: segmentMesh, materials: [material])
-
-            // Position at midpoint of arc segment
-            let midAngle = (angle + nextAngle) / 2
-            segmentEntity.position = SIMD3<Float>(
-                cos(midAngle) * rotationArcRadius,
-                0,
-                sin(midAngle) * rotationArcRadius
-            )
-
-            // Rotate to be tangent to circle
-            segmentEntity.orientation = simd_quatf(angle: -midAngle, axis: SIMD3<Float>(0, 1, 0))
-
-            handleEntity.addChild(segmentEntity)
+        // Create smooth torus arc mesh
+        if let torusMesh = createTorusArcMesh(
+            majorRadius: rotationArcRadius,
+            minorRadius: rotationArcThickness / 2,
+            startAngle: -.pi / 6,
+            arcAngle: rotationArcAngle
+        ) {
+            let torusEntity = ModelEntity(mesh: torusMesh, materials: [material])
+            handleEntity.addChild(torusEntity)
         }
 
-        // Add sphere caps at arc ends for rounded appearance
-        let capMesh = MeshResource.generateSphere(radius: rotationArcThickness / 2)
-        let startCap = ModelEntity(mesh: capMesh, materials: [material])
-        startCap.position = SIMD3<Float>(
-            cos(startAngle) * rotationArcRadius,
-            0,
-            sin(startAngle) * rotationArcRadius
-        )
-        handleEntity.addChild(startCap)
+        // Add arrow head at the end of the arc
+        let endAngle: Float = -.pi / 6 + rotationArcAngle
+        let arrowSize: Float = rotationArcThickness * 2.0
 
-        let endAngle = startAngle + rotationArcAngle
-        let endCap = ModelEntity(mesh: capMesh, materials: [material])
-        endCap.position = SIMD3<Float>(
+        // Create triangular arrow using a flattened box rotated
+        let arrowMesh = MeshResource.generateBox(
+            size: [arrowSize * 1.8, rotationArcThickness * 0.8, arrowSize * 1.8],
+            cornerRadius: rotationArcThickness / 4
+        )
+        let arrowHead = ModelEntity(mesh: arrowMesh, materials: [material])
+
+        // Position at end of arc, slightly outward
+        arrowHead.position = SIMD3<Float>(
             cos(endAngle) * rotationArcRadius,
             0,
             sin(endAngle) * rotationArcRadius
         )
-        handleEntity.addChild(endCap)
+
+        // Rotate to point tangentially (like an arrow head)
+        // Rotate 45 degrees to make diamond shape pointing in arc direction
+        let tangentAngle = endAngle + .pi / 2
+        arrowHead.orientation = simd_quatf(angle: tangentAngle + .pi / 4, axis: SIMD3<Float>(0, 1, 0))
+
+        handleEntity.addChild(arrowHead)
 
         // Add collision
         let collisionShape = ShapeResource.generateBox(
-            size: [rotationArcRadius * 1.5, rotationArcThickness * 4, rotationArcRadius * 1.5]
+            size: [rotationArcRadius * 2, rotationArcThickness * 4, rotationArcRadius * 2]
         )
         handleEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
 
@@ -361,6 +347,84 @@ class BoxVisualization {
         rotationRingEntity = handleEntity
     }
 
+    /// Create a smooth torus arc mesh
+    private func createTorusArcMesh(
+        majorRadius: Float,
+        minorRadius: Float,
+        startAngle: Float,
+        arcAngle: Float
+    ) -> MeshResource? {
+        let majorSegments = 32  // Segments along the arc
+        let minorSegments = 12  // Segments around the tube
+
+        var positions: [SIMD3<Float>] = []
+        var normals: [SIMD3<Float>] = []
+        var uvs: [SIMD2<Float>] = []
+        var indices: [UInt32] = []
+
+        // Generate vertices
+        for i in 0...majorSegments {
+            let majorAngle = startAngle + arcAngle * Float(i) / Float(majorSegments)
+            let majorCos = cos(majorAngle)
+            let majorSin = sin(majorAngle)
+
+            // Center of tube at this point
+            let centerX = majorCos * majorRadius
+            let centerZ = majorSin * majorRadius
+
+            for j in 0...minorSegments {
+                let minorAngle = 2.0 * .pi * Float(j) / Float(minorSegments)
+                let minorCos = cos(minorAngle)
+                let minorSin = sin(minorAngle)
+
+                // Position on tube surface
+                let x = centerX + majorCos * minorRadius * minorCos
+                let y = minorRadius * minorSin
+                let z = centerZ + majorSin * minorRadius * minorCos
+
+                positions.append(SIMD3<Float>(x, y, z))
+
+                // Normal points outward from tube center
+                let nx = majorCos * minorCos
+                let ny = minorSin
+                let nz = majorSin * minorCos
+                normals.append(SIMD3<Float>(nx, ny, nz))
+
+                // UV coordinates
+                let u = Float(i) / Float(majorSegments)
+                let v = Float(j) / Float(minorSegments)
+                uvs.append(SIMD2<Float>(u, v))
+            }
+        }
+
+        // Generate indices
+        let minorCount = minorSegments + 1
+        for i in 0..<majorSegments {
+            for j in 0..<minorSegments {
+                let current = UInt32(i * minorCount + j)
+                let next = UInt32((i + 1) * minorCount + j)
+
+                // Two triangles per quad
+                indices.append(current)
+                indices.append(next)
+                indices.append(current + 1)
+
+                indices.append(current + 1)
+                indices.append(next)
+                indices.append(next + 1)
+            }
+        }
+
+        // Create mesh descriptor
+        var descriptor = MeshDescriptor(name: "torusArc")
+        descriptor.positions = MeshBuffer(positions)
+        descriptor.normals = MeshBuffer(normals)
+        descriptor.textureCoordinates = MeshBuffer(uvs)
+        descriptor.primitives = .triangles(indices)
+
+        return try? MeshResource.generate(from: [descriptor])
+    }
+
     private func updateRotationRingPosition() {
         guard let ringEntity = rotationRingEntity else { return }
         updateRotationRingTransform(ringEntity)
@@ -369,7 +433,7 @@ class BoxVisualization {
     private func updateRotationRingTransform(_ ringEntity: Entity) {
         // Position at bottom corner (outside the box)
         let bottomY = -boundingBox.extents.y
-        let cornerOffset = max(boundingBox.extents.x, boundingBox.extents.z) + rotationArcRadius * 0.3
+        let cornerOffset = max(boundingBox.extents.x, boundingBox.extents.z) + rotationArcRadius * 0.5
         let localPos = SIMD3<Float>(cornerOffset, bottomY, cornerOffset)
         ringEntity.position = boundingBox.localToWorld(localPos)
 
