@@ -15,6 +15,7 @@ struct ARMeasurementView: View {
     @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
     @State private var boxSelectionRect: CGRect? = nil
     @State private var boxSelectionComplete: Bool = false
+    @State private var showVolumeMethodPicker: Bool = false
 
     var body: some View {
         ZStack {
@@ -28,7 +29,7 @@ struct ARMeasurementView: View {
                     .ignoresSafeArea()
 
                 // Corner brackets overlay - visible only in tap mode
-                if selectionMode == .tap {
+                if selectionMode == .tap && !viewModel.isMultiScanActive {
                     GeometryReader { geometry in
                         CornerBracketsView(
                             phase: viewModel.animationPhase,
@@ -40,7 +41,7 @@ struct ARMeasurementView: View {
                 }
 
                 // Box selection overlay - visible in box mode (below UI controls)
-                if selectionMode == .box && viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                if selectionMode == .box && viewModel.currentMeasurement == nil && !viewModel.isProcessing && !viewModel.isMultiScanActive {
                     BoxSelectionOverlay(
                         selectionRect: $boxSelectionRect,
                         isComplete: $boxSelectionComplete
@@ -48,34 +49,72 @@ struct ARMeasurementView: View {
                     .ignoresSafeArea()
                 }
 
+                // Multi-scan overlay (when active)
+                if viewModel.isMultiScanActive {
+                    MultiScanOverlay(
+                        sessionManager: viewModel.multiScanManager,
+                        unit: measurementUnit,
+                        onAddScan: {
+                            Task {
+                                await viewModel.addMultiScan()
+                            }
+                        },
+                        onFinish: {
+                            Task {
+                                await viewModel.finishMultiScanSession()
+                            }
+                        },
+                        onCancel: {
+                            viewModel.cancelMultiScanSession()
+                        }
+                    )
+                }
+
                 // Overlay UI (on top)
                 VStack {
-                    // Top bar with status and selection mode toggle
+                    // Top bar with status and mode toggles
                     HStack {
                         StatusBar(
                             trackingMessage: viewModel.trackingMessage,
-                            isProcessing: viewModel.isProcessing
+                            isProcessing: viewModel.isProcessing || viewModel.isCalculatingAdvancedVolume
                         )
 
                         Spacer()
 
-                        // Selection mode toggle (visible when not measuring)
-                        if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
-                            SelectionModeToggle(selectionMode: $selectionMode)
-                        }
+                        // Mode toggles (visible when not measuring and not in multi-scan)
+                        if viewModel.currentMeasurement == nil && !viewModel.isProcessing && !viewModel.isMultiScanActive {
+                            HStack(spacing: 8) {
+                                // Scan mode toggle
+                                ScanModeToggle(
+                                    isMultiScanMode: Binding(
+                                        get: { viewModel.scanMode == .multi },
+                                        set: { viewModel.scanMode = $0 ? .multi : .single }
+                                    ),
+                                    disabled: viewModel.isProcessing
+                                )
 
+                                // Selection mode toggle
+                                SelectionModeToggle(selectionMode: $selectionMode)
+                            }
+                        }
                     }
 
                     Spacer()
 
                     // Editing mode indicator
-                    if viewModel.isEditing {
+                    if viewModel.isEditing && !viewModel.isMultiScanActive {
                         EditingIndicator(isDragging: viewModel.isDragging)
                             .transition(.opacity)
                     }
 
-                    // Measurement result card
-                    if let result = viewModel.currentMeasurement {
+                    // Advanced volume calculation indicator
+                    if viewModel.isCalculatingAdvancedVolume {
+                        VolumeCalculationIndicator(method: viewModel.volumeMethod)
+                            .transition(.opacity)
+                    }
+
+                    // Measurement result card (when not in multi-scan mode)
+                    if let result = viewModel.currentMeasurement, !viewModel.isMultiScanActive {
                         MeasurementResultCard(
                             result: result,
                             unit: measurementUnit,
@@ -99,13 +138,22 @@ struct ARMeasurementView: View {
                             },
                             onToggleVoxel: {
                                 viewModel.toggleVoxelVisualization()
-                            }
+                            },
+                            onStartMultiScan: viewModel.scanMode == .multi ? {
+                                viewModel.startMultiScanSession()
+                            } : nil,
+                            onSelectVolumeMethod: {
+                                showVolumeMethodPicker = true
+                            },
+                            volumeMethod: viewModel.volumeMethod,
+                            alphaShapeResult: viewModel.alphaShapeResult,
+                            meshResult: viewModel.meshResult
                         )
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
                     // Instruction text when in targeting mode
-                    if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                    if viewModel.currentMeasurement == nil && !viewModel.isProcessing && !viewModel.isMultiScanActive {
                         if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
                             InstructionCard(mode: .tap)
                         } else if selectionMode == .box {
@@ -115,6 +163,7 @@ struct ARMeasurementView: View {
                 }
                 .padding()
                 .animation(.easeInOut(duration: 0.3), value: viewModel.currentMeasurement != nil)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.isMultiScanActive)
                 .onChange(of: boxSelectionComplete) { _, isComplete in
                     if isComplete, let rect = boxSelectionRect {
                         Task {
@@ -395,6 +444,11 @@ struct MeasurementResultCard: View {
     var onDone: (() -> Void)? = nil
     let onDiscard: () -> Void
     var onToggleVoxel: (() -> Void)? = nil
+    var onStartMultiScan: (() -> Void)? = nil
+    var onSelectVolumeMethod: (() -> Void)? = nil
+    var volumeMethod: VolumeCalculationMethod = .voxel
+    var alphaShapeResult: AlphaShapeResult? = nil
+    var meshResult: MeshResult? = nil
 
     var body: some View {
         VStack(spacing: 16) {
@@ -412,6 +466,19 @@ struct MeasurementResultCard: View {
                     QualityIndicator(quality: result.quality.overallQuality)
                 }
                 Spacer()
+
+                // Multi-scan button (if available)
+                if !isEditing, let onStartMultiScan = onStartMultiScan {
+                    Button(action: onStartMultiScan) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "camera.on.rectangle.fill")
+                            Text("Multi-Scan")
+                        }
+                        .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.blue)
+                }
             }
 
             // Dimensions
@@ -422,57 +489,8 @@ struct MeasurementResultCard: View {
                     DimensionLabel(label: "H", value: formatDimension(result.height))
                 }
 
-                // Volume display with refined volume
-                VStack(spacing: 4) {
-                    HStack {
-                        Text("Box Volume:")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        Text(formatVolume(result.volume))
-                            .font(.headline)
-                    }
-
-                    // Refined volume (if available or calculating)
-                    if result.isCalculatingRefinedVolume {
-                        HStack {
-                            Text("Refined:")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                                .scaleEffect(0.6)
-                            Text("Calculating...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    } else if let refinedVolume = result.refinedVolume {
-                        HStack {
-                            Text("Refined:")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(formatVolume(refinedVolume.volume))
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.green)
-
-                            if let diff = result.volumeDifferencePercent, abs(diff) > 1 {
-                                Text(String(format: "(%.0f%% more precise)", abs(diff)))
-                                    .font(.caption2)
-                                    .foregroundColor(.green)
-                            }
-
-                            Spacer()
-
-                            // Voxel visualization toggle
-                            Button(action: { onToggleVoxel?() }) {
-                                Image(systemName: showVoxelVisualization ? "cube.fill" : "cube")
-                                    .foregroundColor(showVoxelVisualization ? .green : .secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Toggle voxel visualization")
-                        }
-                    }
-                }
+                // Volume display with all available methods
+                volumeDisplaySection
             }
 
             // Action buttons - different based on editing mode
@@ -527,6 +545,113 @@ struct MeasurementResultCard: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .animation(.easeInOut(duration: 0.2), value: isEditing)
+    }
+
+    // MARK: - Volume Display Section
+
+    @ViewBuilder
+    private var volumeDisplaySection: some View {
+        VStack(spacing: 4) {
+            // Box volume (always shown)
+            HStack {
+                Text("Box Volume:")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text(formatVolume(result.volume))
+                    .font(.headline)
+            }
+
+            // Voxel refined volume
+            if result.isCalculatingRefinedVolume {
+                HStack {
+                    Text("Voxel:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .scaleEffect(0.6)
+                    Text("Calculating...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else if let refinedVolume = result.refinedVolume {
+                HStack {
+                    Image(systemName: "cube.fill")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                    Text("Voxel:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(formatVolume(refinedVolume.volume))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.green)
+
+                    Spacer()
+
+                    Button(action: { onToggleVoxel?() }) {
+                        Image(systemName: showVoxelVisualization ? "eye.fill" : "eye.slash")
+                            .font(.caption)
+                            .foregroundColor(showVoxelVisualization ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            // Alpha Shape volume (if available)
+            if let alpha = alphaShapeResult {
+                HStack {
+                    Image(systemName: "pentagon.fill")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    Text("Alpha:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(alpha.formattedVolume)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+
+                    Spacer()
+
+                    Text(String(format: "%.0fms", alpha.processingTime * 1000))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Mesh volume (if available)
+            if let mesh = meshResult {
+                HStack {
+                    Image(systemName: "circle.hexagongrid.fill")
+                        .font(.caption)
+                        .foregroundColor(.purple)
+                    Text("Mesh:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(mesh.formattedVolume)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.purple)
+
+                    if mesh.isWatertight {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                    }
+
+                    Spacer()
+
+                    Text(String(format: "%.0fms", mesh.processingTime * 1000))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func formatDimension(_ meters: Float) -> String {
@@ -667,6 +792,7 @@ class ARMeasurementViewModel: ObservableObject {
     private let boxEditingService = BoxEditingService()
     private var boxVisualization: BoxVisualization?
     private var voxelVisualization: VoxelVisualization?
+    private var meshVisualization: MeshVisualization?
     private var pointCloudEntity: Entity?
     private var animatedBoxVisualization: AnimatedBoxVisualization?
 
@@ -675,6 +801,33 @@ class ARMeasurementViewModel: ObservableObject {
 
     /// Whether to show voxel visualization
     @Published var showVoxelVisualization: Bool = true
+
+    // MARK: - Multi-Scan Mode
+
+    /// Current scan mode (single or multi)
+    @Published var scanMode: ScanMode = .single
+
+    /// Volume calculation method
+    @Published var volumeMethod: VolumeCalculationMethod = .voxel
+
+    /// Multi-scan session manager
+    let multiScanManager = MultiScanSessionManager()
+
+    /// Whether multi-scan is currently active
+    @Published var isMultiScanActive: Bool = false
+
+    /// Whether advanced volume calculation is in progress
+    @Published var isCalculatingAdvancedVolume: Bool = false
+
+    /// Alpha shape result (if available)
+    @Published var alphaShapeResult: AlphaShapeResult?
+
+    /// Ball Pivoting mesh result (if available)
+    @Published var meshResult: MeshResult?
+
+    // Advanced volume calculators
+    private let alphaShapeCalculator = AlphaShapeCalculator()
+    private let ballPivotingBuilder = BallPivotingMeshBuilder()
 
     init() {
         sessionManager.$trackingStateMessage
@@ -1197,6 +1350,244 @@ class ARMeasurementViewModel: ObservableObject {
         showDebugDepth.toggle()
     }
 
+    // MARK: - Multi-Scan Methods
+
+    /// Starts a multi-scan session with the current measurement's bounding box
+    func startMultiScanSession() {
+        guard let result = currentMeasurement else {
+            print("[MultiScan] Cannot start session: no current measurement")
+            return
+        }
+
+        print("[MultiScan] Starting session with bounding box: \(result.boundingBox)")
+        multiScanManager.startSession(initialBox: result.boundingBox)
+        isMultiScanActive = true
+
+        // Add the initial point cloud as the first scan
+        if let points = storedPointCloud, let cameraPos = getCameraPosition() {
+            let addedCount = multiScanManager.addScan(points: points, cameraPosition: cameraPos)
+            print("[MultiScan] Initial scan added with \(addedCount) unique points from \(points.count) total")
+        } else {
+            print("[MultiScan] No stored point cloud for initial scan")
+        }
+    }
+
+    /// Adds a new scan to the multi-scan session
+    func addMultiScan() async {
+        print("[MultiScan] addMultiScan called")
+
+        guard isMultiScanActive else {
+            print("[MultiScan] Cannot add scan: isMultiScanActive=false")
+            return
+        }
+
+        guard let frame = sessionManager.currentFrame else {
+            print("[MultiScan] Cannot add scan: no current frame")
+            return
+        }
+
+        guard let boundingBox = currentMeasurement?.boundingBox else {
+            print("[MultiScan] Cannot add scan: no bounding box")
+            return
+        }
+
+        print("[MultiScan] Starting to capture point cloud...")
+        print("[MultiScan] Bounding box center: \(boundingBox.center), extents: \(boundingBox.extents)")
+        isProcessing = true
+
+        do {
+            // Capture current point cloud
+            guard let allPoints = try await capturePointCloud(from: frame) else {
+                print("[MultiScan] capturePointCloud returned nil")
+                isProcessing = false
+                return
+            }
+
+            guard let cameraPos = getCameraPosition() else {
+                print("[MultiScan] Could not get camera position")
+                isProcessing = false
+                return
+            }
+
+            print("[MultiScan] Camera position: \(cameraPos)")
+
+            // Calculate distance range of captured points
+            if !allPoints.isEmpty {
+                let distances = allPoints.map { simd_distance($0, boundingBox.center) }
+                let minDist = distances.min() ?? 0
+                let maxDist = distances.max() ?? 0
+                print("[MultiScan] Point distance range from box center: \(minDist) - \(maxDist)")
+            }
+
+            // Filter points to only those within the bounding box (with large margin)
+            let margin: Float = 0.2 // 20cm margin for testing
+            let expandedBox = BoundingBox3D(
+                center: boundingBox.center,
+                extents: boundingBox.extents + SIMD3<Float>(repeating: margin),
+                rotation: boundingBox.rotation
+            )
+
+            let filteredPoints = allPoints.filter { point in
+                expandedBox.contains(point)
+            }
+
+            print("[MultiScan] Captured \(allPoints.count) points, \(filteredPoints.count) within expanded bounding box")
+
+            // Use filtered points if available, otherwise use all points (for debugging)
+            let pointsToAdd = filteredPoints.isEmpty ? allPoints : filteredPoints
+
+            if !pointsToAdd.isEmpty {
+                let addedCount = multiScanManager.addScan(points: pointsToAdd, cameraPosition: cameraPos)
+                print("[MultiScan] Added \(addedCount) unique points. Total: \(multiScanManager.accumulatedPointCount)")
+            } else {
+                print("[MultiScan] No points captured at all")
+            }
+        } catch {
+            print("[MultiScan] Error capturing point cloud: \(error)")
+        }
+
+        isProcessing = false
+    }
+
+    /// Finishes the multi-scan session and calculates advanced volume
+    func finishMultiScanSession() async {
+        guard isMultiScanActive else { return }
+
+        let result = multiScanManager.finishSession()
+        isMultiScanActive = false
+
+        guard !result.points.isEmpty else { return }
+
+        // Store accumulated points
+        storedPointCloud = result.points
+
+        // Calculate volume based on selected method
+        await calculateAdvancedVolume(points: result.points)
+    }
+
+    /// Cancels the multi-scan session
+    func cancelMultiScanSession() {
+        multiScanManager.cancelSession()
+        isMultiScanActive = false
+    }
+
+    /// Calculates volume using the selected advanced method
+    func calculateAdvancedVolume(points: [SIMD3<Float>]) async {
+        isCalculatingAdvancedVolume = true
+
+        switch volumeMethod {
+        case .voxel:
+            // Already handled by calculateRefinedVolumeInBackground
+            isCalculatingAdvancedVolume = false
+
+        case .alphaShape:
+            let result = await alphaShapeCalculator.calculateVolumeAsync(points: points)
+            alphaShapeResult = result
+            showMeshVisualization(with: result)
+
+            // Update measurement with Alpha Shape volume
+            if var measurement = currentMeasurement {
+                measurement.alphaShapeVolume = result
+                currentMeasurement = measurement
+            }
+            isCalculatingAdvancedVolume = false
+
+        case .ballPivoting:
+            let result = await ballPivotingBuilder.buildMeshAsync(points: points)
+            meshResult = result
+            showMeshVisualization(with: result)
+
+            // Update measurement with mesh volume
+            if var measurement = currentMeasurement {
+                measurement.meshVolume = result
+                currentMeasurement = measurement
+            }
+            isCalculatingAdvancedVolume = false
+        }
+    }
+
+    /// Shows mesh visualization in AR scene
+    private func showMeshVisualization(with result: AlphaShapeResult) {
+        meshVisualization?.entity.removeFromParent()
+
+        let visualization = MeshVisualization()
+        visualization.update(with: result)
+
+        sessionManager.addEntity(visualization.entity)
+        meshVisualization = visualization
+
+        visualization.animateAppear(duration: 0.5)
+    }
+
+    /// Shows mesh visualization for Ball Pivoting result
+    private func showMeshVisualization(with result: MeshResult) {
+        meshVisualization?.entity.removeFromParent()
+
+        let visualization = MeshVisualization()
+        visualization.update(with: result)
+
+        sessionManager.addEntity(visualization.entity)
+        meshVisualization = visualization
+
+        visualization.animateAppear(duration: 0.5)
+    }
+
+    /// Toggles mesh visualization visibility
+    func toggleMeshVisualization() {
+        if let mesh = meshVisualization {
+            mesh.isVisible.toggle()
+        }
+    }
+
+    /// Gets current camera position
+    private func getCameraPosition() -> SIMD3<Float>? {
+        guard let frame = sessionManager.currentFrame else { return nil }
+        let transform = frame.camera.transform
+        return SIMD3<Float>(transform.columns.3.x, transform.columns.3.y, transform.columns.3.z)
+    }
+
+    /// Captures point cloud from current frame
+    private func capturePointCloud(from frame: ARFrame) async throws -> [SIMD3<Float>]? {
+        // Use existing measurement calculator to extract point cloud
+        // This is a simplified version - in production, you'd want to
+        // extract points from the current visible area
+        guard let depthMap = frame.sceneDepth?.depthMap else {
+            print("[MultiScan] No depth map available")
+            return nil
+        }
+
+        let pointGenerator = PointCloudGenerator()
+
+        // Get depth map dimensions
+        let depthWidth = CVPixelBufferGetWidth(depthMap)
+        let depthHeight = CVPixelBufferGetHeight(depthMap)
+        let imageSize = CGSize(width: depthWidth, height: depthHeight)
+
+        print("[MultiScan] Depth map size: \(depthWidth)x\(depthHeight)")
+
+        // Create a grid of pixels covering the depth map
+        // Sample every 4th pixel for performance
+        var maskedPixels: [(x: Int, y: Int)] = []
+        let step = 4
+        for y in stride(from: 0, to: depthHeight, by: step) {
+            for x in stride(from: 0, to: depthWidth, by: step) {
+                maskedPixels.append((x: x, y: y))
+            }
+        }
+
+        print("[MultiScan] Sampling \(maskedPixels.count) pixels")
+
+        let result = pointGenerator.generatePointCloud(
+            frame: frame,
+            maskedPixels: maskedPixels,
+            imageSize: imageSize
+        )
+
+        print("[MultiScan] Generated \(result.points.count) points")
+
+        return result.points
+    }
+
     private func showBoxVisualization(for box: BoundingBox3D, pointCloud: [SIMD3<Float>]? = nil, floorY: Float? = nil) {
         // Store point cloud for Fit functionality
         storedPointCloud = pointCloud
@@ -1233,6 +1624,10 @@ class ARMeasurementViewModel: ObservableObject {
         sessionManager.removeAllEntities()
         boxVisualization = nil
         pointCloudEntity = nil
+        meshVisualization = nil
+        voxelVisualization = nil
+        alphaShapeResult = nil
+        meshResult = nil
     }
 
     private func captureAnnotatedImage() -> Data? {
@@ -1241,6 +1636,31 @@ class ARMeasurementViewModel: ObservableObject {
             sessionManager.arView.drawHierarchy(in: sessionManager.arView.bounds, afterScreenUpdates: true)
         }
         return image.jpegData(compressionQuality: 0.8)
+    }
+}
+
+// MARK: - Volume Calculation Indicator
+
+struct VolumeCalculationIndicator: View {
+    let method: VolumeCalculationMethod
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                .scaleEffect(1.2)
+
+            HStack(spacing: 6) {
+                Image(systemName: method.icon)
+                Text("Calculating \(method.displayName)...")
+            }
+            .font(.subheadline)
+            .foregroundColor(.white)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color.blue.opacity(0.9))
+        .clipShape(Capsule())
     }
 }
 

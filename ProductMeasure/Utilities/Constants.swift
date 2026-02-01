@@ -133,3 +133,129 @@ enum SelectionMode: String, CaseIterable, Codable {
         }
     }
 }
+
+// MARK: - Scan Mode
+
+/// Scan mode for measurement
+enum ScanMode: String, CaseIterable, Codable {
+    case single = "single"
+    case multi = "multi"
+
+    var displayName: String {
+        switch self {
+        case .single: return "Single Scan"
+        case .multi: return "Multi-Scan"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .single: return "Quick measurement from one angle"
+        case .multi: return "Accurate volume from multiple angles (min. 3)"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .single: return "viewfinder"
+        case .multi: return "camera.on.rectangle.fill"
+        }
+    }
+}
+
+// MARK: - Volume Calculation Method
+
+/// Methods for calculating volume from point cloud
+enum VolumeCalculationMethod: String, CaseIterable, Codable {
+    case voxel = "voxel"
+    case alphaShape = "alpha"
+    case ballPivoting = "mesh"
+
+    var displayName: String {
+        switch self {
+        case .voxel: return "Voxel"
+        case .alphaShape: return "Alpha Shape"
+        case .ballPivoting: return "Ball Pivoting"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .voxel:
+            return "Fast grid-based calculation (±10-20%)"
+        case .alphaShape:
+            return "Medium precision surface reconstruction (±2-5%)"
+        case .ballPivoting:
+            return "High precision mesh reconstruction (95%+)"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .voxel: return "cube.fill"
+        case .alphaShape: return "pentagon.fill"
+        case .ballPivoting: return "circle.hexagongrid.fill"
+        }
+    }
+
+    /// Estimated accuracy percentage
+    var estimatedAccuracy: String {
+        switch self {
+        case .voxel: return "80-90%"
+        case .alphaShape: return "95-98%"
+        case .ballPivoting: return "95%+"
+        }
+    }
+
+    /// Relative processing speed
+    var speedRating: Int {
+        switch self {
+        case .voxel: return 3      // Fast
+        case .alphaShape: return 2  // Medium
+        case .ballPivoting: return 1 // Slow
+        }
+    }
+}
+
+// MARK: - Multi-Scan Constants
+
+extension AppConstants {
+    // MARK: - Multi-Scan Settings
+
+    /// Minimum number of scans required for multi-scan mode
+    static let minimumScansRequired = 3
+
+    /// Target point count for good coverage
+    static let targetMultiScanPointCount = 15000
+
+    /// Minimum angle difference between scans (degrees)
+    static let minimumScanAngleDifference: Float = 30.0
+
+    /// Default minimum point spacing for octree (3mm)
+    static let defaultOctreePointSpacing: Float = 0.003
+
+    // MARK: - Alpha Shape Settings
+
+    /// Default alpha multiplier for automatic selection
+    static let defaultAlphaMultiplier: Float = 2.5
+
+    /// Minimum alpha value (5mm)
+    static let minimumAlpha: Float = 0.005
+
+    /// Maximum alpha value (50cm)
+    static let maximumAlpha: Float = 0.5
+
+    // MARK: - Ball Pivoting Settings
+
+    /// Default ball radius multiplier
+    static let defaultBallRadiusMultiplier: Float = 3.0
+
+    /// Minimum ball radius (5mm)
+    static let minimumBallRadius: Float = 0.005
+
+    /// Maximum ball radius (20cm)
+    static let maximumBallRadius: Float = 0.2
+
+    /// Maximum triangles to generate (memory limit)
+    static let maxMeshTriangles = 100000
+}

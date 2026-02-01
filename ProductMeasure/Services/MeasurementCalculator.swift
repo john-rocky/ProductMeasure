@@ -36,6 +36,16 @@ class MeasurementCalculator {
         // Voxel-based refined volume (more accurate for irregular shapes)
         var refinedVolume: VoxelVolumeResult?
 
+        // Alpha Shape volume (high precision for concave objects)
+        var alphaShapeVolume: AlphaShapeResult?
+
+        // Ball Pivoting mesh volume (highest precision)
+        var meshVolume: MeshResult?
+
+        // Multi-scan metadata
+        var scanCount: Int = 1
+        var totalPointCount: Int = 0
+
         // Whether refined volume calculation is in progress
         var isCalculatingRefinedVolume: Bool = false
 
@@ -68,6 +78,42 @@ class MeasurementCalculator {
         var volumeDifferencePercent: Float? {
             guard let refined = refinedVolume, refined.volume > 0, volume > 0 else { return nil }
             return ((volume - refined.volume) / volume) * 100
+        }
+
+        /// Returns the most precise volume available
+        var mostPreciseVolume: Float {
+            if let mesh = meshVolume {
+                return mesh.volume
+            } else if let alpha = alphaShapeVolume {
+                return alpha.volume
+            } else if let refined = refinedVolume {
+                return refined.volume
+            }
+            return volume
+        }
+
+        /// Returns the most precise formatted volume
+        var formattedMostPreciseVolume: String {
+            if let mesh = meshVolume {
+                return mesh.formattedVolume
+            } else if let alpha = alphaShapeVolume {
+                return alpha.formattedVolume
+            } else if let refined = refinedVolume {
+                return refined.formattedVolume
+            }
+            return formattedVolume
+        }
+
+        /// Description of which volume method is being used
+        var volumeMethodDescription: String {
+            if meshVolume != nil {
+                return "Ball Pivoting (95%+)"
+            } else if alphaShapeVolume != nil {
+                return "Alpha Shape (±2-5%)"
+            } else if refinedVolume != nil {
+                return "Voxel (±10-20%)"
+            }
+            return "OBB (estimate)"
         }
     }
 
