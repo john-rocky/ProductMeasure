@@ -50,10 +50,9 @@ class BoxVisualization {
     private let handleRadius: Float = 0.004      // Radius of capsule (4mm)
     private let handleCollisionRadius: Float = 0.015  // Larger for easy touch
 
-    // Rotation handle (circular arrow at bottom corner)
-    private let rotationArcRadius: Float = 0.014     // Arc radius (14mm)
-    private let rotationArcThickness: Float = 0.002  // Arc thickness (2mm)
-    private let rotationArcAngle: Float = .pi * 1.2  // 216 degree arc
+    // Rotation handle (corner arc that looks like part of the box frame)
+    private let rotationArcThickness: Float = 0.001  // Same thickness as edge lines
+    private let rotationArcAngle: Float = .pi / 2    // 90 degree arc (quarter circle at corner)
 
     // MARK: - Initialization
 
@@ -293,47 +292,42 @@ class BoxVisualization {
         let handleEntity = Entity()
         handleEntity.name = "rotation_ring"
 
-        var material = UnlitMaterial(color: UIColor(white: 1.0, alpha: 0.5))  // Lighter, more transparent
+        // Use same semi-transparent white as edges for consistency
+        var material = UnlitMaterial(color: UIColor(white: 1.0, alpha: 0.6))
 
-        // Create smooth torus arc mesh
+        // Arc radius will be calculated based on box size in updateRotationRingTransform
+        // Use a placeholder radius here, it will be updated
+        let placeholderRadius: Float = 0.03
+
+        // Create smooth torus arc mesh (quarter circle at corner)
         if let torusMesh = createTorusArcMesh(
-            majorRadius: rotationArcRadius,
-            minorRadius: rotationArcThickness / 2,
-            startAngle: -.pi / 6,
+            majorRadius: placeholderRadius,
+            minorRadius: rotationArcThickness,
+            startAngle: 0,
             arcAngle: rotationArcAngle
         ) {
             let torusEntity = ModelEntity(mesh: torusMesh, materials: [material])
+            torusEntity.name = "rotation_arc"
             handleEntity.addChild(torusEntity)
         }
 
-        // Add arrow head at the end of the arc
-        let endAngle: Float = -.pi / 6 + rotationArcAngle
-        let arrowSize: Float = rotationArcThickness * 2.0
-
-        // Create triangular arrow using a flattened box rotated
+        // Add small arrow indicators at both ends to show rotation direction
+        let arrowSize: Float = 0.004
         let arrowMesh = MeshResource.generateBox(
-            size: [arrowSize * 1.8, rotationArcThickness * 0.8, arrowSize * 1.8],
-            cornerRadius: rotationArcThickness / 4
+            size: [arrowSize, arrowSize * 0.5, arrowSize],
+            cornerRadius: arrowSize * 0.2
         )
+
+        // Arrow at the end of arc (pointing in rotation direction)
         let arrowHead = ModelEntity(mesh: arrowMesh, materials: [material])
-
-        // Position at end of arc, slightly outward
-        arrowHead.position = SIMD3<Float>(
-            cos(endAngle) * rotationArcRadius,
-            0,
-            sin(endAngle) * rotationArcRadius
-        )
-
-        // Rotate to point tangentially (like an arrow head)
-        // Rotate 45 degrees to make diamond shape pointing in arc direction
-        let tangentAngle = endAngle + .pi / 2
-        arrowHead.orientation = simd_quatf(angle: tangentAngle + .pi / 4, axis: SIMD3<Float>(0, 1, 0))
-
+        arrowHead.name = "rotation_arrow"
+        arrowHead.position = SIMD3<Float>(0, 0, placeholderRadius)
+        arrowHead.orientation = simd_quatf(angle: .pi / 4, axis: SIMD3<Float>(0, 1, 0))
         handleEntity.addChild(arrowHead)
 
-        // Add collision
+        // Add collision for touch detection
         let collisionShape = ShapeResource.generateBox(
-            size: [rotationArcRadius * 2, rotationArcThickness * 4, rotationArcRadius * 2]
+            size: [placeholderRadius * 2.5, 0.02, placeholderRadius * 2.5]
         )
         handleEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
 
@@ -428,14 +422,43 @@ class BoxVisualization {
     }
 
     private func updateRotationRingTransform(_ ringEntity: Entity) {
-        // Position at bottom corner (outside the box)
+        // Calculate arc radius based on box size (proportional to smaller horizontal dimension)
+        let arcRadius = min(boundingBox.extents.x, boundingBox.extents.z) * 0.4
+
+        // Position at bottom corner of the box (+X, -Y, +Z corner)
+        // The arc connects the X edge to the Z edge at this corner
         let bottomY = -boundingBox.extents.y
-        let cornerOffset = max(boundingBox.extents.x, boundingBox.extents.z) + rotationArcRadius * 0.5
-        let localPos = SIMD3<Float>(cornerOffset, bottomY, cornerOffset)
+        let cornerX = boundingBox.extents.x
+        let cornerZ = boundingBox.extents.z
+        let localPos = SIMD3<Float>(cornerX, bottomY, cornerZ)
         ringEntity.position = boundingBox.localToWorld(localPos)
 
-        // Align with box rotation
+        // Align with box rotation - arc should extend outward from corner
+        // No additional rotation needed since arc naturally goes from +X to +Z direction
         ringEntity.orientation = boundingBox.rotation
+
+        // Update the arc mesh with correct radius
+        if let arcEntity = ringEntity.children.first(where: { $0.name == "rotation_arc" }) as? ModelEntity {
+            if let newMesh = createTorusArcMesh(
+                majorRadius: arcRadius,
+                minorRadius: rotationArcThickness,
+                startAngle: 0,
+                arcAngle: rotationArcAngle
+            ) {
+                arcEntity.model?.mesh = newMesh
+            }
+        }
+
+        // Update arrow position
+        if let arrowEntity = ringEntity.children.first(where: { $0.name == "rotation_arrow" }) as? ModelEntity {
+            arrowEntity.position = SIMD3<Float>(0, 0, arcRadius)
+        }
+
+        // Update collision size
+        let collisionShape = ShapeResource.generateBox(
+            size: [arcRadius * 2.5, 0.02, arcRadius * 2.5]
+        )
+        ringEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
     }
 
     // MARK: - Floor Distance Indicator
