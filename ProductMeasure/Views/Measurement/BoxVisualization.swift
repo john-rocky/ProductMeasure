@@ -49,8 +49,11 @@ class BoxVisualization {
     private let handleLength: Float = 0.018      // Length of capsule (18mm)
     private let handleRadius: Float = 0.004      // Radius of capsule (4mm)
     private let handleCollisionRadius: Float = 0.015  // Larger for easy touch
-    private let ringRadius: Float = 0.015        // Rotation ring radius
-    private let ringThickness: Float = 0.003
+
+    // Rotation handle (small arc at bottom corner)
+    private let rotationArcRadius: Float = 0.025     // Arc radius (25mm)
+    private let rotationArcThickness: Float = 0.004  // Arc thickness (4mm)
+    private let rotationArcAngle: Float = .pi / 3    // 60 degree arc
 
     // MARK: - Initialization
 
@@ -87,6 +90,34 @@ class BoxVisualization {
             return .rotationRing
         }
         return .none
+    }
+
+    /// Highlight a handle to show it's being touched
+    func highlightHandle(_ handleType: HandleType) {
+        let handleTypes: [HandleType] = [
+            .faceNegX, .facePosX,
+            .faceNegY, .facePosY,
+            .faceNegZ, .facePosZ
+        ]
+
+        guard let index = handleTypes.firstIndex(of: handleType),
+              index < faceHandleEntities.count else { return }
+
+        let handle = faceHandleEntities[index]
+        handle.scale = SIMD3<Float>(repeating: 1.3)  // Scale up 30%
+    }
+
+    /// Highlight rotation handle
+    func highlightRotationHandle() {
+        rotationRingEntity?.scale = SIMD3<Float>(repeating: 1.3)
+    }
+
+    /// Remove all handle highlights
+    func unhighlightAllHandles() {
+        for handle in faceHandleEntities {
+            handle.scale = SIMD3<Float>(repeating: 1.0)
+        }
+        rotationRingEntity?.scale = SIMD3<Float>(repeating: 1.0)
     }
 
     // MARK: - Private Methods
@@ -191,28 +222,18 @@ class BoxVisualization {
         let parentEntity = Entity()
         parentEntity.name = handleType.entityName
 
-        // Create capsule-shaped handle (pill shape)
-        // Use a cylinder with sphere caps approximation
+        // Create clean capsule handle using a single rounded box
         var material = SimpleMaterial()
         material.color = .init(tint: handleColor)
 
-        // Main cylinder body
-        let cylinderMesh = MeshResource.generateBox(
-            size: [handleRadius * 2, handleRadius * 2, handleLength - handleRadius * 2],
+        // Single rounded box with full corner radius for smooth capsule appearance
+        let capsuleMesh = MeshResource.generateBox(
+            size: [handleRadius * 2, handleRadius * 2, handleLength],
             cornerRadius: handleRadius
         )
-        let cylinderEntity = ModelEntity(mesh: cylinderMesh, materials: [material])
+        let capsuleEntity = ModelEntity(mesh: capsuleMesh, materials: [material])
 
-        // Sphere caps for rounded ends
-        let capMesh = MeshResource.generateSphere(radius: handleRadius)
-        let topCap = ModelEntity(mesh: capMesh, materials: [material])
-        topCap.position = SIMD3<Float>(0, 0, (handleLength - handleRadius * 2) / 2)
-        let bottomCap = ModelEntity(mesh: capMesh, materials: [material])
-        bottomCap.position = SIMD3<Float>(0, 0, -(handleLength - handleRadius * 2) / 2)
-
-        parentEntity.addChild(cylinderEntity)
-        parentEntity.addChild(topCap)
-        parentEntity.addChild(bottomCap)
+        parentEntity.addChild(capsuleEntity)
 
         // Add collision (capsule approximated as box)
         let collisionShape = ShapeResource.generateCapsule(height: handleLength, radius: handleCollisionRadius)
@@ -268,51 +289,76 @@ class BoxVisualization {
         return calculateOrientation(direction: targetDirection)
     }
 
-    // MARK: - Rotation Ring Creation
+    // MARK: - Rotation Handle Creation (Arc at bottom corner)
 
     private func createRotationRing() {
-        let ringEntity = Entity()
-        ringEntity.name = "rotation_ring"
+        let handleEntity = Entity()
+        handleEntity.name = "rotation_ring"
 
-        // Create ring segments (approximate circle with boxes)
-        let segmentCount = 16
-        let angleStep = Float.pi * 2 / Float(segmentCount)
+        // Create small arc segments at bottom corner
+        let segmentCount = 5
+        let startAngle: Float = -.pi / 6  // Start angle
+        let angleStep = rotationArcAngle / Float(segmentCount)
+
+        var material = SimpleMaterial()
+        material.color = .init(tint: handleColor)
 
         for i in 0..<segmentCount {
-            let angle = Float(i) * angleStep
-            let nextAngle = Float(i + 1) * angleStep
+            let angle = startAngle + Float(i) * angleStep
+            let nextAngle = startAngle + Float(i + 1) * angleStep
 
-            let segmentLength = ringRadius * angleStep * 1.1
-            let segmentMesh = MeshResource.generateBox(size: [ringThickness, ringThickness, segmentLength])
-
-            var material = SimpleMaterial()
-            material.color = .init(tint: .systemOrange)
+            let segmentLength = rotationArcRadius * angleStep * 1.1
+            let segmentMesh = MeshResource.generateBox(
+                size: [rotationArcThickness, rotationArcThickness, segmentLength],
+                cornerRadius: rotationArcThickness / 2
+            )
 
             let segmentEntity = ModelEntity(mesh: segmentMesh, materials: [material])
 
-            // Position at midpoint of arc
+            // Position at midpoint of arc segment
             let midAngle = (angle + nextAngle) / 2
             segmentEntity.position = SIMD3<Float>(
-                cos(midAngle) * ringRadius,
+                cos(midAngle) * rotationArcRadius,
                 0,
-                sin(midAngle) * ringRadius
+                sin(midAngle) * rotationArcRadius
             )
 
             // Rotate to be tangent to circle
             segmentEntity.orientation = simd_quatf(angle: -midAngle, axis: SIMD3<Float>(0, 1, 0))
 
-            ringEntity.addChild(segmentEntity)
+            handleEntity.addChild(segmentEntity)
         }
 
-        // Add collision (torus approximated as flat ring)
-        let collisionShape = ShapeResource.generateBox(size: [ringRadius * 2.2, ringThickness * 3, ringRadius * 2.2])
-        ringEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
+        // Add sphere caps at arc ends for rounded appearance
+        let capMesh = MeshResource.generateSphere(radius: rotationArcThickness / 2)
+        let startCap = ModelEntity(mesh: capMesh, materials: [material])
+        startCap.position = SIMD3<Float>(
+            cos(startAngle) * rotationArcRadius,
+            0,
+            sin(startAngle) * rotationArcRadius
+        )
+        handleEntity.addChild(startCap)
 
-        updateRotationRingTransform(ringEntity)
-        ringEntity.isEnabled = isInteractive
+        let endAngle = startAngle + rotationArcAngle
+        let endCap = ModelEntity(mesh: capMesh, materials: [material])
+        endCap.position = SIMD3<Float>(
+            cos(endAngle) * rotationArcRadius,
+            0,
+            sin(endAngle) * rotationArcRadius
+        )
+        handleEntity.addChild(endCap)
 
-        entity.addChild(ringEntity)
-        rotationRingEntity = ringEntity
+        // Add collision
+        let collisionShape = ShapeResource.generateBox(
+            size: [rotationArcRadius * 1.5, rotationArcThickness * 4, rotationArcRadius * 1.5]
+        )
+        handleEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
+
+        updateRotationRingTransform(handleEntity)
+        handleEntity.isEnabled = isInteractive
+
+        entity.addChild(handleEntity)
+        rotationRingEntity = handleEntity
     }
 
     private func updateRotationRingPosition() {
@@ -321,12 +367,13 @@ class BoxVisualization {
     }
 
     private func updateRotationRingTransform(_ ringEntity: Entity) {
-        // Position above the top face
-        let topFaceY = boundingBox.extents.y
-        let localPos = SIMD3<Float>(0, topFaceY + handleRadius * 3, 0)
+        // Position at bottom corner (outside the box)
+        let bottomY = -boundingBox.extents.y
+        let cornerOffset = max(boundingBox.extents.x, boundingBox.extents.z) + rotationArcRadius * 0.3
+        let localPos = SIMD3<Float>(cornerOffset, bottomY, cornerOffset)
         ringEntity.position = boundingBox.localToWorld(localPos)
 
-        // Align with box rotation (only horizontal rotation)
+        // Align with box rotation
         ringEntity.orientation = boundingBox.rotation
     }
 

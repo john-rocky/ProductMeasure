@@ -759,6 +759,9 @@ class ARMeasurementViewModel: ObservableObject {
 
         isDragging = true
 
+        // Highlight the touched handle
+        boxVisualization?.highlightHandle(handleType)
+
         // Get handle position in world space
         let handleLocalPos = handleType.localPosition(extents: result.boundingBox.extents)
         let handleWorldPos = result.boundingBox.localToWorld(handleLocalPos)
@@ -800,6 +803,9 @@ class ARMeasurementViewModel: ObservableObject {
 
         isDragging = true
 
+        // Highlight the rotation handle
+        boxVisualization?.highlightRotationHandle()
+
         // Convert horizontal screen movement to Yaw rotation
         // Positive X movement = clockwise rotation (negative yaw)
         let rotationSensitivity: Float = 0.005
@@ -826,6 +832,8 @@ class ARMeasurementViewModel: ObservableObject {
 
     func finishDrag() {
         isDragging = false
+        // Remove handle highlight
+        boxVisualization?.unhighlightAllHandles()
     }
 
     func fitToPointCloud(mode: MeasurementMode) {
