@@ -54,9 +54,9 @@ class BoundingBoxEstimator {
         let rotation = simd_quatf(rotationMatrix: rotationMatrix)
 
         // Project points onto local axes and find extents
-        let extents = computeExtents(points: points, centroid: centroid, rotation: rotation)
+        let (center, extents) = computeExtents(points: points, centroid: centroid, rotation: rotation)
 
-        return BoundingBox3D(center: centroid, extents: extents, rotation: rotation)
+        return BoundingBox3D(center: center, extents: extents, rotation: rotation)
     }
 
     // MARK: - Free Object Mode
@@ -86,9 +86,9 @@ class BoundingBoxEstimator {
         let rotation = simd_quatf(rotationMatrix: rotationMatrix)
 
         // Compute extents
-        let extents = computeExtents(points: points, centroid: centroid, rotation: rotation)
+        let (center, extents) = computeExtents(points: points, centroid: centroid, rotation: rotation)
 
-        return BoundingBox3D(center: centroid, extents: extents, rotation: rotation)
+        return BoundingBox3D(center: center, extents: extents, rotation: rotation)
     }
 
     // MARK: - Helper Methods
@@ -164,7 +164,7 @@ class BoundingBoxEstimator {
         points: [SIMD3<Float>],
         centroid: SIMD3<Float>,
         rotation: simd_quatf
-    ) -> SIMD3<Float> {
+    ) -> (center: SIMD3<Float>, extents: SIMD3<Float>) {
         var minLocal = SIMD3<Float>(Float.infinity, Float.infinity, Float.infinity)
         var maxLocal = SIMD3<Float>(-Float.infinity, -Float.infinity, -Float.infinity)
 
@@ -176,8 +176,14 @@ class BoundingBoxEstimator {
             maxLocal = simd_max(maxLocal, local)
         }
 
+        // Compute the true box center (not the centroid)
+        let localCenter = (minLocal + maxLocal) / 2
+        let adjustedCenter = centroid + rotation.act(localCenter)
+
         // Extents are half-sizes
-        return (maxLocal - minLocal) / 2
+        let extents = (maxLocal - minLocal) / 2
+
+        return (center: adjustedCenter, extents: extents)
     }
 }
 
