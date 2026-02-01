@@ -8,30 +8,39 @@ import UIKit
 import simd
 
 /// Creates RealityKit entities for visualizing a 3D bounding box with animation support
-/// The box animates by growing vertically from the bottom plane upward (world Y direction)
+/// Animation flow:
+/// 1. Bottom plane starts at camera position (matching 2D bracket appearance)
+/// 2. Bottom plane flies to object's actual bottom position
+/// 3. Box grows vertically from bottom to top
 class AnimatedBoxVisualization {
     // MARK: - Properties
 
     private(set) var entity: Entity
 
     // Edge entities
-    private var bottomEdgeEntities: [ModelEntity] = []   // 4 edges on bottom (lowest world Y)
+    private var bottomEdgeEntities: [ModelEntity] = []   // 4 edges on bottom
     private var verticalEdgeEntities: [ModelEntity] = [] // 4 vertical edges
-    private var topEdgeEntities: [ModelEntity] = []      // 4 edges on top (highest world Y)
+    private var topEdgeEntities: [ModelEntity] = []      // 4 edges on top
 
     private(set) var boundingBox: BoundingBox3D
 
-    /// Current animation progress (0 = bottom only, 1 = full box)
+    /// Current animation progress for vertical growth (0 = bottom only, 1 = full box)
     private(set) var verticalProgress: Float = 0
 
-    // Bottom and top corners sorted by world Y
-    private var bottomCorners: [SIMD3<Float>] = []
-    private var topCorners: [SIMD3<Float>] = []
+    /// Current animation progress for flying (0 = at camera, 1 = at target)
+    private(set) var flyProgress: Float = 0
 
-    // Animation timer
+    // Target corners (at object position)
+    private var targetBottomCorners: [SIMD3<Float>] = []
+    private var targetTopCorners: [SIMD3<Float>] = []
+
+    // Start corners (at camera position)
+    private var startBottomCorners: [SIMD3<Float>] = []
+
+    // Animation state
     private var animationTimer: Timer?
     private var animationStartTime: Date?
-    private var animationDuration: TimeInterval = 0.35
+    private var currentAnimationDuration: TimeInterval = 0.4
 
     // MARK: - Constants
 
@@ -43,8 +52,7 @@ class AnimatedBoxVisualization {
     init(boundingBox: BoundingBox3D) {
         self.boundingBox = boundingBox
         self.entity = Entity()
-        computeBottomAndTopCorners()
-        createVisualization()
+        computeTargetCorners()
     }
 
     deinit {
@@ -53,23 +61,55 @@ class AnimatedBoxVisualization {
 
     // MARK: - Public Methods
 
-    /// Update the bounding box dimensions
-    func update(boundingBox: BoundingBox3D) {
-        self.boundingBox = boundingBox
-        computeBottomAndTopCorners()
-        updateAllEdges()
-    }
+    /// Setup the bottom plane at camera position, ready to fly to target
+    /// - Parameters:
+    ///   - cameraTransform: The camera's world transform
+    ///   - distanceFromCamera: How far in front of camera to place the initial rect
+    ///   - rectSize: Size of the initial rect (matches 2D bracket size)
+    func setupAtCameraPosition(cameraTransform: simd_float4x4, distanceFromCamera: Float = 0.5, rectSize: Float = 0.3) {
+        // Get camera position and forward direction
+        let cameraPosition = SIMD3<Float>(
+            cameraTransform.columns.3.x,
+            cameraTransform.columns.3.y,
+            cameraTransform.columns.3.z
+        )
 
-    /// Show only the bottom plane immediately
-    func showBottomPlaneOnly() {
+        // Camera's forward is -Z in camera space
+        let cameraForward = -SIMD3<Float>(
+            cameraTransform.columns.2.x,
+            cameraTransform.columns.2.y,
+            cameraTransform.columns.2.z
+        )
+
+        // Center of the initial rect (in front of camera)
+        let startCenter = cameraPosition + cameraForward * distanceFromCamera
+
+        // Get target bottom corners' centroid
+        let targetCentroid = targetBottomCorners.reduce(SIMD3<Float>(0, 0, 0), +) / Float(targetBottomCorners.count)
+
+        // Calculate the scale factor to match the desired rectSize
+        // Get the average "radius" of the target shape
+        let targetRadius = targetBottomCorners.map { simd_length($0 - targetCentroid) }.reduce(0, +) / Float(targetBottomCorners.count)
+        let desiredRadius = rectSize / 2 * sqrt(2)  // diagonal of square / 2
+        let scale = targetRadius > 0.001 ? desiredRadius / targetRadius : 1.0
+
+        // Create start corners with the SAME shape as target, just translated and scaled
+        // This prevents rotation during interpolation
+        startBottomCorners = targetBottomCorners.map { corner in
+            let offset = corner - targetCentroid  // offset from target center
+            let scaledOffset = offset * scale      // scale to desired size
+            return startCenter + scaledOffset      // translate to start position
+        }
+
+        // Create the visualization at start position
+        flyProgress = 0
         verticalProgress = 0
+        createVisualization()
 
-        // Show bottom edges
+        // Show only bottom edges at start position
         for edge in bottomEdgeEntities {
             edge.isEnabled = true
         }
-
-        // Hide vertical and top edges
         for edge in verticalEdgeEntities {
             edge.isEnabled = false
         }
@@ -77,23 +117,17 @@ class AnimatedBoxVisualization {
             edge.isEnabled = false
         }
 
-        updateBottomEdges()
+        updateBottomEdgesForFly()
     }
 
-    /// Animate to show the full box - grows from bottom to top (world Y direction)
-    func animateToFullBox(duration: TimeInterval = 0.35, completion: (() -> Void)? = nil) {
+    /// Animate the bottom plane flying from camera position to object bottom
+    func animateFlyToBottom(duration: TimeInterval = 0.4, completion: (() -> Void)? = nil) {
         animationTimer?.invalidate()
 
-        animationDuration = duration
+        currentAnimationDuration = duration
         animationStartTime = Date()
-        verticalProgress = 0
+        flyProgress = 0
 
-        // Enable vertical edges
-        for edge in verticalEdgeEntities {
-            edge.isEnabled = true
-        }
-
-        // Start animation timer (60 FPS)
         animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] timer in
             guard let self = self else {
                 timer.invalidate()
@@ -106,7 +140,50 @@ class AnimatedBoxVisualization {
             }
 
             let elapsed = Date().timeIntervalSince(startTime)
-            let progress = Float(min(elapsed / self.animationDuration, 1.0))
+            let progress = Float(min(elapsed / self.currentAnimationDuration, 1.0))
+
+            // Ease out curve
+            let easedProgress = 1.0 - pow(1.0 - progress, 3)
+
+            self.flyProgress = easedProgress
+            self.updateBottomEdgesForFly()
+
+            if progress >= 1.0 {
+                timer.invalidate()
+                self.animationTimer = nil
+                self.flyProgress = 1.0
+                self.updateBottomEdgesForFly()
+                completion?()
+            }
+        }
+    }
+
+    /// Animate the box growing vertically from bottom to top
+    func animateGrowVertical(duration: TimeInterval = 0.35, completion: (() -> Void)? = nil) {
+        animationTimer?.invalidate()
+
+        currentAnimationDuration = duration
+        animationStartTime = Date()
+        verticalProgress = 0
+
+        // Enable vertical edges
+        for edge in verticalEdgeEntities {
+            edge.isEnabled = true
+        }
+
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate()
+                return
+            }
+
+            guard let startTime = self.animationStartTime else {
+                timer.invalidate()
+                return
+            }
+
+            let elapsed = Date().timeIntervalSince(startTime)
+            let progress = Float(min(elapsed / self.currentAnimationDuration, 1.0))
 
             // Ease out curve
             let easedProgress = 1.0 - pow(1.0 - progress, 3)
@@ -122,7 +199,6 @@ class AnimatedBoxVisualization {
                 self.updateTopEdges()
             }
 
-            // Complete
             if progress >= 1.0 {
                 timer.invalidate()
                 self.animationTimer = nil
@@ -134,10 +210,9 @@ class AnimatedBoxVisualization {
         }
     }
 
-    // MARK: - Private Methods - Corner Sorting
+    // MARK: - Private Methods - Corner Computation
 
-    /// Compute bottom and top corners based on world Y coordinate
-    private func computeBottomAndTopCorners() {
+    private func computeTargetCorners() {
         let corners = boundingBox.corners
 
         // Sort corners by world Y coordinate
@@ -148,16 +223,10 @@ class AnimatedBoxVisualization {
         // Top 4 corners (highest Y)
         let topIndices = sortedByY.suffix(4).map { $0.offset }
 
-        bottomCorners = bottomIndices.map { corners[$0] }
-        topCorners = topIndices.map { corners[$0] }
-
-        // Sort bottom and top corners to match them correctly
-        // Sort by angle around the centroid for consistent ordering
-        bottomCorners = sortCornersClockwise(bottomCorners)
-        topCorners = sortCornersClockwise(topCorners)
+        targetBottomCorners = sortCornersClockwise(bottomIndices.map { corners[$0] })
+        targetTopCorners = sortCornersClockwise(topIndices.map { corners[$0] })
     }
 
-    /// Sort corners in clockwise order around their centroid (for consistent edge matching)
     private func sortCornersClockwise(_ corners: [SIMD3<Float>]) -> [SIMD3<Float>] {
         guard corners.count == 4 else { return corners }
 
@@ -173,16 +242,24 @@ class AnimatedBoxVisualization {
     // MARK: - Private Methods - Creation
 
     private func createVisualization() {
+        // Clear existing
+        for child in entity.children {
+            child.removeFromParent()
+        }
+        bottomEdgeEntities.removeAll()
+        verticalEdgeEntities.removeAll()
+        topEdgeEntities.removeAll()
+
         createBottomEdges()
         createVerticalEdges()
         createTopEdges()
     }
 
     private func createBottomEdges() {
-        // Create edges connecting the 4 bottom corners
+        // Create 4 edges for the bottom plane
         for i in 0..<4 {
-            let start = bottomCorners[i]
-            let end = bottomCorners[(i + 1) % 4]
+            let start = currentBottomCorners()[i]
+            let end = currentBottomCorners()[(i + 1) % 4]
             let edge = createEdgeEntity(from: start, to: end)
             entity.addChild(edge)
             bottomEdgeEntities.append(edge)
@@ -190,10 +267,9 @@ class AnimatedBoxVisualization {
     }
 
     private func createVerticalEdges() {
-        // Create vertical edges from bottom to top corners
+        // Create vertical edges (initially hidden, at minimal height)
         for i in 0..<4 {
-            let bottomCorner = bottomCorners[i]
-            // Start with minimal height edge
+            let bottomCorner = targetBottomCorners[i]
             let edge = createEdgeEntity(from: bottomCorner, to: bottomCorner + SIMD3<Float>(0, 0.001, 0))
             edge.isEnabled = false
             entity.addChild(edge)
@@ -202,10 +278,10 @@ class AnimatedBoxVisualization {
     }
 
     private func createTopEdges() {
-        // Create edges connecting the 4 top corners
+        // Create top edges (initially hidden)
         for i in 0..<4 {
-            let start = topCorners[i]
-            let end = topCorners[(i + 1) % 4]
+            let start = targetTopCorners[i]
+            let end = targetTopCorners[(i + 1) % 4]
             let edge = createEdgeEntity(from: start, to: end)
             edge.isEnabled = false
             entity.addChild(edge)
@@ -230,17 +306,23 @@ class AnimatedBoxVisualization {
 
     // MARK: - Private Methods - Updates
 
-    private func updateAllEdges() {
-        updateBottomEdges()
-        updateVerticalEdges()
-        updateTopEdges()
+    /// Get current bottom corners based on fly progress
+    private func currentBottomCorners() -> [SIMD3<Float>] {
+        guard startBottomCorners.count == 4, targetBottomCorners.count == 4 else {
+            return targetBottomCorners
+        }
+
+        return (0..<4).map { i in
+            simd_mix(startBottomCorners[i], targetBottomCorners[i], SIMD3<Float>(repeating: flyProgress))
+        }
     }
 
-    private func updateBottomEdges() {
+    private func updateBottomEdgesForFly() {
+        let corners = currentBottomCorners()
         for i in 0..<4 {
             guard i < bottomEdgeEntities.count else { continue }
-            let start = bottomCorners[i]
-            let end = bottomCorners[(i + 1) % 4]
+            let start = corners[i]
+            let end = corners[(i + 1) % 4]
             updateEdgeEntity(bottomEdgeEntities[i], from: start, to: end)
         }
     }
@@ -249,12 +331,10 @@ class AnimatedBoxVisualization {
         for i in 0..<4 {
             guard i < verticalEdgeEntities.count else { continue }
 
-            let bottomCorner = bottomCorners[i]
-            let topCorner = topCorners[i]
+            let bottomCorner = targetBottomCorners[i]
+            let topCorner = targetTopCorners[i]
 
-            // Interpolate from bottom to top based on progress
             let currentTop = simd_mix(bottomCorner, topCorner, SIMD3<Float>(repeating: verticalProgress))
-
             updateEdgeEntity(verticalEdgeEntities[i], from: bottomCorner, to: currentTop)
         }
     }
@@ -263,11 +343,10 @@ class AnimatedBoxVisualization {
         for i in 0..<4 {
             guard i < topEdgeEntities.count else { continue }
 
-            // Interpolate top edge positions based on progress
-            let startBottom = bottomCorners[i]
-            let startTop = topCorners[i]
-            let endBottom = bottomCorners[(i + 1) % 4]
-            let endTop = topCorners[(i + 1) % 4]
+            let startBottom = targetBottomCorners[i]
+            let startTop = targetTopCorners[i]
+            let endBottom = targetBottomCorners[(i + 1) % 4]
+            let endTop = targetTopCorners[(i + 1) % 4]
 
             let currentStart = simd_mix(startBottom, startTop, SIMD3<Float>(repeating: verticalProgress))
             let currentEnd = simd_mix(endBottom, endTop, SIMD3<Float>(repeating: verticalProgress))

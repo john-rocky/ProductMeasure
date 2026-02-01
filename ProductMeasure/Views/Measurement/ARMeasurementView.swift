@@ -20,11 +20,10 @@ struct ARMeasurementView: View {
                 ARMeasurementViewRepresentable(viewModel: viewModel, measurementMode: measurementMode)
                     .ignoresSafeArea()
 
-                // Corner brackets overlay - always visible as targeting guide
+                // Corner brackets overlay - visible only before tap
                 GeometryReader { geometry in
                     CornerBracketsView(
                         phase: viewModel.animationPhase,
-                        context: viewModel.animationContext,
                         screenSize: geometry.size
                     )
                 }
@@ -673,57 +672,50 @@ class ARMeasurementViewModel: ObservableObject {
         result: MeasurementCalculator.MeasurementResult,
         floorY: Float?
     ) {
-        // Project bottom corners for 2D overlay
-        let bottomCorners = sessionManager.projectBottomPlaneCorners(of: boundingBox)
+        // Get camera transform for starting position
+        let cameraTransform = frame.camera.transform
 
-        // Create animation context
-        let context = BoundingBoxAnimationContext(
-            tapPoint: tapPoint,
-            targetBox: boundingBox,
-            bottomCorners: bottomCorners,
-            screenSize: viewSize
-        )
-        self.animationContext = context
+        // Phase 1: Hide 2D brackets and create 3D rect at camera position
+        animationPhase = .flyingToBottom
 
-        // Start animation phases
-        Task {
-            // Phase 1: Shrink brackets to target position
-            animationPhase = .shrinkingToTarget
-            try? await Task.sleep(for: .milliseconds(Int(BoxAnimationTiming.shrinkToTarget * 1000)))
-
-            // Phase 2: Transition to 3D - create and show animated visualization
-            animationPhase = .transitioningTo3D
-
-            // Create animated box visualization
-            animatedBoxVisualization = AnimatedBoxVisualization(boundingBox: boundingBox)
-            if let animatedBox = animatedBoxVisualization {
-                animatedBox.showBottomPlaneOnly()
-                sessionManager.addEntity(animatedBox.entity)
-            }
-
-            try? await Task.sleep(for: .milliseconds(Int(BoxAnimationTiming.transitionTo3D * 1000)))
-
-            // Phase 3: Grow vertical edges
-            animationPhase = .growingVertical
-
-            animatedBoxVisualization?.animateToFullBox(duration: BoxAnimationTiming.growVertical)
-            try? await Task.sleep(for: .milliseconds(Int(BoxAnimationTiming.growVertical * 1000)))
-
-            // Phase 4: Complete - swap to regular BoxVisualization for editing
-            animationPhase = .complete
-
-            // Remove animated visualization
-            animatedBoxVisualization?.entity.removeFromParent()
-            animatedBoxVisualization = nil
-
-            // Show regular editable box visualization
-            currentMeasurement = result
-            showBoxVisualization(for: boundingBox, pointCloud: result.pointCloud, floorY: floorY)
-
-            // Clear 2D overlay context but keep phase as complete
-            animationContext = nil
-
+        // Create animated box visualization
+        animatedBoxVisualization = AnimatedBoxVisualization(boundingBox: boundingBox)
+        guard let animatedBox = animatedBoxVisualization else {
             isProcessing = false
+            return
+        }
+
+        // Setup the 3D rect at camera position (facing camera, matching bracket size)
+        animatedBox.setupAtCameraPosition(
+            cameraTransform: cameraTransform,
+            distanceFromCamera: 0.5,
+            rectSize: 0.25
+        )
+        sessionManager.addEntity(animatedBox.entity)
+
+        // Animate flying to bottom position
+        animatedBox.animateFlyToBottom(duration: BoxAnimationTiming.flyToBottom) { [weak self] in
+            guard let self = self else { return }
+
+            // Phase 2: Grow vertical edges
+            self.animationPhase = .growingVertical
+
+            animatedBox.animateGrowVertical(duration: BoxAnimationTiming.growVertical) { [weak self] in
+                guard let self = self else { return }
+
+                // Phase 3: Complete - swap to regular BoxVisualization for editing
+                self.animationPhase = .complete
+
+                // Remove animated visualization
+                animatedBox.entity.removeFromParent()
+                self.animatedBoxVisualization = nil
+
+                // Show regular editable box visualization
+                self.currentMeasurement = result
+                self.showBoxVisualization(for: boundingBox, pointCloud: result.pointCloud, floorY: floorY)
+
+                self.isProcessing = false
+            }
         }
     }
 

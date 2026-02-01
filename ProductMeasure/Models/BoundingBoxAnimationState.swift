@@ -11,14 +11,11 @@ import simd
 
 /// Animation phases for the bounding box appearance animation
 enum BoundingBoxAnimationPhase: Equatable {
-    /// Showing target brackets - waiting for user tap
+    /// Showing 2D target brackets - waiting for user tap
     case showingTargetBrackets
 
-    /// Brackets are shrinking/moving to the tapped object position
-    case shrinkingToTarget
-
-    /// Transitioning from 2D overlay to 3D space (showing bottom plane)
-    case transitioningTo3D
+    /// 3D rect flying from camera position to object bottom plane
+    case flyingToBottom
 
     /// Growing vertically from the bottom plane
     case growingVertical
@@ -66,15 +63,12 @@ struct BoundingBoxAnimationContext {
 
 /// Animation timing constants
 struct BoxAnimationTiming {
-    /// Duration for brackets to shrink to target position
-    static let shrinkToTarget: Double = 0.3
-
-    /// Duration for rectangle to transition to 3D bottom plane
-    static let transitionTo3D: Double = 0.3
+    /// Duration for 3D rect to fly from camera to bottom plane
+    static let flyToBottom: Double = 0.4
 
     /// Duration for vertical edges to grow
     static let growVertical: Double = 0.35
 
     /// Total animation duration
-    static let total: Double = shrinkToTarget + transitionTo3D + growVertical
+    static let total: Double = flyToBottom + growVertical
 }
