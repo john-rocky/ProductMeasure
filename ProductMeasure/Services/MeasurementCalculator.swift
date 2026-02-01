@@ -302,10 +302,11 @@ class MeasurementCalculator {
         }
         print("[Calculator] Found \(depthFilteredPixels.count) masked pixels after depth filtering")
 
-        // Create debug mask image
-        let debugMaskImage = DebugVisualization.visualizeMask(
+        // Create debug mask image with ROI
+        let debugMaskImage = DebugVisualization.visualizeMaskWithROI(
             mask: segmentation.mask,
             cameraImage: frame.capturedImage,
+            visionROI: visionROI,
             tapPoint: normalizedCenter
         )
 

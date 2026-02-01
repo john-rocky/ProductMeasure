@@ -141,6 +141,157 @@ class DebugVisualization {
         return result
     }
 
+    /// Create a debug image showing the segmentation mask with ROI
+    /// The mask covers only the ROI area, so we need to position it correctly on the camera image
+    static func visualizeMaskWithROI(
+        mask: CVPixelBuffer,
+        cameraImage: CVPixelBuffer,
+        visionROI: CGRect,
+        tapPoint: CGPoint? = nil
+    ) -> UIImage? {
+        let maskWidth = CVPixelBufferGetWidth(mask)
+        let maskHeight = CVPixelBufferGetHeight(mask)
+        let imageWidth = CVPixelBufferGetWidth(cameraImage)
+        let imageHeight = CVPixelBufferGetHeight(cameraImage)
+
+        print("[DebugViz] Mask size: \(maskWidth)x\(maskHeight)")
+        print("[DebugViz] Camera image size: \(imageWidth)x\(imageHeight)")
+        print("[DebugViz] Vision ROI: \(visionROI)")
+
+        // Create UIImage from camera with proper orientation
+        let ciImage = CIImage(cvPixelBuffer: cameraImage)
+        let context = CIContext()
+
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            return nil
+        }
+
+        // Use reduced resolution to save memory (1/4 size)
+        let scale: CGFloat = 0.25
+        let drawWidth = CGFloat(imageWidth) * scale
+        let drawHeight = CGFloat(imageHeight) * scale
+        let landscapeSize = CGSize(width: drawWidth, height: drawHeight)
+
+        UIGraphicsBeginImageContextWithOptions(landscapeSize, false, 1.0)
+        guard let ctx = UIGraphicsGetCurrentContext() else { return nil }
+
+        // Draw camera image - need to flip because CGContext has flipped Y
+        ctx.saveGState()
+        ctx.translateBy(x: 0, y: drawHeight)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: drawWidth, height: drawHeight))
+        ctx.restoreGState()
+
+        // Read mask
+        CVPixelBufferLockBaseAddress(mask, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
+
+        guard let maskBase = CVPixelBufferGetBaseAddress(mask) else { return nil }
+        let maskBytesPerRow = CVPixelBufferGetBytesPerRow(mask)
+        let maskPtr = maskBase.assumingMemoryBound(to: UInt8.self)
+
+        // Determine bytes per pixel based on format
+        let maskPixelFormat = CVPixelBufferGetPixelFormatType(mask)
+        let bytesPerPixel: Int
+        if maskPixelFormat == kCVPixelFormatType_32BGRA || maskPixelFormat == kCVPixelFormatType_32ARGB {
+            bytesPerPixel = 4
+        } else {
+            bytesPerPixel = 1
+        }
+
+        // Draw mask overlay - positioned according to ROI
+        // Vision ROI is in normalized coordinates (0-1, bottom-left origin)
+        // Need to convert to draw coordinates (top-left origin)
+        ctx.setFillColor(UIColor.green.withAlphaComponent(0.4).cgColor)
+
+        var maskedPixelCount = 0
+        let sampleStep = max(4, min(maskWidth, maskHeight) / 100)
+
+        for my in Swift.stride(from: 0, to: maskHeight, by: sampleStep) {
+            for mx in Swift.stride(from: 0, to: maskWidth, by: sampleStep) {
+                let pixelOffset = my * maskBytesPerRow + mx * bytesPerPixel
+                let value: UInt8
+                if bytesPerPixel == 4 {
+                    value = maskPtr[pixelOffset + 3]
+                } else {
+                    value = maskPtr[pixelOffset]
+                }
+
+                if value > 0 {
+                    maskedPixelCount += 1
+
+                    // Mask coords to ROI-relative normalized (0-1)
+                    let roiRelativeX = CGFloat(mx) / CGFloat(maskWidth)
+                    let roiRelativeY = CGFloat(my) / CGFloat(maskHeight)
+
+                    // ROI-relative to Vision absolute (bottom-left origin)
+                    // Flip Y within ROI because mask uses top-left origin
+                    let visionX = visionROI.origin.x + roiRelativeX * visionROI.width
+                    let visionY = visionROI.origin.y + (1.0 - roiRelativeY) * visionROI.height
+
+                    // Vision coords to draw coords (top-left origin)
+                    let drawX = visionX * drawWidth
+                    let drawY = (1.0 - visionY) * drawHeight
+
+                    let rectSize = max(scaleStep(sampleStep, maskWidth, visionROI.width, drawWidth),
+                                       scaleStep(sampleStep, maskHeight, visionROI.height, drawHeight))
+                    ctx.fill(CGRect(x: drawX, y: drawY, width: rectSize, height: rectSize))
+                }
+            }
+        }
+
+        print("[DebugViz] Masked pixels sampled: \(maskedPixelCount)")
+
+        // Draw ROI rectangle outline
+        ctx.setStrokeColor(UIColor.yellow.cgColor)
+        ctx.setLineWidth(2)
+        let roiDrawX = visionROI.origin.x * drawWidth
+        let roiDrawY = (1.0 - visionROI.origin.y - visionROI.height) * drawHeight
+        let roiDrawW = visionROI.width * drawWidth
+        let roiDrawH = visionROI.height * drawHeight
+        ctx.stroke(CGRect(x: roiDrawX, y: roiDrawY, width: roiDrawW, height: roiDrawH))
+
+        // Draw tap point if provided (in landscape normalized coordinates)
+        if let tap = tapPoint {
+            let tapX = tap.x * drawWidth
+            let tapY = tap.y * drawHeight
+            let markerSize: CGFloat = 10 * scale
+
+            ctx.setFillColor(UIColor.red.cgColor)
+            ctx.fillEllipse(in: CGRect(x: tapX - markerSize, y: tapY - markerSize, width: markerSize * 2, height: markerSize * 2))
+
+            ctx.setStrokeColor(UIColor.white.cgColor)
+            ctx.setLineWidth(2)
+            ctx.strokeEllipse(in: CGRect(x: tapX - markerSize, y: tapY - markerSize, width: markerSize * 2, height: markerSize * 2))
+        }
+
+        guard let landscapeImage = UIGraphicsGetImageFromCurrentImageContext() else {
+            UIGraphicsEndImageContext()
+            return nil
+        }
+        UIGraphicsEndImageContext()
+
+        // Rotate the landscape image to portrait for display
+        let portraitSize = CGSize(width: drawHeight, height: drawWidth)
+        UIGraphicsBeginImageContextWithOptions(portraitSize, false, 1.0)
+        guard let portraitCtx = UIGraphicsGetCurrentContext() else { return nil }
+
+        portraitCtx.translateBy(x: portraitSize.width / 2, y: portraitSize.height / 2)
+        portraitCtx.rotate(by: .pi / 2)
+        portraitCtx.translateBy(x: -landscapeSize.width / 2, y: -landscapeSize.height / 2)
+
+        landscapeImage.draw(in: CGRect(origin: .zero, size: landscapeSize))
+
+        let result = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+
+        return result
+    }
+
+    private static func scaleStep(_ step: Int, _ maskDim: Int, _ roiDim: CGFloat, _ drawDim: CGFloat) -> CGFloat {
+        return CGFloat(step) / CGFloat(maskDim) * roiDim * drawDim
+    }
+
     // MARK: - Point Cloud Visualization
 
     /// Create RealityKit entities for visualizing point cloud
