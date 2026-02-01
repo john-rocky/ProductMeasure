@@ -36,6 +36,10 @@
 		001000078 /* DebugVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000079 /* DebugVisualization.swift */; };
 		001000080 /* HandleType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000081 /* HandleType.swift */; };
 		001000082 /* BoxEditingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000083 /* BoxEditingService.swift */; };
+		001000084 /* BoundingBoxAnimationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000085 /* BoundingBoxAnimationState.swift */; };
+		001000086 /* CornerBracketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000087 /* CornerBracketsView.swift */; };
+		001000088 /* AnimatedBoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000089 /* AnimatedBoxVisualization.swift */; };
+		001000090 /* BoxAnimationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000091 /* BoxAnimationCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -70,6 +74,10 @@
 		001000079 /* DebugVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugVisualization.swift; sourceTree = "<group>"; };
 		001000081 /* HandleType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleType.swift; sourceTree = "<group>"; };
 		001000083 /* BoxEditingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxEditingService.swift; sourceTree = "<group>"; };
+		001000085 /* BoundingBoxAnimationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundingBoxAnimationState.swift; sourceTree = "<group>"; };
+		001000087 /* CornerBracketsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerBracketsView.swift; sourceTree = "<group>"; };
+		001000089 /* AnimatedBoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedBoxVisualization.swift; sourceTree = "<group>"; };
+		001000091 /* BoxAnimationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxAnimationCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +129,7 @@
 				001000024 /* BoundingBox3D.swift */,
 				001000026 /* MeasurementQuality.swift */,
 				001000081 /* HandleType.swift */,
+				001000085 /* BoundingBoxAnimationState.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -147,6 +156,7 @@
 				001000038 /* MeasurementCalculator.swift */,
 				001000079 /* DebugVisualization.swift */,
 				001000083 /* BoxEditingService.swift */,
+				001000091 /* BoxAnimationCoordinator.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -178,6 +188,8 @@
 				001000010 /* BoxVisualization.swift */,
 				001000012 /* MeasurementOverlay.swift */,
 				001000014 /* BoxEditingView.swift */,
+				001000087 /* CornerBracketsView.swift */,
+				001000089 /* AnimatedBoxVisualization.swift */,
 			);
 			path = Measurement;
 			sourceTree = "<group>";
@@ -305,6 +317,10 @@
 				001000078 /* DebugVisualization.swift in Sources */,
 				001000080 /* HandleType.swift in Sources */,
 				001000082 /* BoxEditingService.swift in Sources */,
+				001000084 /* BoundingBoxAnimationState.swift in Sources */,
+				001000086 /* CornerBracketsView.swift in Sources */,
+				001000088 /* AnimatedBoxVisualization.swift in Sources */,
+				001000090 /* BoxAnimationCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

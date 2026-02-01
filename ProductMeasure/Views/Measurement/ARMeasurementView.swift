@@ -20,6 +20,16 @@ struct ARMeasurementView: View {
                 ARMeasurementViewRepresentable(viewModel: viewModel, measurementMode: measurementMode)
                     .ignoresSafeArea()
 
+                // Corner brackets overlay - always visible as targeting guide
+                GeometryReader { geometry in
+                    CornerBracketsView(
+                        phase: viewModel.animationPhase,
+                        context: viewModel.animationContext,
+                        screenSize: geometry.size
+                    )
+                }
+                .ignoresSafeArea()
+
                 // Overlay UI
                 VStack {
                     // Top status bar
@@ -84,8 +94,8 @@ struct ARMeasurementView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
-                    // Instruction text when no measurement
-                    if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                    // Instruction text when in targeting mode (brackets visible)
+                    if viewModel.currentMeasurement == nil && !viewModel.isProcessing && viewModel.animationPhase == .showingTargetBrackets {
                         InstructionCard()
                     }
                 }
@@ -541,11 +551,17 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var debugMaskImage: UIImage?
     @Published var debugDepthImage: UIImage?
 
+    // Animation state - start with target brackets visible
+    @Published var animationPhase: BoundingBoxAnimationPhase = .showingTargetBrackets
+    @Published var animationContext: BoundingBoxAnimationContext?
+    let animationCoordinator = BoxAnimationCoordinator()
+
     let sessionManager = ARSessionManager()
     private let measurementCalculator = MeasurementCalculator()
     private let boxEditingService = BoxEditingService()
     private var boxVisualization: BoxVisualization?
     private var pointCloudEntity: Entity?
+    private var animatedBoxVisualization: AnimatedBoxVisualization?
 
     // Stored point cloud for Fit functionality
     private var storedPointCloud: [SIMD3<Float>]?
@@ -557,6 +573,10 @@ class ARMeasurementViewModel: ObservableObject {
 
     func startSession() {
         sessionManager.startSession()
+        // Configure animation coordinator with AR view
+        if let arView = sessionManager.arView {
+            animationCoordinator.configure(arView: arView)
+        }
     }
 
     func pauseSession() {
@@ -586,9 +606,12 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Clean up previous measurement to free memory
         removeAllVisualizations()
+        animationCoordinator.cancelAnimation()
         currentMeasurement = nil
         debugMaskImage = nil
         debugDepthImage = nil
+        animationContext = nil
+        // Keep showing target brackets during processing
 
         isProcessing = true
         print("[ViewModel] Starting measurement...")
@@ -614,22 +637,94 @@ class ARMeasurementViewModel: ObservableObject {
             ) {
                 print("[ViewModel] Measurement successful!")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
-                currentMeasurement = result
 
                 // Store debug images (only if available)
                 debugMaskImage = result.debugMaskImage
                 debugDepthImage = result.debugDepthImage
 
-                // Show bounding box visualization with point cloud and floor position
-                showBoxVisualization(for: result.boundingBox, pointCloud: result.pointCloud, floorY: raycastHitPosition?.y)
+                // Store the floor Y for later use
+                let floorY = raycastHitPosition?.y
+
+                // Start the animation sequence
+                startBoxAnimation(
+                    at: location,
+                    boundingBox: result.boundingBox,
+                    frame: frame,
+                    viewSize: viewSize,
+                    result: result,
+                    floorY: floorY
+                )
             } else {
                 print("[ViewModel] Measurement returned nil")
+                isProcessing = false
             }
         } catch {
             print("[ViewModel] Measurement failed with error: \(error)")
+            isProcessing = false
         }
+    }
 
-        isProcessing = false
+    /// Start the bounding box appearance animation
+    private func startBoxAnimation(
+        at tapPoint: CGPoint,
+        boundingBox: BoundingBox3D,
+        frame: ARFrame,
+        viewSize: CGSize,
+        result: MeasurementCalculator.MeasurementResult,
+        floorY: Float?
+    ) {
+        // Project bottom corners for 2D overlay
+        let bottomCorners = sessionManager.projectBottomPlaneCorners(of: boundingBox)
+
+        // Create animation context
+        let context = BoundingBoxAnimationContext(
+            tapPoint: tapPoint,
+            targetBox: boundingBox,
+            bottomCorners: bottomCorners,
+            screenSize: viewSize
+        )
+        self.animationContext = context
+
+        // Start animation phases
+        Task {
+            // Phase 1: Shrink brackets to target position
+            animationPhase = .shrinkingToTarget
+            try? await Task.sleep(for: .milliseconds(Int(BoxAnimationTiming.shrinkToTarget * 1000)))
+
+            // Phase 2: Transition to 3D - create and show animated visualization
+            animationPhase = .transitioningTo3D
+
+            // Create animated box visualization
+            animatedBoxVisualization = AnimatedBoxVisualization(boundingBox: boundingBox)
+            if let animatedBox = animatedBoxVisualization {
+                animatedBox.showBottomPlaneOnly()
+                sessionManager.addEntity(animatedBox.entity)
+            }
+
+            try? await Task.sleep(for: .milliseconds(Int(BoxAnimationTiming.transitionTo3D * 1000)))
+
+            // Phase 3: Grow vertical edges
+            animationPhase = .growingVertical
+
+            animatedBoxVisualization?.animateToFullBox(duration: BoxAnimationTiming.growVertical)
+            try? await Task.sleep(for: .milliseconds(Int(BoxAnimationTiming.growVertical * 1000)))
+
+            // Phase 4: Complete - swap to regular BoxVisualization for editing
+            animationPhase = .complete
+
+            // Remove animated visualization
+            animatedBoxVisualization?.entity.removeFromParent()
+            animatedBoxVisualization = nil
+
+            // Show regular editable box visualization
+            currentMeasurement = result
+            showBoxVisualization(for: boundingBox, pointCloud: result.pointCloud, floorY: floorY)
+
+            // Clear 2D overlay context but keep phase as complete
+            animationContext = nil
+
+            isProcessing = false
+        }
     }
 
     func saveMeasurement(mode: MeasurementMode) {
@@ -788,6 +883,11 @@ class ARMeasurementViewModel: ObservableObject {
         storedPointCloud = nil
         debugMaskImage = nil
         debugDepthImage = nil
+        animationPhase = .showingTargetBrackets  // Return to targeting mode
+        animationContext = nil
+        animationCoordinator.cancelAnimation()
+        animatedBoxVisualization?.entity.removeFromParent()
+        animatedBoxVisualization = nil
         removeAllVisualizations()
     }
 
