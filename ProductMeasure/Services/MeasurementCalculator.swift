@@ -19,6 +19,9 @@ class MeasurementCalculator {
         let volume: Float  // cubic meters
         let quality: MeasurementQuality
 
+        // Point cloud for Fit functionality
+        var pointCloud: [SIMD3<Float>]?
+
         // Debug info
         var debugMaskImage: UIImage?
         var debugDepthImage: UIImage?
@@ -213,6 +216,9 @@ class MeasurementCalculator {
             volume: volume,
             quality: pointCloud.quality
         )
+
+        // Store point cloud for Fit functionality
+        result.pointCloud = pointCloud.points
 
         // Attach debug info (images only, not point cloud to save memory)
         result.debugMaskImage = debugMaskImage

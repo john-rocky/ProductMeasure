@@ -52,16 +52,30 @@ struct ARMeasurementView: View {
 
                     Spacer()
 
+                    // Editing mode indicator
+                    if viewModel.isEditing {
+                        EditingIndicator(isDragging: viewModel.isDragging)
+                            .transition(.opacity)
+                    }
+
                     // Measurement result card
                     if let result = viewModel.currentMeasurement {
                         MeasurementResultCard(
                             result: result,
                             unit: measurementUnit,
+                            isEditing: viewModel.isEditing,
                             onSave: {
+                                viewModel.stopEditing()
                                 viewModel.saveMeasurement(mode: measurementMode)
                             },
                             onEdit: {
                                 viewModel.startEditing()
+                            },
+                            onFit: {
+                                viewModel.fitToPointCloud(mode: measurementMode)
+                            },
+                            onDone: {
+                                viewModel.stopEditing()
                             },
                             onDiscard: {
                                 viewModel.discardMeasurement()
@@ -101,7 +115,7 @@ struct ARMeasurementView: View {
     }
 }
 
-// MARK: - AR View Representable with Tap Handling
+// MARK: - AR View Representable with Tap and Pan Handling
 
 struct ARMeasurementViewRepresentable: UIViewRepresentable {
     @ObservedObject var viewModel: ARMeasurementViewModel
@@ -113,6 +127,13 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
         // Add tap gesture recognizer
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         arView.addGestureRecognizer(tapGesture)
+
+        // Add pan gesture recognizer for handle dragging
+        let panGesture = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
+        arView.addGestureRecognizer(panGesture)
+
+        // Store reference to arView in coordinator
+        context.coordinator.arView = arView
 
         return arView
     }
@@ -128,20 +149,101 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
     class Coordinator: NSObject {
         let viewModel: ARMeasurementViewModel
         var measurementMode: MeasurementMode
+        weak var arView: ARView?
+
+        // Drag state
+        private var activeDragType: DragType?
+        private var lastPanLocation: CGPoint?
+
+        enum DragType {
+            case faceHandle(HandleType)
+            case rotationRing
+        }
 
         init(viewModel: ARMeasurementViewModel, measurementMode: MeasurementMode) {
             self.viewModel = viewModel
             self.measurementMode = measurementMode
         }
 
-        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+        @MainActor @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended else { return }
+
+            // If editing, ignore taps
+            if viewModel.isEditing { return }
+
             let location = gesture.location(in: gesture.view)
             print("[Tap] Location: \(location)")
 
-            Task { @MainActor in
+            Task {
                 await viewModel.handleTap(at: location, mode: measurementMode)
             }
+        }
+
+        @MainActor @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
+            guard viewModel.isEditing, let arView = arView else { return }
+
+            let location = gesture.location(in: arView)
+
+            switch gesture.state {
+            case .began:
+                // Hit test to find handle or ring
+                if let dragType = hitTest(at: location, in: arView) {
+                    activeDragType = dragType
+                    lastPanLocation = location
+                    print("[Pan] Started dragging: \(dragType)")
+                }
+
+            case .changed:
+                guard let dragType = activeDragType,
+                      let lastLocation = lastPanLocation else { return }
+
+                let delta = CGPoint(
+                    x: location.x - lastLocation.x,
+                    y: location.y - lastLocation.y
+                )
+
+                switch dragType {
+                case .faceHandle(let handleType):
+                    viewModel.handleFaceDrag(handleType: handleType, screenDelta: delta, mode: measurementMode)
+                case .rotationRing:
+                    viewModel.handleRotationDrag(screenDelta: delta)
+                }
+
+                lastPanLocation = location
+
+            case .ended, .cancelled:
+                if activeDragType != nil {
+                    print("[Pan] Ended dragging")
+                    viewModel.finishDrag()
+                }
+                activeDragType = nil
+                lastPanLocation = nil
+
+            default:
+                break
+            }
+        }
+
+        private func hitTest(at location: CGPoint, in arView: ARView) -> DragType? {
+            let results = arView.hitTest(location, query: .nearest, mask: .all)
+
+            for result in results {
+                var entity: Entity? = result.entity
+                while let current = entity {
+                    let hitType = BoxVisualization.parseHit(entityName: current.name)
+                    switch hitType {
+                    case .faceHandle(let handleType):
+                        return .faceHandle(handleType)
+                    case .rotationRing:
+                        return .rotationRing
+                    case .none:
+                        break
+                    }
+                    entity = current.parent
+                }
+            }
+
+            return nil
         }
     }
 }
@@ -220,15 +322,28 @@ struct InstructionCard: View {
 struct MeasurementResultCard: View {
     let result: MeasurementCalculator.MeasurementResult
     let unit: MeasurementUnit
+    var isEditing: Bool = false
     let onSave: () -> Void
     let onEdit: () -> Void
+    var onFit: (() -> Void)? = nil
+    var onDone: (() -> Void)? = nil
     let onDiscard: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
-            // Quality indicator
+            // Quality indicator or editing badge
             HStack {
-                QualityIndicator(quality: result.quality.overallQuality)
+                if isEditing {
+                    HStack(spacing: 4) {
+                        Image(systemName: "pencil.circle.fill")
+                            .foregroundColor(.orange)
+                        Text("Editing Mode")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                } else {
+                    QualityIndicator(quality: result.quality.overallQuality)
+                }
                 Spacer()
             }
 
@@ -244,31 +359,58 @@ struct MeasurementResultCard: View {
                     .font(.headline)
             }
 
-            // Action buttons
-            HStack(spacing: 12) {
-                Button(action: onDiscard) {
-                    Label("Discard", systemImage: "xmark")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .tint(.red)
+            // Action buttons - different based on editing mode
+            if isEditing {
+                // Editing mode buttons
+                HStack(spacing: 12) {
+                    Button(action: onDiscard) {
+                        Label("Cancel", systemImage: "xmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
 
-                Button(action: onEdit) {
-                    Label("Edit", systemImage: "pencil")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+                    Button(action: { onFit?() }) {
+                        Label("Fit", systemImage: "crop")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.blue)
 
-                Button(action: onSave) {
-                    Label("Save", systemImage: "checkmark")
-                        .frame(maxWidth: .infinity)
+                    Button(action: { onDone?() }) {
+                        Label("Done", systemImage: "checkmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
+            } else {
+                // Normal mode buttons
+                HStack(spacing: 12) {
+                    Button(action: onDiscard) {
+                        Label("Discard", systemImage: "xmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+
+                    Button(action: onEdit) {
+                        Label("Edit", systemImage: "pencil")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(action: onSave) {
+                        Label("Save", systemImage: "checkmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             }
         }
         .padding()
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .animation(.easeInOut(duration: 0.2), value: isEditing)
     }
 
     private func formatDimension(_ meters: Float) -> String {
@@ -338,6 +480,29 @@ struct QualityIndicator: View {
     }
 }
 
+// MARK: - Editing Indicator
+
+struct EditingIndicator: View {
+    var isDragging: Bool
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: isDragging ? "hand.draw.fill" : "hand.point.up.left.fill")
+                .font(.title2)
+                .foregroundColor(.white)
+
+            Text(isDragging ? "Dragging..." : "Drag handles to resize")
+                .font(.subheadline)
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color.orange.opacity(0.9))
+        .clipShape(Capsule())
+        .animation(.easeInOut(duration: 0.2), value: isDragging)
+    }
+}
+
 // MARK: - LiDAR Not Available View
 
 struct LiDARNotAvailableView: View {
@@ -368,6 +533,7 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var isProcessing = false
     @Published var currentMeasurement: MeasurementCalculator.MeasurementResult?
     @Published var isEditing = false
+    @Published var isDragging = false
 
     // Debug visualization
     @Published var showDebugMask = false
@@ -377,8 +543,12 @@ class ARMeasurementViewModel: ObservableObject {
 
     let sessionManager = ARSessionManager()
     private let measurementCalculator = MeasurementCalculator()
+    private let boxEditingService = BoxEditingService()
     private var boxVisualization: BoxVisualization?
     private var pointCloudEntity: Entity?
+
+    // Stored point cloud for Fit functionality
+    private var storedPointCloud: [SIMD3<Float>]?
 
     init() {
         sessionManager.$trackingStateMessage
@@ -450,8 +620,8 @@ class ARMeasurementViewModel: ObservableObject {
                 debugMaskImage = result.debugMaskImage
                 debugDepthImage = result.debugDepthImage
 
-                // Show bounding box visualization
-                showBoxVisualization(for: result.boundingBox)
+                // Show bounding box visualization with point cloud and floor position
+                showBoxVisualization(for: result.boundingBox, pointCloud: result.pointCloud, floorY: raycastHitPosition?.y)
             } else {
                 print("[ViewModel] Measurement returned nil")
             }
@@ -487,12 +657,135 @@ class ARMeasurementViewModel: ObservableObject {
 
     func startEditing() {
         isEditing = true
-        // Enable box editing handles
+        // Enable handle interactivity
+        boxVisualization?.isInteractive = true
+    }
+
+    func stopEditing() {
+        isEditing = false
+        isDragging = false
+        boxVisualization?.isInteractive = false
+    }
+
+    func handleFaceDrag(handleType: HandleType, screenDelta: CGPoint, mode: MeasurementMode) {
+        guard let result = currentMeasurement,
+              let frame = sessionManager.currentFrame else { return }
+
+        isDragging = true
+
+        // Get camera transform and calculate distance to object
+        let cameraTransform = frame.camera.transform
+        let cameraPosition = SIMD3<Float>(
+            cameraTransform.columns.3.x,
+            cameraTransform.columns.3.y,
+            cameraTransform.columns.3.z
+        )
+        let distanceToObject = simd_distance(cameraPosition, result.boundingBox.center)
+
+        // Convert screen delta to world delta
+        let worldDelta = boxEditingService.screenToWorldDelta(
+            screenDelta: screenDelta,
+            cameraTransform: cameraTransform,
+            distanceToObject: distanceToObject
+        )
+
+        // Apply face drag to bounding box
+        let editResult = boxEditingService.applyFaceDrag(
+            box: result.boundingBox,
+            handleType: handleType,
+            worldDelta: worldDelta
+        )
+
+        if editResult.didChange {
+            // Update measurement result
+            let newResult = measurementCalculator.recalculate(
+                boundingBox: editResult.boundingBox,
+                quality: result.quality
+            )
+            var updatedResult = newResult
+            updatedResult.pointCloud = storedPointCloud
+            updatedResult.debugMaskImage = result.debugMaskImage
+            updatedResult.debugDepthImage = result.debugDepthImage
+            currentMeasurement = updatedResult
+
+            // Update visualization
+            boxVisualization?.update(boundingBox: editResult.boundingBox)
+        }
+    }
+
+    func handleRotationDrag(screenDelta: CGPoint) {
+        guard let result = currentMeasurement else { return }
+
+        isDragging = true
+
+        // Convert horizontal screen movement to Yaw rotation
+        // Positive X movement = clockwise rotation (negative yaw)
+        let rotationSensitivity: Float = 0.005
+        let yawAngle = Float(-screenDelta.x) * rotationSensitivity
+
+        // Apply rotation
+        var newBox = result.boundingBox
+        newBox.rotateAroundY(by: yawAngle)
+
+        // Update measurement result
+        let newResult = measurementCalculator.recalculate(
+            boundingBox: newBox,
+            quality: result.quality
+        )
+        var updatedResult = newResult
+        updatedResult.pointCloud = storedPointCloud
+        updatedResult.debugMaskImage = result.debugMaskImage
+        updatedResult.debugDepthImage = result.debugDepthImage
+        currentMeasurement = updatedResult
+
+        // Update visualization
+        boxVisualization?.update(boundingBox: newBox)
+    }
+
+    func finishDrag() {
+        isDragging = false
+    }
+
+    func fitToPointCloud(mode: MeasurementMode) {
+        guard let result = currentMeasurement,
+              let points = storedPointCloud,
+              !points.isEmpty else {
+            print("[ViewModel] No point cloud available for fit")
+            return
+        }
+
+        print("[ViewModel] Fitting to point cloud with \(points.count) points")
+
+        if let fittedBox = boxEditingService.fitToPoints(
+            currentBox: result.boundingBox,
+            allPoints: points,
+            mode: mode
+        ) {
+            // Update measurement result
+            let newResult = measurementCalculator.recalculate(
+                boundingBox: fittedBox,
+                quality: result.quality
+            )
+            var updatedResult = newResult
+            updatedResult.pointCloud = storedPointCloud
+            updatedResult.debugMaskImage = result.debugMaskImage
+            updatedResult.debugDepthImage = result.debugDepthImage
+            currentMeasurement = updatedResult
+
+            // Update visualization
+            boxVisualization?.update(boundingBox: fittedBox)
+
+            print("[ViewModel] Fit successful - new dimensions: L=\(fittedBox.length*100)cm, W=\(fittedBox.width*100)cm, H=\(fittedBox.height*100)cm")
+        } else {
+            print("[ViewModel] Fit failed - not enough points in current box")
+        }
     }
 
     func discardMeasurement() {
         currentMeasurement = nil
         isEditing = false
+        isDragging = false
+        storedPointCloud = nil
         debugMaskImage = nil
         debugDepthImage = nil
         removeAllVisualizations()
@@ -506,8 +799,17 @@ class ARMeasurementViewModel: ObservableObject {
         showDebugDepth.toggle()
     }
 
-    private func showBoxVisualization(for box: BoundingBox3D) {
-        boxVisualization = BoxVisualization(boundingBox: box)
+    private func showBoxVisualization(for box: BoundingBox3D, pointCloud: [SIMD3<Float>]? = nil, floorY: Float? = nil) {
+        // Store point cloud for Fit functionality
+        storedPointCloud = pointCloud
+
+        boxVisualization = BoxVisualization(boundingBox: box, interactive: false)
+
+        // Set floor height for distance indicator
+        if let floorY = floorY {
+            boxVisualization?.floorY = floorY
+        }
+
         if let entity = boxVisualization?.entity {
             sessionManager.addEntity(entity)
         }
