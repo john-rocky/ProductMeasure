@@ -42,14 +42,13 @@ class BoxVisualization {
     private let lineColor: UIColor = UIColor(white: 1.0, alpha: 0.9)  // Clean white
     private let lineRadius: Float = 0.0008  // Very thin (0.8mm)
 
-    // Face handle colors by axis (vibrant but not too saturated)
-    private let xAxisColor: UIColor = UIColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1.0)
-    private let yAxisColor: UIColor = UIColor(red: 0.3, green: 0.9, blue: 0.4, alpha: 1.0)
-    private let zAxisColor: UIColor = UIColor(red: 0.3, green: 0.6, blue: 1.0, alpha: 1.0)
+    // Handle color (white, semi-transparent for Apple-style appearance)
+    private let handleColor: UIColor = UIColor(white: 1.0, alpha: 0.85)
 
-    // Handle dimensions
-    private let handleSize: Float = 0.006        // Size of face handle sphere (6mm)
-    private let handleCollisionRadius: Float = 0.012  // Larger for easy touch
+    // Handle dimensions (capsule shape)
+    private let handleLength: Float = 0.018      // Length of capsule (18mm)
+    private let handleRadius: Float = 0.004      // Radius of capsule (4mm)
+    private let handleCollisionRadius: Float = 0.015  // Larger for easy touch
     private let ringRadius: Float = 0.015        // Rotation ring radius
     private let ringThickness: Float = 0.003
 
@@ -192,31 +191,31 @@ class BoxVisualization {
         let parentEntity = Entity()
         parentEntity.name = handleType.entityName
 
-        // Determine color based on axis
-        let color: UIColor
-        switch handleType {
-        case .faceNegX, .facePosX: color = xAxisColor
-        case .faceNegY, .facePosY: color = yAxisColor
-        case .faceNegZ, .facePosZ: color = zAxisColor
-        default: color = .white
-        }
-
-        // Create sphere handle
-        let sphereMesh = MeshResource.generateSphere(radius: handleSize)
+        // Create capsule-shaped handle (pill shape)
+        // Use a cylinder with sphere caps approximation
         var material = SimpleMaterial()
-        material.color = .init(tint: color)
-        let sphereEntity = ModelEntity(mesh: sphereMesh, materials: [material])
+        material.color = .init(tint: handleColor)
 
-        // Add direction indicator (small arrow/pointer)
-        let pointerMesh = MeshResource.generateBox(size: [handleSize * 0.3, handleSize * 0.3, handleSize * 0.8])
-        let pointerEntity = ModelEntity(mesh: pointerMesh, materials: [material])
-        pointerEntity.position = SIMD3<Float>(0, 0, handleSize * 0.6)
+        // Main cylinder body
+        let cylinderMesh = MeshResource.generateBox(
+            size: [handleRadius * 2, handleRadius * 2, handleLength - handleRadius * 2],
+            cornerRadius: handleRadius
+        )
+        let cylinderEntity = ModelEntity(mesh: cylinderMesh, materials: [material])
 
-        parentEntity.addChild(sphereEntity)
-        parentEntity.addChild(pointerEntity)
+        // Sphere caps for rounded ends
+        let capMesh = MeshResource.generateSphere(radius: handleRadius)
+        let topCap = ModelEntity(mesh: capMesh, materials: [material])
+        topCap.position = SIMD3<Float>(0, 0, (handleLength - handleRadius * 2) / 2)
+        let bottomCap = ModelEntity(mesh: capMesh, materials: [material])
+        bottomCap.position = SIMD3<Float>(0, 0, -(handleLength - handleRadius * 2) / 2)
 
-        // Add collision
-        let collisionShape = ShapeResource.generateSphere(radius: handleCollisionRadius)
+        parentEntity.addChild(cylinderEntity)
+        parentEntity.addChild(topCap)
+        parentEntity.addChild(bottomCap)
+
+        // Add collision (capsule approximated as box)
+        let collisionShape = ShapeResource.generateCapsule(height: handleLength, radius: handleCollisionRadius)
         parentEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
 
         // Set position and orientation
@@ -248,15 +247,22 @@ class BoxVisualization {
     private func calculateHandleOrientation(for handleType: HandleType) -> simd_quatf {
         let axes = boundingBox.localAxes
 
+        // Capsule default orientation is along Z axis
+        // For edge handles, orient along the edge direction
+        // For face handles (Y), orient perpendicular to the face (up/down)
         let targetDirection: SIMD3<Float>
         switch handleType {
-        case .faceNegX: targetDirection = -axes.x
-        case .facePosX: targetDirection = axes.x
-        case .faceNegY: targetDirection = -axes.y
-        case .facePosY: targetDirection = axes.y
-        case .faceNegZ: targetDirection = -axes.z
-        case .facePosZ: targetDirection = axes.z
-        default: return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
+        case .faceNegX, .facePosX:
+            // X edge handles on top face - orient along Z axis (edge direction)
+            targetDirection = axes.z
+        case .faceNegZ, .facePosZ:
+            // Z edge handles on top face - orient along X axis (edge direction)
+            targetDirection = axes.x
+        case .faceNegY, .facePosY:
+            // Y handles (top/bottom center) - orient along X axis (horizontal capsule)
+            targetDirection = axes.x
+        default:
+            return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
         }
 
         return calculateOrientation(direction: targetDirection)
@@ -317,7 +323,7 @@ class BoxVisualization {
     private func updateRotationRingTransform(_ ringEntity: Entity) {
         // Position above the top face
         let topFaceY = boundingBox.extents.y
-        let localPos = SIMD3<Float>(0, topFaceY + handleSize * 1.5, 0)
+        let localPos = SIMD3<Float>(0, topFaceY + handleRadius * 3, 0)
         ringEntity.position = boundingBox.localToWorld(localPos)
 
         // Align with box rotation (only horizontal rotation)

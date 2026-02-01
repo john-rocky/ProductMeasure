@@ -39,19 +39,9 @@ enum HandleType: Int, CaseIterable {
         rawValue >= 8
     }
 
-    /// The color for this handle type
+    /// The color for this handle type (white for Apple-style appearance)
     var color: UIColor {
-        switch self {
-        case .corner0, .corner1, .corner2, .corner3,
-             .corner4, .corner5, .corner6, .corner7:
-            return .systemYellow
-        case .faceNegX, .facePosX:
-            return .systemRed
-        case .faceNegY, .facePosY:
-            return .systemGreen
-        case .faceNegZ, .facePosZ:
-            return .systemBlue
-        }
+        return UIColor(white: 1.0, alpha: 0.85)
     }
 
     /// The axis index for face handles (0=X, 1=Y, 2=Z), nil for corners
@@ -126,14 +116,15 @@ enum HandleType: Int, CaseIterable {
             return multiplier * extents
         }
 
-        // Face handles are at the center of each face
+        // Horizontal handles (X/Z) are at the midpoints of top face edges
+        // Vertical handles (Y) are at the centers of top and bottom faces
         switch self {
-        case .faceNegX: return SIMD3<Float>(-extents.x, 0, 0)
-        case .facePosX: return SIMD3<Float>( extents.x, 0, 0)
-        case .faceNegY: return SIMD3<Float>(0, -extents.y, 0)
-        case .facePosY: return SIMD3<Float>(0,  extents.y, 0)
-        case .faceNegZ: return SIMD3<Float>(0, 0, -extents.z)
-        case .facePosZ: return SIMD3<Float>(0, 0,  extents.z)
+        case .faceNegX: return SIMD3<Float>(-extents.x, extents.y, 0)  // Top edge -X
+        case .facePosX: return SIMD3<Float>( extents.x, extents.y, 0)  // Top edge +X
+        case .faceNegY: return SIMD3<Float>(0, -extents.y, 0)          // Bottom face center
+        case .facePosY: return SIMD3<Float>(0,  extents.y, 0)          // Top face center
+        case .faceNegZ: return SIMD3<Float>(0, extents.y, -extents.z)  // Top edge -Z
+        case .facePosZ: return SIMD3<Float>(0, extents.y,  extents.z)  // Top edge +Z
         default: return .zero
         }
     }

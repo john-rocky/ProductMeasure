@@ -755,32 +755,27 @@ class ARMeasurementViewModel: ObservableObject {
     }
 
     func handleFaceDrag(handleType: HandleType, screenDelta: CGPoint, mode: MeasurementMode) {
-        guard let result = currentMeasurement,
-              let frame = sessionManager.currentFrame else { return }
+        guard let result = currentMeasurement else { return }
 
         isDragging = true
 
-        // Get camera transform and calculate distance to object
-        let cameraTransform = frame.camera.transform
-        let cameraPosition = SIMD3<Float>(
-            cameraTransform.columns.3.x,
-            cameraTransform.columns.3.y,
-            cameraTransform.columns.3.z
-        )
-        let distanceToObject = simd_distance(cameraPosition, result.boundingBox.center)
+        // Get handle position in world space
+        let handleLocalPos = handleType.localPosition(extents: result.boundingBox.extents)
+        let handleWorldPos = result.boundingBox.localToWorld(handleLocalPos)
 
-        // Convert screen delta to world delta
-        let worldDelta = boxEditingService.screenToWorldDelta(
-            screenDelta: screenDelta,
-            cameraTransform: cameraTransform,
-            distanceToObject: distanceToObject
-        )
+        // Project handle and box center to screen coordinates
+        guard let handleScreenPos = sessionManager.projectToScreen(worldPosition: handleWorldPos),
+              let boxCenterScreenPos = sessionManager.projectToScreen(worldPosition: result.boundingBox.center) else {
+            return
+        }
 
         // Apply face drag to bounding box
         let editResult = boxEditingService.applyFaceDrag(
             box: result.boundingBox,
             handleType: handleType,
-            worldDelta: worldDelta
+            screenDelta: screenDelta,
+            handleScreenPos: handleScreenPos,
+            boxCenterScreenPos: boxCenterScreenPos
         )
 
         if editResult.didChange {

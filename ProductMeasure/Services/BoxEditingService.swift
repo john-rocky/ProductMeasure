@@ -109,18 +109,44 @@ class BoxEditingService {
     /// - Parameters:
     ///   - box: The current bounding box
     ///   - handleType: The face handle being dragged
-    ///   - worldDelta: The 3D world space movement
+    ///   - screenDelta: The 2D screen space movement
+    ///   - handleScreenPos: The handle's current position on screen
+    ///   - boxCenterScreenPos: The box center's position on screen
     /// - Returns: Updated bounding box
     func applyFaceDrag(
         box: BoundingBox3D,
         handleType: HandleType,
-        worldDelta: SIMD3<Float>
+        screenDelta: CGPoint,
+        handleScreenPos: CGPoint,
+        boxCenterScreenPos: CGPoint
     ) -> EditResult {
         guard handleType.isFace,
               let axisIndex = handleType.axisIndex,
               let faceDirection = handleType.faceDirection else {
             return EditResult(boundingBox: box, didChange: false)
         }
+
+        // Calculate "outward" direction on screen (from box center to handle)
+        let outwardX = Float(handleScreenPos.x - boxCenterScreenPos.x)
+        let outwardY = Float(handleScreenPos.y - boxCenterScreenPos.y)
+        let outwardDir = SIMD2<Float>(outwardX, outwardY)
+        let outwardLength = simd_length(outwardDir)
+
+        // If handle is too close to center on screen, can't determine direction
+        guard outwardLength > 10 else {
+            return EditResult(boundingBox: box, didChange: false)
+        }
+
+        let normalizedOutward = outwardDir / outwardLength
+
+        // Project screen delta onto the outward direction
+        // Positive = dragging away from center (expand)
+        // Negative = dragging toward center (contract)
+        let screenDelta2D = SIMD2<Float>(Float(screenDelta.x), Float(screenDelta.y))
+        let alignedDelta = simd_dot(screenDelta2D, normalizedOutward)
+
+        // Scale by sensitivity (use fixed scale, adjusted by screen density)
+        let scaledDelta = alignedDelta * sensitivity * 1.5
 
         // Get the face normal in world space
         let axes = box.localAxes
@@ -132,12 +158,9 @@ class BoxEditingService {
         default: return EditResult(boundingBox: box, didChange: false)
         }
 
-        // Project world delta onto face normal
-        let projectedDelta = simd_dot(worldDelta, faceNormal)
-
         // Calculate new extent
         var newExtents = box.extents
-        let newExtent = newExtents[axisIndex] + projectedDelta / 2
+        let newExtent = newExtents[axisIndex] + scaledDelta / 2
 
         guard newExtent >= minimumExtent else {
             return EditResult(boundingBox: box, didChange: false)
@@ -145,27 +168,14 @@ class BoxEditingService {
 
         newExtents[axisIndex] = newExtent
 
-        // Center moves by half the projected delta along the face normal
-        let centerOffset = faceNormal * (projectedDelta / 2)
+        // Center moves by half the delta along the face normal
+        let centerOffset = faceNormal * (scaledDelta / 2)
 
         var newBox = box
         newBox.extents = newExtents
         newBox.center = box.center + centerOffset
 
         return EditResult(boundingBox: newBox, didChange: true)
-    }
-
-    /// Apply drag to a handle (dispatches to corner or face)
-    func applyDrag(
-        box: BoundingBox3D,
-        handleType: HandleType,
-        worldDelta: SIMD3<Float>
-    ) -> EditResult {
-        if handleType.isCorner {
-            return applyCornerDrag(box: box, handleType: handleType, worldDelta: worldDelta)
-        } else {
-            return applyFaceDrag(box: box, handleType: handleType, worldDelta: worldDelta)
-        }
     }
 
     /// Apply edge drag to bounding box
