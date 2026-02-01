@@ -128,4 +128,19 @@ enum HandleType: Int, CaseIterable {
         default: return .zero
         }
     }
+
+    /// Get the center position of the face for this face handle
+    /// - Parameter extents: The half-extents of the bounding box
+    /// - Returns: Local position of face center in box space
+    func faceCenterPosition(extents: SIMD3<Float>) -> SIMD3<Float>? {
+        switch self {
+        case .faceNegX: return SIMD3<Float>(-extents.x, 0, 0)
+        case .facePosX: return SIMD3<Float>( extents.x, 0, 0)
+        case .faceNegY: return SIMD3<Float>(0, -extents.y, 0)
+        case .facePosY: return SIMD3<Float>(0,  extents.y, 0)
+        case .faceNegZ: return SIMD3<Float>(0, 0, -extents.z)
+        case .facePosZ: return SIMD3<Float>(0, 0,  extents.z)
+        default: return nil
+        }
+    }
 }

@@ -905,12 +905,15 @@ class ARMeasurementViewModel: ObservableObject {
         // Highlight the touched handle
         boxVisualization?.highlightHandle(handleType)
 
-        // Get handle position in world space
-        let handleLocalPos = handleType.localPosition(extents: result.boundingBox.extents)
-        let handleWorldPos = result.boundingBox.localToWorld(handleLocalPos)
+        // Get face center position in world space (not handle position)
+        // This gives us the correct direction for the face normal on screen
+        guard let faceCenterLocalPos = handleType.faceCenterPosition(extents: result.boundingBox.extents) else {
+            return
+        }
+        let faceCenterWorldPos = result.boundingBox.localToWorld(faceCenterLocalPos)
 
-        // Project handle and box center to screen coordinates
-        guard let handleScreenPos = sessionManager.projectToScreen(worldPosition: handleWorldPos),
+        // Project face center and box center to screen coordinates
+        guard let faceCenterScreenPos = sessionManager.projectToScreen(worldPosition: faceCenterWorldPos),
               let boxCenterScreenPos = sessionManager.projectToScreen(worldPosition: result.boundingBox.center) else {
             return
         }
@@ -920,7 +923,7 @@ class ARMeasurementViewModel: ObservableObject {
             box: result.boundingBox,
             handleType: handleType,
             screenDelta: screenDelta,
-            handleScreenPos: handleScreenPos,
+            faceCenterScreenPos: faceCenterScreenPos,
             boxCenterScreenPos: boxCenterScreenPos
         )
 

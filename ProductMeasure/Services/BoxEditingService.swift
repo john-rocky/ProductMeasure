@@ -110,14 +110,14 @@ class BoxEditingService {
     ///   - box: The current bounding box
     ///   - handleType: The face handle being dragged
     ///   - screenDelta: The 2D screen space movement
-    ///   - handleScreenPos: The handle's current position on screen
+    ///   - faceCenterScreenPos: The face center's position on screen
     ///   - boxCenterScreenPos: The box center's position on screen
     /// - Returns: Updated bounding box
     func applyFaceDrag(
         box: BoundingBox3D,
         handleType: HandleType,
         screenDelta: CGPoint,
-        handleScreenPos: CGPoint,
+        faceCenterScreenPos: CGPoint,
         boxCenterScreenPos: CGPoint
     ) -> EditResult {
         guard handleType.isFace,
@@ -126,9 +126,10 @@ class BoxEditingService {
             return EditResult(boundingBox: box, didChange: false)
         }
 
-        // Calculate "outward" direction on screen (from box center to handle)
-        let outwardX = Float(handleScreenPos.x - boxCenterScreenPos.x)
-        let outwardY = Float(handleScreenPos.y - boxCenterScreenPos.y)
+        // Calculate "outward" direction on screen (from box center to face center)
+        // This accurately represents the face normal direction on screen
+        let outwardX = Float(faceCenterScreenPos.x - boxCenterScreenPos.x)
+        let outwardY = Float(faceCenterScreenPos.y - boxCenterScreenPos.y)
         let outwardDir = SIMD2<Float>(outwardX, outwardY)
         let outwardLength = simd_length(outwardDir)
 
