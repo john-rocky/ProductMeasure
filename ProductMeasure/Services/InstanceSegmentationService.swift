@@ -350,9 +350,9 @@ extension InstanceSegmentationService {
     }
 
     /// Get the pixels that are part of the mask when ROI was used
-    /// The mask covers only the ROI area, so coordinates need to be transformed
+    /// Handles both full-size masks and ROI-cropped masks
     /// - Parameters:
-    ///   - mask: The mask pixel buffer (covers ROI area only)
+    ///   - mask: The mask pixel buffer
     ///   - imageSize: The original camera image size
     ///   - visionROI: The ROI in Vision normalized coordinates (0-1, bottom-left origin)
     func getMaskedPixelsWithROI(
@@ -390,6 +390,12 @@ extension InstanceSegmentationService {
             bytesPerPixel = 1
         }
 
+        // Check if mask is full-size or ROI-cropped
+        // Full-size: mask dimensions match image dimensions (within tolerance)
+        let isFullSizeMask = abs(CGFloat(maskWidth) - imageSize.width) < 10 &&
+                             abs(CGFloat(maskHeight) - imageSize.height) < 10
+        print("[Segmentation] Mask is full-size: \(isFullSizeMask)")
+
         let step = max(4, min(maskWidth, maskHeight) / 80)
         let maxPixels = 5000
 
@@ -404,19 +410,30 @@ extension InstanceSegmentationService {
                 }
 
                 if pixelValue > 0 {
-                    // Mask coordinates to ROI-relative normalized (0-1)
-                    let roiRelativeX = CGFloat(mx) / CGFloat(maskWidth)
-                    let roiRelativeY = CGFloat(my) / CGFloat(maskHeight)
+                    let imageX: Int
+                    let imageY: Int
 
-                    // ROI-relative to Vision absolute coordinates
-                    // Vision uses bottom-left origin, mask uses top-left origin
-                    // So we need to flip Y within the ROI
-                    let visionX = visionROI.origin.x + roiRelativeX * visionROI.width
-                    let visionY = visionROI.origin.y + (1.0 - roiRelativeY) * visionROI.height
+                    if isFullSizeMask {
+                        // Full-size mask: mask coordinates directly correspond to image coordinates
+                        // No ROI transformation needed
+                        imageX = mx
+                        imageY = my
+                    } else {
+                        // ROI-cropped mask: need to transform coordinates
+                        // Mask coordinates to ROI-relative normalized (0-1)
+                        let roiRelativeX = CGFloat(mx) / CGFloat(maskWidth)
+                        let roiRelativeY = CGFloat(my) / CGFloat(maskHeight)
 
-                    // Vision coordinates (bottom-left origin) to image coordinates (top-left origin)
-                    let imageX = Int(visionX * imageSize.width)
-                    let imageY = Int((1.0 - visionY) * imageSize.height)
+                        // ROI-relative to Vision absolute coordinates
+                        // Vision uses bottom-left origin, mask uses top-left origin
+                        // So we need to flip Y within the ROI
+                        let visionX = visionROI.origin.x + roiRelativeX * visionROI.width
+                        let visionY = visionROI.origin.y + (1.0 - roiRelativeY) * visionROI.height
+
+                        // Vision coordinates (bottom-left origin) to image coordinates (top-left origin)
+                        imageX = Int(visionX * imageSize.width)
+                        imageY = Int((1.0 - visionY) * imageSize.height)
+                    }
 
                     pixels.append((imageX, imageY))
 
@@ -427,7 +444,7 @@ extension InstanceSegmentationService {
             }
         }
 
-        print("[Segmentation] Found \(pixels.count) masked pixels with ROI transformation")
+        print("[Segmentation] Found \(pixels.count) masked pixels")
 
         if !pixels.isEmpty {
             let minX = pixels.map { $0.x }.min()!

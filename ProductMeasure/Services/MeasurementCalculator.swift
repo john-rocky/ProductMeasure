@@ -307,6 +307,8 @@ class MeasurementCalculator {
             mask: segmentation.mask,
             cameraImage: frame.capturedImage,
             visionROI: visionROI,
+            screenRect: regionOfInterest,
+            viewSize: viewSize,
             tapPoint: normalizedCenter
         )
 
