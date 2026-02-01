@@ -19,6 +19,17 @@ class MeasurementCalculator {
         let volume: Float  // cubic meters
         let quality: MeasurementQuality
 
+        // Axis mapping (fixed at initial measurement time)
+        // Determines which local axis (0=x, 1=y, 2=z) corresponds to each dimension
+        let heightAxisIndex: Int   // Axis most aligned with world Y (vertical)
+        let lengthAxisIndex: Int   // Axis most aligned with camera depth direction
+        let widthAxisIndex: Int    // Axis most aligned with camera horizontal direction
+
+        /// Get the axis mapping as a tuple
+        var axisMapping: BoundingBox3D.AxisMapping {
+            (height: heightAxisIndex, length: lengthAxisIndex, width: widthAxisIndex)
+        }
+
         // Point cloud for Fit functionality
         var pointCloud: [SIMD3<Float>]?
 
@@ -198,13 +209,12 @@ class MeasurementCalculator {
         print("[Calculator] Box center: \(boundingBox.center)")
         print("[Calculator] Box extents: \(boundingBox.extents)")
 
-        // 7. Calculate dimensions
-        let sorted = boundingBox.sortedDimensions
-        let length = sorted[0].dimension
-        let width = sorted[1].dimension
-        let height = sorted[2].dimension
+        // 7. Calculate dimensions using camera-based axis mapping
+        let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
+        let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
         let volume = boundingBox.volume
 
+        print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
         print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
         print("[Calculator] Volume: \(volume * 1_000_000) cm³")
 
@@ -214,7 +224,10 @@ class MeasurementCalculator {
             width: width,
             height: height,
             volume: volume,
-            quality: pointCloud.quality
+            quality: pointCloud.quality,
+            heightAxisIndex: mapping.height,
+            lengthAxisIndex: mapping.length,
+            widthAxisIndex: mapping.width
         )
 
         // Store point cloud for Fit functionality
@@ -372,13 +385,12 @@ class MeasurementCalculator {
         }
         print("[Calculator] Bounding box estimated")
 
-        // 8. Calculate dimensions
-        let sorted = boundingBox.sortedDimensions
-        let length = sorted[0].dimension
-        let width = sorted[1].dimension
-        let height = sorted[2].dimension
+        // 8. Calculate dimensions using camera-based axis mapping
+        let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
+        let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
         let volume = boundingBox.volume
 
+        print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
         print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
 
         var result = MeasurementResult(
@@ -387,7 +399,10 @@ class MeasurementCalculator {
             width: width,
             height: height,
             volume: volume,
-            quality: pointCloud.quality
+            quality: pointCloud.quality,
+            heightAxisIndex: mapping.height,
+            lengthAxisIndex: mapping.length,
+            widthAxisIndex: mapping.width
         )
 
         result.pointCloud = pointCloud.points
@@ -496,17 +511,29 @@ class MeasurementCalculator {
         return CGPoint(x: normalizedX, y: normalizedY)
     }
 
-    /// Update measurement with an edited bounding box
-    func recalculate(boundingBox: BoundingBox3D, quality: MeasurementQuality) -> MeasurementResult {
-        let sorted = boundingBox.sortedDimensions
+    /// Update measurement with an edited bounding box, preserving the original axis mapping
+    /// - Parameters:
+    ///   - boundingBox: The modified bounding box
+    ///   - quality: The measurement quality
+    ///   - axisMapping: The original axis mapping from the initial measurement
+    /// - Returns: Updated MeasurementResult with recalculated dimensions
+    func recalculate(
+        boundingBox: BoundingBox3D,
+        quality: MeasurementQuality,
+        axisMapping: BoundingBox3D.AxisMapping
+    ) -> MeasurementResult {
+        let (height, length, width) = boundingBox.dimensions(withMapping: axisMapping)
 
         return MeasurementResult(
             boundingBox: boundingBox,
-            length: sorted[0].dimension,
-            width: sorted[1].dimension,
-            height: sorted[2].dimension,
+            length: length,
+            width: width,
+            height: height,
             volume: boundingBox.volume,
-            quality: quality
+            quality: quality,
+            heightAxisIndex: axisMapping.height,
+            lengthAxisIndex: axisMapping.length,
+            widthAxisIndex: axisMapping.width
         )
     }
 

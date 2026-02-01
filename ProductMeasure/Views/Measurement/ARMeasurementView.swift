@@ -844,9 +844,11 @@ class ARMeasurementViewModel: ObservableObject {
                 }
 
                 // Recalculate measurement with adjusted box dimensions
+                // Use the original axis mapping from the initial measurement
                 var adjustedResult = self.measurementCalculator.recalculate(
                     boundingBox: adjustedBox,
-                    quality: result.quality
+                    quality: result.quality,
+                    axisMapping: result.axisMapping
                 )
                 adjustedResult.pointCloud = result.pointCloud
                 adjustedResult.debugMaskImage = result.debugMaskImage
@@ -925,10 +927,11 @@ class ARMeasurementViewModel: ObservableObject {
         )
 
         if editResult.didChange {
-            // Update measurement result
+            // Update measurement result using the original axis mapping
             let newResult = measurementCalculator.recalculate(
                 boundingBox: editResult.boundingBox,
-                quality: result.quality
+                quality: result.quality,
+                axisMapping: result.axisMapping
             )
             var updatedResult = newResult
             updatedResult.pointCloud = storedPointCloud
@@ -983,10 +986,11 @@ class ARMeasurementViewModel: ObservableObject {
         var newBox = result.boundingBox
         newBox.rotateAroundY(by: yawAngle)
 
-        // Update measurement result
+        // Update measurement result using the original axis mapping
         let newResult = measurementCalculator.recalculate(
             boundingBox: newBox,
-            quality: result.quality
+            quality: result.quality,
+            axisMapping: result.axisMapping
         )
         var updatedResult = newResult
         updatedResult.pointCloud = storedPointCloud
@@ -1024,10 +1028,11 @@ class ARMeasurementViewModel: ObservableObject {
                 fittedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
             }
 
-            // Update measurement result
+            // Update measurement result using the original axis mapping
             let newResult = measurementCalculator.recalculate(
                 boundingBox: fittedBox,
-                quality: result.quality
+                quality: result.quality,
+                axisMapping: result.axisMapping
             )
             var updatedResult = newResult
             updatedResult.pointCloud = storedPointCloud
