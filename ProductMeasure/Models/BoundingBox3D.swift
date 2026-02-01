@@ -162,6 +162,40 @@ struct BoundingBox3D: Codable {
         let yRotation = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
         rotation = yRotation * rotation
     }
+
+    /// Extend the bottom face to the floor while keeping the top face fixed
+    /// - Parameters:
+    ///   - floorY: The world Y coordinate of the floor
+    ///   - threshold: Maximum distance to extend (default 0.05m = 5cm)
+    /// - Returns: true if extension was performed
+    @discardableResult
+    mutating func extendBottomToFloor(floorY: Float, threshold: Float = 0.05) -> Bool {
+        // Calculate the world Y coordinate of the bottom center
+        let bottomCenterLocal = SIMD3<Float>(0, -extents.y, 0)
+        let bottomCenterWorld = localToWorld(bottomCenterLocal)
+
+        // Distance from floor (positive = above floor)
+        let distanceToFloor = bottomCenterWorld.y - floorY
+
+        // Only extend if above floor and within threshold
+        guard distanceToFloor > 0 && distanceToFloor <= threshold else {
+            return false
+        }
+
+        // Calculate current top face Y (this stays fixed)
+        let topCenterLocal = SIMD3<Float>(0, extents.y, 0)
+        let topCenterWorld = localToWorld(topCenterLocal)
+        let topWorldY = topCenterWorld.y
+
+        // Calculate new dimensions keeping top fixed
+        let newHalfHeight = (topWorldY - floorY) / 2
+        let newCenterY = floorY + newHalfHeight
+
+        center.y = newCenterY
+        extents.y = newHalfHeight
+
+        return true
+    }
 }
 
 // MARK: - Codable for simd types

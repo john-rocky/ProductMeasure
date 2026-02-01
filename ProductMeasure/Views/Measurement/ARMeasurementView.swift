@@ -64,23 +64,6 @@ struct ARMeasurementView: View {
                             SelectionModeToggle(selectionMode: $selectionMode)
                         }
 
-                        // Debug buttons
-                        if viewModel.currentMeasurement != nil {
-                            HStack(spacing: 8) {
-                                Button("Mask") {
-                                    viewModel.toggleDebugMask()
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(.green)
-
-                                Button("Depth") {
-                                    viewModel.toggleDebugDepth()
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(.blue)
-                            }
-                            .font(.caption)
-                        }
                     }
 
                     Spacer()
@@ -854,8 +837,22 @@ class ARMeasurementViewModel: ObservableObject {
                 self.animatedBoxVisualization = nil
 
                 // Show regular editable box visualization
-                self.currentMeasurement = result
-                self.showBoxVisualization(for: boundingBox, pointCloud: result.pointCloud, floorY: floorY)
+                // Apply bottom extension if within threshold of floor
+                var adjustedBox = boundingBox
+                if let floorY = floorY {
+                    adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                }
+
+                // Recalculate measurement with adjusted box dimensions
+                var adjustedResult = self.measurementCalculator.recalculate(
+                    boundingBox: adjustedBox,
+                    quality: result.quality
+                )
+                adjustedResult.pointCloud = result.pointCloud
+                adjustedResult.debugMaskImage = result.debugMaskImage
+                adjustedResult.debugDepthImage = result.debugDepthImage
+                self.currentMeasurement = adjustedResult
+                self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY)
 
                 self.isProcessing = false
             }
@@ -1017,11 +1014,16 @@ class ARMeasurementViewModel: ObservableObject {
 
         print("[ViewModel] Fitting to point cloud with \(points.count) points")
 
-        if let fittedBox = boxEditingService.fitToPoints(
+        if var fittedBox = boxEditingService.fitToPoints(
             currentBox: result.boundingBox,
             allPoints: points,
             mode: mode
         ) {
+            // Apply bottom extension if within threshold of floor
+            if let floorY = boxVisualization?.floorY {
+                fittedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+            }
+
             // Update measurement result
             let newResult = measurementCalculator.recalculate(
                 boundingBox: fittedBox,
