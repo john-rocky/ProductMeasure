@@ -12,26 +12,45 @@ struct ARMeasurementView: View {
     @StateObject private var viewModel = ARMeasurementViewModel()
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
+    @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
+    @State private var boxSelectionRect: CGRect? = nil
+    @State private var boxSelectionComplete: Bool = false
 
     var body: some View {
         ZStack {
             // AR Camera View
             if LiDARChecker.isLiDARAvailable {
-                ARMeasurementViewRepresentable(viewModel: viewModel, measurementMode: measurementMode)
+                ARMeasurementViewRepresentable(
+                    viewModel: viewModel,
+                    measurementMode: measurementMode,
+                    selectionMode: selectionMode
+                )
                     .ignoresSafeArea()
 
-                // Corner brackets overlay - visible only before tap
-                GeometryReader { geometry in
-                    CornerBracketsView(
-                        phase: viewModel.animationPhase,
-                        screenSize: geometry.size
-                    )
+                // Corner brackets overlay - visible only in tap mode
+                if selectionMode == .tap {
+                    GeometryReader { geometry in
+                        CornerBracketsView(
+                            phase: viewModel.animationPhase,
+                            screenSize: geometry.size
+                        )
+                    }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
                 }
-                .ignoresSafeArea()
 
-                // Overlay UI
+                // Box selection overlay - visible in box mode (below UI controls)
+                if selectionMode == .box && viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                    BoxSelectionOverlay(
+                        selectionRect: $boxSelectionRect,
+                        isComplete: $boxSelectionComplete
+                    )
+                    .ignoresSafeArea()
+                }
+
+                // Overlay UI (on top)
                 VStack {
-                    // Top status bar
+                    // Top bar with status and selection mode toggle
                     HStack {
                         StatusBar(
                             trackingMessage: viewModel.trackingMessage,
@@ -39,6 +58,11 @@ struct ARMeasurementView: View {
                         )
 
                         Spacer()
+
+                        // Selection mode toggle (visible when not measuring)
+                        if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                            SelectionModeToggle(selectionMode: $selectionMode)
+                        }
 
                         // Debug buttons
                         if viewModel.currentMeasurement != nil {
@@ -93,13 +117,31 @@ struct ARMeasurementView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
-                    // Instruction text when in targeting mode (brackets visible)
-                    if viewModel.currentMeasurement == nil && !viewModel.isProcessing && viewModel.animationPhase == .showingTargetBrackets {
-                        InstructionCard()
+                    // Instruction text when in targeting mode
+                    if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                        if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
+                            InstructionCard(mode: .tap)
+                        } else if selectionMode == .box {
+                            InstructionCard(mode: .box)
+                        }
                     }
                 }
                 .padding()
                 .animation(.easeInOut(duration: 0.3), value: viewModel.currentMeasurement != nil)
+                .onChange(of: boxSelectionComplete) { _, isComplete in
+                    if isComplete, let rect = boxSelectionRect {
+                        Task {
+                            await viewModel.handleBoxSelection(
+                                rect: rect,
+                                viewSize: viewModel.sessionManager.arView.bounds.size,
+                                mode: measurementMode
+                            )
+                        }
+                        // Reset box selection state
+                        boxSelectionRect = nil
+                        boxSelectionComplete = false
+                    }
+                }
                 .sheet(isPresented: $viewModel.showDebugMask) {
                     if let image = viewModel.debugMaskImage {
                         DebugImageView(image: image, title: "Segmentation Mask (Green) + Tap Point (Red)")
@@ -129,6 +171,7 @@ struct ARMeasurementView: View {
 struct ARMeasurementViewRepresentable: UIViewRepresentable {
     @ObservedObject var viewModel: ARMeasurementViewModel
     let measurementMode: MeasurementMode
+    let selectionMode: SelectionMode
 
     func makeUIView(context: Context) -> ARView {
         let arView = viewModel.sessionManager.arView!
@@ -136,10 +179,12 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
         // Add tap gesture recognizer
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         arView.addGestureRecognizer(tapGesture)
+        context.coordinator.tapGesture = tapGesture
 
         // Add pan gesture recognizer for handle dragging
         let panGesture = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
         arView.addGestureRecognizer(panGesture)
+        context.coordinator.panGesture = panGesture
 
         // Store reference to arView in coordinator
         context.coordinator.arView = arView
@@ -149,16 +194,32 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
 
     func updateUIView(_ uiView: ARView, context: Context) {
         context.coordinator.measurementMode = measurementMode
+        context.coordinator.selectionMode = selectionMode
+
+        // Disable gestures in box mode (unless editing)
+        let isBoxMode = selectionMode == .box
+        let isEditing = viewModel.isEditing
+        let hasMeasurement = viewModel.currentMeasurement != nil
+
+        // In box mode without measurement, disable tap/pan to allow BoxSelectionOverlay to work
+        // But if editing, keep pan enabled for handle dragging
+        context.coordinator.tapGesture?.isEnabled = !isBoxMode || hasMeasurement
+        context.coordinator.panGesture?.isEnabled = !isBoxMode || hasMeasurement || isEditing
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel, measurementMode: measurementMode)
+        Coordinator(viewModel: viewModel, measurementMode: measurementMode, selectionMode: selectionMode)
     }
 
     class Coordinator: NSObject {
         let viewModel: ARMeasurementViewModel
         var measurementMode: MeasurementMode
+        var selectionMode: SelectionMode
         weak var arView: ARView?
+
+        // Gesture references for enabling/disabling
+        weak var tapGesture: UITapGestureRecognizer?
+        weak var panGesture: UIPanGestureRecognizer?
 
         // Drag state
         private var activeDragType: DragType?
@@ -169,9 +230,10 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
             case rotationRing
         }
 
-        init(viewModel: ARMeasurementViewModel, measurementMode: MeasurementMode) {
+        init(viewModel: ARMeasurementViewModel, measurementMode: MeasurementMode, selectionMode: SelectionMode) {
             self.viewModel = viewModel
             self.measurementMode = measurementMode
+            self.selectionMode = selectionMode
         }
 
         @MainActor @objc func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -179,6 +241,9 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
 
             // If editing, ignore taps
             if viewModel.isEditing { return }
+
+            // Only handle taps in tap mode
+            guard selectionMode == .tap else { return }
 
             let location = gesture.location(in: gesture.view)
             print("[Tap] Location: \(location)")
@@ -309,13 +374,17 @@ struct StatusBar: View {
 // MARK: - Instruction Card
 
 struct InstructionCard: View {
+    var mode: SelectionMode = .tap
+
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: "hand.tap.fill")
+            Image(systemName: mode == .tap ? "hand.tap.fill" : "rectangle.dashed")
                 .font(.title)
-            Text("Tap on an object to measure")
+            Text(mode == .tap ? "Tap on an object to measure" : "Draw a box to select")
                 .font(.headline)
-            Text("Point your device at an object and tap to measure its dimensions")
+            Text(mode == .tap
+                 ? "Point your device at an object and tap to measure its dimensions"
+                 : "Drag to draw a rectangle around the object you want to measure")
                 .font(.caption)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
@@ -659,6 +728,80 @@ class ARMeasurementViewModel: ObservableObject {
             }
         } catch {
             print("[ViewModel] Measurement failed with error: \(error)")
+            isProcessing = false
+        }
+    }
+
+    func handleBoxSelection(rect: CGRect, viewSize: CGSize, mode: MeasurementMode) async {
+        print("[ViewModel] handleBoxSelection called with rect: \(rect)")
+        print("[ViewModel] isProcessing: \(isProcessing), trackingState: \(sessionManager.trackingState)")
+
+        guard !isProcessing else {
+            print("[ViewModel] Already processing, ignoring box selection")
+            return
+        }
+
+        guard let frame = sessionManager.currentFrame else {
+            print("[ViewModel] No current frame available")
+            return
+        }
+
+        guard sessionManager.trackingState == .normal ||
+              (sessionManager.trackingState != .notAvailable) else {
+            print("[ViewModel] Tracking state not ready: \(sessionManager.trackingState)")
+            return
+        }
+
+        // Clean up previous measurement
+        removeAllVisualizations()
+        animationCoordinator.cancelAnimation()
+        currentMeasurement = nil
+        debugMaskImage = nil
+        debugDepthImage = nil
+        animationContext = nil
+
+        isProcessing = true
+        print("[ViewModel] Starting box selection measurement...")
+
+        // Raycast from box center
+        let boxCenter = CGPoint(x: rect.midX, y: rect.midY)
+        let raycastHitPosition = sessionManager.raycastWorldPosition(from: boxCenter)
+        if let pos = raycastHitPosition {
+            print("[ViewModel] Raycast hit position from box center: \(pos)")
+        } else {
+            print("[ViewModel] Raycast did not hit any surface from box center")
+        }
+
+        do {
+            if let result = try await measurementCalculator.measureWithROI(
+                frame: frame,
+                regionOfInterest: rect,
+                viewSize: viewSize,
+                mode: mode,
+                raycastHitPosition: raycastHitPosition
+            ) {
+                print("[ViewModel] Box selection measurement successful!")
+                print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
+
+                debugMaskImage = result.debugMaskImage
+                debugDepthImage = result.debugDepthImage
+
+                let floorY = raycastHitPosition?.y
+
+                startBoxAnimation(
+                    at: boxCenter,
+                    boundingBox: result.boundingBox,
+                    frame: frame,
+                    viewSize: viewSize,
+                    result: result,
+                    floorY: floorY
+                )
+            } else {
+                print("[ViewModel] Box selection measurement returned nil")
+                isProcessing = false
+            }
+        } catch {
+            print("[ViewModel] Box selection measurement failed with error: \(error)")
             isProcessing = false
         }
     }

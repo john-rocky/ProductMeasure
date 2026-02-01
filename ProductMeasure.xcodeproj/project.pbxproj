@@ -40,6 +40,8 @@
 		001000086 /* CornerBracketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000087 /* CornerBracketsView.swift */; };
 		001000088 /* AnimatedBoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000089 /* AnimatedBoxVisualization.swift */; };
 		001000090 /* BoxAnimationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000091 /* BoxAnimationCoordinator.swift */; };
+		001000092 /* BoxSelectionOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000093 /* BoxSelectionOverlay.swift */; };
+		001000094 /* SelectionModeToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000095 /* SelectionModeToggle.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -78,6 +80,8 @@
 		001000087 /* CornerBracketsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CornerBracketsView.swift; sourceTree = "<group>"; };
 		001000089 /* AnimatedBoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedBoxVisualization.swift; sourceTree = "<group>"; };
 		001000091 /* BoxAnimationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxAnimationCoordinator.swift; sourceTree = "<group>"; };
+		001000093 /* BoxSelectionOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxSelectionOverlay.swift; sourceTree = "<group>"; };
+		001000095 /* SelectionModeToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionModeToggle.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -190,6 +194,8 @@
 				001000014 /* BoxEditingView.swift */,
 				001000087 /* CornerBracketsView.swift */,
 				001000089 /* AnimatedBoxVisualization.swift */,
+				001000093 /* BoxSelectionOverlay.swift */,
+				001000095 /* SelectionModeToggle.swift */,
 			);
 			path = Measurement;
 			sourceTree = "<group>";
@@ -321,6 +327,8 @@
 				001000086 /* CornerBracketsView.swift in Sources */,
 				001000088 /* AnimatedBoxVisualization.swift in Sources */,
 				001000090 /* BoxAnimationCoordinator.swift in Sources */,
+				001000092 /* BoxSelectionOverlay.swift in Sources */,
+				001000094 /* SelectionModeToggle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

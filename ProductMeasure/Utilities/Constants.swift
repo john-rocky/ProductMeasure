@@ -114,3 +114,22 @@ enum MeasurementMode: String, CaseIterable, Codable {
         }
     }
 }
+
+enum SelectionMode: String, CaseIterable, Codable {
+    case tap = "tap"
+    case box = "box"
+
+    var displayName: String {
+        switch self {
+        case .tap: return "Tap"
+        case .box: return "Box"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .tap: return "hand.tap"
+        case .box: return "rectangle.dashed"
+        }
+    }
+}
