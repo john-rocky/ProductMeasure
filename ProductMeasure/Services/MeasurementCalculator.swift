@@ -16,7 +16,7 @@ class MeasurementCalculator {
         let length: Float  // meters
         let width: Float   // meters
         let height: Float  // meters
-        let volume: Float  // cubic meters
+        let volume: Float  // cubic meters (OBB volume)
         let quality: MeasurementQuality
 
         // Axis mapping (fixed at initial measurement time)
@@ -32,6 +32,12 @@ class MeasurementCalculator {
 
         // Point cloud for Fit functionality
         var pointCloud: [SIMD3<Float>]?
+
+        // Voxel-based refined volume (more accurate for irregular shapes)
+        var refinedVolume: VoxelVolumeResult?
+
+        // Whether refined volume calculation is in progress
+        var isCalculatingRefinedVolume: Bool = false
 
         // Debug info
         var debugMaskImage: UIImage?
@@ -51,6 +57,18 @@ class MeasurementCalculator {
                 return String(format: "%.1f cm³", volumeCm3)
             }
         }
+
+        /// Formatted refined volume string (if available)
+        var formattedRefinedVolume: String? {
+            guard let refined = refinedVolume else { return nil }
+            return refined.formattedVolume
+        }
+
+        /// Volume difference between OBB and refined volume (percentage)
+        var volumeDifferencePercent: Float? {
+            guard let refined = refinedVolume, refined.volume > 0, volume > 0 else { return nil }
+            return ((volume - refined.volume) / volume) * 100
+        }
     }
 
     // MARK: - Properties
@@ -58,6 +76,7 @@ class MeasurementCalculator {
     private let segmentationService = InstanceSegmentationService()
     private let pointCloudGenerator = PointCloudGenerator()
     private let boundingBoxEstimator = BoundingBoxEstimator()
+    private let voxelCalculator = VoxelVolumeCalculator()
 
     // MARK: - Public Methods
 
@@ -635,6 +654,41 @@ class MeasurementCalculator {
     /// Calculate volume from dimensions
     static func calculateVolume(length: Float, width: Float, height: Float) -> Float {
         length * width * height
+    }
+
+    /// Calculate refined volume using voxel-based method
+    /// - Parameters:
+    ///   - result: The measurement result to enhance with refined volume
+    ///   - voxelSize: Size of voxels in meters (default: 1cm)
+    /// - Returns: Updated MeasurementResult with refined volume
+    func calculateRefinedVolume(
+        for result: MeasurementResult,
+        voxelSize: Float = VoxelVolumeCalculator.defaultVoxelSize
+    ) async -> MeasurementResult {
+        guard let points = result.pointCloud, !points.isEmpty else {
+            print("[Calculator] No point cloud available for refined volume calculation")
+            return result
+        }
+
+        print("[Calculator] Starting refined volume calculation with \(points.count) points")
+
+        let voxelResult = await voxelCalculator.calculateVolumeAsync(
+            points: points,
+            voxelSize: voxelSize
+        )
+
+        var updatedResult = result
+        updatedResult.refinedVolume = voxelResult
+        updatedResult.isCalculatingRefinedVolume = false
+
+        print("[Calculator] Refined volume: \(voxelResult.formattedVolume)")
+        print("[Calculator] OBB volume: \(result.formattedVolume)")
+
+        if let diff = updatedResult.volumeDifferencePercent {
+            print("[Calculator] Volume difference: \(String(format: "%.1f", diff))% (OBB is larger)")
+        }
+
+        return updatedResult
     }
 
     /// Filter 3D points by proximity to a center point

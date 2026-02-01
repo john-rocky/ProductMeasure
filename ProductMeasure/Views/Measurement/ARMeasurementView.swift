@@ -80,6 +80,7 @@ struct ARMeasurementView: View {
                             result: result,
                             unit: measurementUnit,
                             isEditing: viewModel.isEditing,
+                            showVoxelVisualization: viewModel.showVoxelVisualization,
                             onSave: {
                                 viewModel.stopEditing()
                                 viewModel.saveMeasurement(mode: measurementMode)
@@ -95,6 +96,9 @@ struct ARMeasurementView: View {
                             },
                             onDiscard: {
                                 viewModel.discardMeasurement()
+                            },
+                            onToggleVoxel: {
+                                viewModel.toggleVoxelVisualization()
                             }
                         )
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -384,11 +388,13 @@ struct MeasurementResultCard: View {
     let result: MeasurementCalculator.MeasurementResult
     let unit: MeasurementUnit
     var isEditing: Bool = false
+    var showVoxelVisualization: Bool = true
     let onSave: () -> Void
     let onEdit: () -> Void
     var onFit: (() -> Void)? = nil
     var onDone: (() -> Void)? = nil
     let onDiscard: () -> Void
+    var onToggleVoxel: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 16) {
@@ -416,8 +422,57 @@ struct MeasurementResultCard: View {
                     DimensionLabel(label: "H", value: formatDimension(result.height))
                 }
 
-                Text("Volume: \(formatVolume(result.volume))")
-                    .font(.headline)
+                // Volume display with refined volume
+                VStack(spacing: 4) {
+                    HStack {
+                        Text("Box Volume:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Text(formatVolume(result.volume))
+                            .font(.headline)
+                    }
+
+                    // Refined volume (if available or calculating)
+                    if result.isCalculatingRefinedVolume {
+                        HStack {
+                            Text("Refined:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .scaleEffect(0.6)
+                            Text("Calculating...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    } else if let refinedVolume = result.refinedVolume {
+                        HStack {
+                            Text("Refined:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(formatVolume(refinedVolume.volume))
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.green)
+
+                            if let diff = result.volumeDifferencePercent, abs(diff) > 1 {
+                                Text(String(format: "(%.0f%% more precise)", abs(diff)))
+                                    .font(.caption2)
+                                    .foregroundColor(.green)
+                            }
+
+                            Spacer()
+
+                            // Voxel visualization toggle
+                            Button(action: { onToggleVoxel?() }) {
+                                Image(systemName: showVoxelVisualization ? "cube.fill" : "cube")
+                                    .foregroundColor(showVoxelVisualization ? .green : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Toggle voxel visualization")
+                        }
+                    }
+                }
             }
 
             // Action buttons - different based on editing mode
@@ -611,11 +666,15 @@ class ARMeasurementViewModel: ObservableObject {
     private let measurementCalculator = MeasurementCalculator()
     private let boxEditingService = BoxEditingService()
     private var boxVisualization: BoxVisualization?
+    private var voxelVisualization: VoxelVisualization?
     private var pointCloudEntity: Entity?
     private var animatedBoxVisualization: AnimatedBoxVisualization?
 
     // Stored point cloud for Fit functionality
     private var storedPointCloud: [SIMD3<Float>]?
+
+    /// Whether to show voxel visualization
+    @Published var showVoxelVisualization: Bool = true
 
     init() {
         sessionManager.$trackingStateMessage
@@ -853,10 +912,18 @@ class ARMeasurementViewModel: ObservableObject {
                 adjustedResult.pointCloud = result.pointCloud
                 adjustedResult.debugMaskImage = result.debugMaskImage
                 adjustedResult.debugDepthImage = result.debugDepthImage
+
+                // Mark as calculating refined volume and set result
+                adjustedResult.isCalculatingRefinedVolume = true
                 self.currentMeasurement = adjustedResult
                 self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY)
 
                 self.isProcessing = false
+
+                // Start refined volume calculation in background
+                Task {
+                    await self.calculateRefinedVolumeInBackground()
+                }
             }
         }
     }
@@ -1061,7 +1128,65 @@ class ARMeasurementViewModel: ObservableObject {
         animationCoordinator.cancelAnimation()
         animatedBoxVisualization?.entity.removeFromParent()
         animatedBoxVisualization = nil
+        voxelVisualization?.entity.removeFromParent()
+        voxelVisualization = nil
         removeAllVisualizations()
+    }
+
+    /// Calculate refined volume in background and update the current measurement
+    private func calculateRefinedVolumeInBackground() async {
+        guard let result = currentMeasurement else { return }
+
+        print("[ViewModel] Starting refined volume calculation...")
+
+        let updatedResult = await measurementCalculator.calculateRefinedVolume(for: result)
+
+        // Only update if we still have the same measurement
+        if currentMeasurement?.boundingBox.center == result.boundingBox.center {
+            currentMeasurement = updatedResult
+
+            if let refined = updatedResult.refinedVolume {
+                print("[ViewModel] Refined volume calculated: \(refined.formattedVolume)")
+                print("[ViewModel] Processing time: \(String(format: "%.0f", refined.processingTime * 1000)) ms")
+
+                // Show voxel visualization
+                if showVoxelVisualization {
+                    showVoxelVisualizationEntity(with: refined)
+                }
+            }
+        }
+    }
+
+    /// Show voxel visualization in AR scene
+    private func showVoxelVisualizationEntity(with result: VoxelVolumeResult) {
+        // Remove existing voxel visualization
+        voxelVisualization?.entity.removeFromParent()
+
+        // Create new visualization
+        let visualization = VoxelVisualization()
+        visualization.update(with: result)
+
+        sessionManager.addEntity(visualization.entity)
+        voxelVisualization = visualization
+
+        // Animate appearance
+        visualization.animateAppear(duration: 0.3)
+    }
+
+    /// Toggle voxel visualization visibility
+    func toggleVoxelVisualization() {
+        showVoxelVisualization.toggle()
+
+        if showVoxelVisualization {
+            // Show if we have refined volume data
+            if let refined = currentMeasurement?.refinedVolume {
+                showVoxelVisualizationEntity(with: refined)
+            }
+        } else {
+            // Hide
+            voxelVisualization?.entity.removeFromParent()
+            voxelVisualization = nil
+        }
     }
 
     func toggleDebugMask() {

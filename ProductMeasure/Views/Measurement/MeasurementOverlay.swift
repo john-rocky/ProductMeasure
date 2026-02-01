@@ -175,15 +175,57 @@ struct MeasurementOverlay: View {
     }
 
     private func volumeDisplay(result: MeasurementCalculator.MeasurementResult) -> some View {
-        HStack {
-            Text("Volume")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+        VStack(spacing: 8) {
+            // Box volume (OBB)
+            HStack {
+                Text("Box Volume")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
 
-            Spacer()
+                Spacer()
 
-            Text(formatVolume(result.volume))
-                .font(.headline)
+                Text(formatVolume(result.volume))
+                    .font(.headline)
+            }
+
+            // Refined volume (Voxel-based)
+            if result.isCalculatingRefinedVolume {
+                HStack {
+                    Text("Refined Volume")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .scaleEffect(0.8)
+
+                    Text("Calculating...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else if let refinedVolume = result.refinedVolume {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Refined Volume")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        if let diff = result.volumeDifferencePercent {
+                            Text(String(format: "%.0f%% more precise", abs(diff)))
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        }
+                    }
+
+                    Spacer()
+
+                    Text(formatVolume(refinedVolume.volume))
+                        .font(.headline)
+                        .foregroundColor(.green)
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
