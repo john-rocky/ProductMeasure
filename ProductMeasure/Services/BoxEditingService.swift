@@ -134,7 +134,7 @@ class BoxEditingService {
         let outwardLength = simd_length(outwardDir)
 
         // If handle is too close to center on screen, can't determine direction
-        guard outwardLength > 10 else {
+        guard outwardLength > 5 else {
             return EditResult(boundingBox: box, didChange: false)
         }
 
@@ -146,8 +146,11 @@ class BoxEditingService {
         let screenDelta2D = SIMD2<Float>(Float(screenDelta.x), Float(screenDelta.y))
         let alignedDelta = simd_dot(screenDelta2D, normalizedOutward)
 
-        // Scale by sensitivity (use fixed scale, adjusted by screen density)
-        let scaledDelta = alignedDelta * sensitivity * 1.5
+        // Calculate pixel-to-world conversion ratio
+        // outwardLength (pixels) corresponds to extents[axisIndex] (meters)
+        // So 1 pixel = extents[axisIndex] / outwardLength meters
+        let pixelToWorld = box.extents[axisIndex] / outwardLength
+        let scaledDelta = alignedDelta * pixelToWorld
 
         // Get the face normal in world space
         let axes = box.localAxes
