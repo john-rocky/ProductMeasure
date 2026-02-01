@@ -44,8 +44,8 @@ class AnimatedBoxVisualization {
 
     // MARK: - Constants
 
-    private let lineColor: UIColor = UIColor(white: 1.0, alpha: 0.9)
-    private let lineRadius: Float = 0.002
+    private let lineColor: UIColor = UIColor(white: 1.0, alpha: 0.5)  // Semi-transparent white
+    private let lineRadius: Float = 0.001  // Thinner (1mm)
 
     // MARK: - Initialization
 
@@ -294,8 +294,7 @@ class AnimatedBoxVisualization {
         let length = max(simd_length(direction), 0.001)
 
         let mesh = MeshResource.generateBox(size: [lineRadius * 2, lineRadius * 2, length])
-        var material = SimpleMaterial()
-        material.color = .init(tint: lineColor)
+        var material = UnlitMaterial(color: lineColor)
 
         let edgeEntity = ModelEntity(mesh: mesh, materials: [material])
         edgeEntity.position = (start + end) / 2

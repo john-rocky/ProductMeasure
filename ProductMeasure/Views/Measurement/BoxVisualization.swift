@@ -39,8 +39,8 @@ class BoxVisualization {
 
     // MARK: - Constants
 
-    private let lineColor: UIColor = UIColor(white: 1.0, alpha: 0.9)  // Clean white
-    private let lineRadius: Float = 0.0008  // Very thin (0.8mm)
+    private let lineColor: UIColor = UIColor(white: 1.0, alpha: 0.5)  // Semi-transparent white
+    private let lineRadius: Float = 0.0004  // Very thin (0.4mm)
 
     // Handle color (white, semi-transparent for Apple-style appearance)
     private let handleColor: UIColor = UIColor(white: 1.0, alpha: 0.85)
@@ -182,8 +182,7 @@ class BoxVisualization {
         let length = simd_length(direction)
 
         let mesh = MeshResource.generateBox(size: [lineRadius * 2, lineRadius * 2, length])
-        var material = SimpleMaterial()
-        material.color = .init(tint: lineColor)
+        var material = UnlitMaterial(color: lineColor)
 
         let edgeEntity = ModelEntity(mesh: mesh, materials: [material])
         edgeEntity.name = "edge_\(index)"
@@ -223,8 +222,7 @@ class BoxVisualization {
         parentEntity.name = handleType.entityName
 
         // Create clean capsule handle using a single rounded box
-        var material = SimpleMaterial()
-        material.color = .init(tint: handleColor)
+        var material = UnlitMaterial(color: handleColor)
 
         // Single rounded box with full corner radius for smooth capsule appearance
         let capsuleMesh = MeshResource.generateBox(
@@ -295,8 +293,7 @@ class BoxVisualization {
         let handleEntity = Entity()
         handleEntity.name = "rotation_ring"
 
-        var material = SimpleMaterial()
-        material.color = .init(tint: UIColor(white: 1.0, alpha: 0.5))  // Lighter, more transparent
+        var material = UnlitMaterial(color: UIColor(white: 1.0, alpha: 0.5))  // Lighter, more transparent
 
         // Create smooth torus arc mesh
         if let torusMesh = createTorusArcMesh(
@@ -489,8 +486,7 @@ class BoxVisualization {
             if segmentY > bottomCenter.y { break }
 
             let dashMesh = MeshResource.generateBox(size: [0.001, dashLength, 0.001])
-            var material = SimpleMaterial()
-            material.color = .init(tint: UIColor(white: 0.8, alpha: 0.7))
+            var material = UnlitMaterial(color: UIColor(white: 0.8, alpha: 0.7))
 
             let dashEntity = ModelEntity(mesh: dashMesh, materials: [material])
             dashEntity.position = SIMD3<Float>(bottomCenter.x, segmentY, bottomCenter.z)
@@ -511,8 +507,7 @@ class BoxVisualization {
             lineBreakMode: .byTruncatingTail
         )
 
-        var textMaterial = SimpleMaterial()
-        textMaterial.color = .init(tint: UIColor(white: 0.9, alpha: 0.9))
+        var textMaterial = UnlitMaterial(color: UIColor(white: 0.9, alpha: 0.9))
 
         let labelEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
         labelEntity.position = labelPosition
@@ -520,8 +515,7 @@ class BoxVisualization {
 
         // Small floor marker
         let markerMesh = MeshResource.generateBox(size: [0.02, 0.001, 0.02])
-        var markerMaterial = SimpleMaterial()
-        markerMaterial.color = .init(tint: UIColor(white: 0.7, alpha: 0.5))
+        var markerMaterial = UnlitMaterial(color: UIColor(white: 0.7, alpha: 0.5))
 
         let markerEntity = ModelEntity(mesh: markerMesh, materials: [markerMaterial])
         markerEntity.position = floorPoint
@@ -604,8 +598,7 @@ extension BoxVisualization {
             lineBreakMode: .byTruncatingTail
         )
 
-        var material = SimpleMaterial()
-        material.color = .init(tint: .white)
+        var material = UnlitMaterial(color: .white)
 
         let textEntity = ModelEntity(mesh: textMesh, materials: [material])
         textEntity.position = position
