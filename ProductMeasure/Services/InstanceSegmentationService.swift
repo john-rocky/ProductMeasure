@@ -94,6 +94,69 @@ class InstanceSegmentationService {
         }
     }
 
+    /// Segment the foreground object within a specific region of interest
+    /// - Parameters:
+    ///   - pixelBuffer: The camera image pixel buffer
+    ///   - regionOfInterest: ROI in normalized image coordinates (0-1, origin bottom-left for Vision)
+    /// - Returns: SegmentationResult if an instance is found in the ROI
+    func segmentInstanceWithROI(
+        in pixelBuffer: CVPixelBuffer,
+        regionOfInterest: CGRect
+    ) async throws -> SegmentationResult? {
+        print("[Segmentation] Starting segmentation with ROI: \(regionOfInterest)")
+
+        let imageWidth = CVPixelBufferGetWidth(pixelBuffer)
+        let imageHeight = CVPixelBufferGetHeight(pixelBuffer)
+        print("[Segmentation] Input image size: \(imageWidth)x\(imageHeight)")
+
+        // Create the foreground instance mask request with ROI
+        let request = VNGenerateForegroundInstanceMaskRequest()
+        request.regionOfInterest = regionOfInterest
+
+        // Use .up orientation - process image as-is
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
+
+        try handler.perform([request])
+
+        guard let observation = request.results?.first else {
+            print("[Segmentation] No observation results with ROI")
+            return nil
+        }
+
+        let allInstances = observation.allInstances
+        print("[Segmentation] Found \(allInstances.count) instances in ROI")
+
+        guard !allInstances.isEmpty else {
+            print("[Segmentation] No instances found in ROI")
+            return nil
+        }
+
+        print("[Segmentation] Using ALL \(allInstances.count) instances from ROI")
+
+        do {
+            let instanceMask = try observation.generateMaskedImage(
+                ofInstances: IndexSet(allInstances),
+                from: handler,
+                croppedToInstancesExtent: false
+            )
+
+            let maskSize = CGSize(
+                width: CVPixelBufferGetWidth(instanceMask),
+                height: CVPixelBufferGetHeight(instanceMask)
+            )
+            print("[Segmentation] Generated mask size: \(maskSize)")
+
+            return SegmentationResult(
+                mask: instanceMask,
+                boundingBox: regionOfInterest,
+                maskSize: maskSize
+            )
+        } catch {
+            print("[Segmentation] Failed to generate mask with ROI: \(error)")
+            throw error
+        }
+    }
+
     // MARK: - Private Methods
 
     private func findInstance(
@@ -281,6 +344,114 @@ extension InstanceSegmentationService {
             let normalizedCenterX = Float(minX + maxX) / 2.0 / Float(imageSize.width)
             let normalizedCenterY = Float(minY + maxY) / 2.0 / Float(imageSize.height)
             print("[Segmentation] Mask center (normalized): (\(normalizedCenterX), \(normalizedCenterY))")
+        }
+
+        return pixels
+    }
+
+    /// Get the pixels that are part of the mask when ROI was used
+    /// Handles both full-size masks and ROI-cropped masks
+    /// - Parameters:
+    ///   - mask: The mask pixel buffer
+    ///   - imageSize: The original camera image size
+    ///   - visionROI: The ROI in Vision normalized coordinates (0-1, bottom-left origin)
+    func getMaskedPixelsWithROI(
+        mask: CVPixelBuffer,
+        imageSize: CGSize,
+        visionROI: CGRect
+    ) -> [(x: Int, y: Int)] {
+        CVPixelBufferLockBaseAddress(mask, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
+
+        let maskWidth = CVPixelBufferGetWidth(mask)
+        let maskHeight = CVPixelBufferGetHeight(mask)
+        let pixelFormat = CVPixelBufferGetPixelFormatType(mask)
+
+        print("[Segmentation] Mask size: \(maskWidth)x\(maskHeight)")
+        print("[Segmentation] Vision ROI: \(visionROI)")
+        print("[Segmentation] Camera image size: \(imageSize)")
+
+        guard let baseAddress = CVPixelBufferGetBaseAddress(mask) else {
+            print("[Segmentation] No base address for mask")
+            return []
+        }
+
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(mask)
+        let buffer = baseAddress.assumingMemoryBound(to: UInt8.self)
+
+        var pixels: [(x: Int, y: Int)] = []
+        pixels.reserveCapacity(5000)
+
+        // Determine bytes per pixel based on format
+        let bytesPerPixel: Int
+        if pixelFormat == kCVPixelFormatType_32BGRA || pixelFormat == kCVPixelFormatType_32ARGB {
+            bytesPerPixel = 4
+        } else {
+            bytesPerPixel = 1
+        }
+
+        // Check if mask is full-size or ROI-cropped
+        // Full-size: mask dimensions match image dimensions (within tolerance)
+        let isFullSizeMask = abs(CGFloat(maskWidth) - imageSize.width) < 10 &&
+                             abs(CGFloat(maskHeight) - imageSize.height) < 10
+        print("[Segmentation] Mask is full-size: \(isFullSizeMask)")
+
+        let step = max(4, min(maskWidth, maskHeight) / 80)
+        let maxPixels = 5000
+
+        outerLoop: for my in Swift.stride(from: 0, to: maskHeight, by: step) {
+            for mx in Swift.stride(from: 0, to: maskWidth, by: step) {
+                let pixelOffset = my * bytesPerRow + mx * bytesPerPixel
+                let pixelValue: UInt8
+                if bytesPerPixel == 4 {
+                    pixelValue = buffer[pixelOffset + 3]  // Alpha channel
+                } else {
+                    pixelValue = buffer[pixelOffset]
+                }
+
+                if pixelValue > 0 {
+                    let imageX: Int
+                    let imageY: Int
+
+                    if isFullSizeMask {
+                        // Full-size mask: mask coordinates directly correspond to image coordinates
+                        // No ROI transformation needed
+                        imageX = mx
+                        imageY = my
+                    } else {
+                        // ROI-cropped mask: need to transform coordinates
+                        // Mask coordinates to ROI-relative normalized (0-1)
+                        let roiRelativeX = CGFloat(mx) / CGFloat(maskWidth)
+                        let roiRelativeY = CGFloat(my) / CGFloat(maskHeight)
+
+                        // ROI-relative to Vision absolute coordinates
+                        // Vision uses bottom-left origin, mask uses top-left origin
+                        // So we need to flip Y within the ROI
+                        let visionX = visionROI.origin.x + roiRelativeX * visionROI.width
+                        let visionY = visionROI.origin.y + (1.0 - roiRelativeY) * visionROI.height
+
+                        // Vision coordinates (bottom-left origin) to image coordinates (top-left origin)
+                        imageX = Int(visionX * imageSize.width)
+                        imageY = Int((1.0 - visionY) * imageSize.height)
+                    }
+
+                    pixels.append((imageX, imageY))
+
+                    if pixels.count >= maxPixels {
+                        break outerLoop
+                    }
+                }
+            }
+        }
+
+        print("[Segmentation] Found \(pixels.count) masked pixels")
+
+        if !pixels.isEmpty {
+            let minX = pixels.map { $0.x }.min()!
+            let maxX = pixels.map { $0.x }.max()!
+            let minY = pixels.map { $0.y }.min()!
+            let maxY = pixels.map { $0.y }.max()!
+            print("[Segmentation] Mask bounds in image coords: x=\(minX)-\(maxX), y=\(minY)-\(maxY)")
         }
 
         return pixels

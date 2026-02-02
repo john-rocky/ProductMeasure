@@ -19,6 +19,20 @@ class MeasurementCalculator {
         let volume: Float  // cubic meters
         let quality: MeasurementQuality
 
+        // Axis mapping (fixed at initial measurement time)
+        // Determines which local axis (0=x, 1=y, 2=z) corresponds to each dimension
+        let heightAxisIndex: Int   // Axis most aligned with world Y (vertical)
+        let lengthAxisIndex: Int   // Axis most aligned with camera depth direction
+        let widthAxisIndex: Int    // Axis most aligned with camera horizontal direction
+
+        /// Get the axis mapping as a tuple
+        var axisMapping: BoundingBox3D.AxisMapping {
+            (height: heightAxisIndex, length: lengthAxisIndex, width: widthAxisIndex)
+        }
+
+        // Point cloud for Fit functionality
+        var pointCloud: [SIMD3<Float>]?
+
         // Debug info
         var debugMaskImage: UIImage?
         var debugDepthImage: UIImage?
@@ -195,13 +209,12 @@ class MeasurementCalculator {
         print("[Calculator] Box center: \(boundingBox.center)")
         print("[Calculator] Box extents: \(boundingBox.extents)")
 
-        // 7. Calculate dimensions
-        let sorted = boundingBox.sortedDimensions
-        let length = sorted[0].dimension
-        let width = sorted[1].dimension
-        let height = sorted[2].dimension
+        // 7. Calculate dimensions using camera-based axis mapping
+        let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
+        let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
         let volume = boundingBox.volume
 
+        print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
         print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
         print("[Calculator] Volume: \(volume * 1_000_000) cm³")
 
@@ -211,14 +224,266 @@ class MeasurementCalculator {
             width: width,
             height: height,
             volume: volume,
-            quality: pointCloud.quality
+            quality: pointCloud.quality,
+            heightAxisIndex: mapping.height,
+            lengthAxisIndex: mapping.length,
+            widthAxisIndex: mapping.width
         )
+
+        // Store point cloud for Fit functionality
+        result.pointCloud = pointCloud.points
 
         // Attach debug info (images only, not point cloud to save memory)
         result.debugMaskImage = debugMaskImage
         result.debugDepthImage = debugDepthImage
 
         return result
+    }
+
+    /// Perform measurement within a specific region of interest (box selection mode)
+    /// - Parameters:
+    ///   - frame: Current AR frame
+    ///   - regionOfInterest: Screen rect defining the selection box
+    ///   - viewSize: Size of the view
+    ///   - mode: Measurement mode
+    ///   - raycastHitPosition: 3D world position from ARKit raycast (optional)
+    /// - Returns: MeasurementResult if successful
+    func measureWithROI(
+        frame: ARFrame,
+        regionOfInterest: CGRect,
+        viewSize: CGSize,
+        mode: MeasurementMode,
+        raycastHitPosition: SIMD3<Float>? = nil
+    ) async throws -> MeasurementResult? {
+        print("[Calculator] Starting ROI measurement")
+        print("[Calculator] Screen ROI: \(regionOfInterest), View size: \(viewSize)")
+
+        let imageSize = CGSize(
+            width: CVPixelBufferGetWidth(frame.capturedImage),
+            height: CVPixelBufferGetHeight(frame.capturedImage)
+        )
+        print("[Calculator] Image size: \(imageSize)")
+
+        // Convert screen ROI to Vision normalized coordinates
+        let visionROI = convertScreenRectToVisionCoordinates(
+            screenRect: regionOfInterest,
+            viewSize: viewSize
+        )
+        print("[Calculator] Vision ROI: \(visionROI)")
+
+        // 1. Perform instance segmentation with ROI
+        guard let segmentation = try await segmentationService.segmentInstanceWithROI(
+            in: frame.capturedImage,
+            regionOfInterest: visionROI
+        ) else {
+            print("[Calculator] Segmentation with ROI failed - no instance found")
+            return nil
+        }
+        print("[Calculator] Segmentation successful, mask size: \(segmentation.maskSize)")
+
+        // 2. Get masked pixels with ROI coordinate transformation
+        let maskedPixels = segmentationService.getMaskedPixelsWithROI(
+            mask: segmentation.mask,
+            imageSize: imageSize,
+            visionROI: visionROI
+        )
+
+        guard !maskedPixels.isEmpty else {
+            print("[Calculator] No masked pixels found")
+            return nil
+        }
+        print("[Calculator] Found \(maskedPixels.count) masked pixels")
+
+        // 4. Apply depth filtering based on box center
+        let boxCenter = CGPoint(x: regionOfInterest.midX, y: regionOfInterest.midY)
+        let normalizedCenter = convertScreenToImageCoordinates(
+            screenPoint: boxCenter,
+            viewSize: viewSize,
+            imageSize: imageSize
+        )
+
+        let depthFilteredPixels = filterMaskedPixelsByDepth(
+            maskedPixels: maskedPixels,
+            frame: frame,
+            tapPoint: normalizedCenter,
+            imageSize: imageSize
+        )
+
+        guard !depthFilteredPixels.isEmpty else {
+            print("[Calculator] No pixels after depth filtering")
+            return nil
+        }
+        print("[Calculator] Found \(depthFilteredPixels.count) masked pixels after depth filtering")
+
+        // Create debug mask image with ROI
+        let debugMaskImage = DebugVisualization.visualizeMaskWithROI(
+            mask: segmentation.mask,
+            cameraImage: frame.capturedImage,
+            visionROI: visionROI,
+            screenRect: regionOfInterest,
+            viewSize: viewSize,
+            tapPoint: normalizedCenter
+        )
+
+        // 5. Generate point cloud
+        var pointCloud = pointCloudGenerator.generatePointCloud(
+            frame: frame,
+            maskedPixels: depthFilteredPixels,
+            imageSize: imageSize
+        )
+
+        guard !pointCloud.isEmpty else {
+            print("[Calculator] Point cloud is empty")
+            return nil
+        }
+        print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
+
+        // 6. Filter by proximity if raycast hit available
+        if let hitPosition = raycastHitPosition {
+            let nearestDistance = pointCloud.points.map { simd_distance($0, hitPosition) }.min() ?? Float.infinity
+            print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
+
+            if nearestDistance > 0.5 {
+                print("[Calculator] ERROR: Point cloud too far from raycast hit")
+                return nil
+            }
+
+            let initialRadius: Float = 0.5
+            var filteredPoints = filterPointsByProximity(
+                points: pointCloud.points,
+                center: hitPosition,
+                maxDistance: initialRadius
+            )
+            print("[Calculator] After initial 50cm filter: \(filteredPoints.count) points")
+
+            if filteredPoints.count >= 30 {
+                filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                print("[Calculator] After clustering: \(filteredPoints.count) points")
+
+                pointCloud = PointCloudGenerator.PointCloud(
+                    points: filteredPoints,
+                    quality: pointCloud.quality
+                )
+            } else if filteredPoints.count >= 10 {
+                pointCloud = PointCloudGenerator.PointCloud(
+                    points: filteredPoints,
+                    quality: pointCloud.quality
+                )
+            } else {
+                print("[Calculator] Too few points near box center (\(filteredPoints.count))")
+                return nil
+            }
+        }
+
+        // 7. Estimate bounding box
+        guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
+            points: pointCloud.points,
+            mode: mode
+        ) else {
+            print("[Calculator] Failed to estimate bounding box")
+            return nil
+        }
+        print("[Calculator] Bounding box estimated")
+
+        // 8. Calculate dimensions using camera-based axis mapping
+        let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
+        let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
+        let volume = boundingBox.volume
+
+        print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
+        print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
+
+        var result = MeasurementResult(
+            boundingBox: boundingBox,
+            length: length,
+            width: width,
+            height: height,
+            volume: volume,
+            quality: pointCloud.quality,
+            heightAxisIndex: mapping.height,
+            lengthAxisIndex: mapping.length,
+            widthAxisIndex: mapping.width
+        )
+
+        result.pointCloud = pointCloud.points
+        result.debugMaskImage = debugMaskImage
+
+        return result
+    }
+
+    /// Convert screen rectangle to Vision normalized coordinates
+    /// Vision uses bottom-left origin (0-1 range)
+    private func convertScreenRectToVisionCoordinates(
+        screenRect: CGRect,
+        viewSize: CGSize
+    ) -> CGRect {
+        // Screen coordinate system: top-left origin, portrait
+        // Vision coordinate system: bottom-left origin, normalized (0-1)
+        // Camera image is landscape, display is portrait (90° CCW rotation)
+        //
+        // Screen point (sx, sy) → Vision point (vx, vy):
+        // - Screen Y maps to Vision X: vx = sy / screenHeight
+        // - Screen X maps to Vision Y: vy = sx / screenWidth
+        //
+        // For rectangle (origin at top-left corner in screen coords):
+        // - Vision origin.x = screen minY / screenHeight
+        // - Vision origin.y = screen minX / screenWidth
+        // - Vision width = screen height / screenHeight
+        // - Vision height = screen width / screenWidth
+
+        let normalizedX = screenRect.minY / viewSize.height
+        let normalizedY = screenRect.minX / viewSize.width
+        let normalizedWidth = screenRect.height / viewSize.height
+        let normalizedHeight = screenRect.width / viewSize.width
+
+        print("[Coords] Screen rect: \(screenRect)")
+        print("[Coords] View size: \(viewSize)")
+        print("[Coords] Vision ROI: x=\(normalizedX), y=\(normalizedY), w=\(normalizedWidth), h=\(normalizedHeight)")
+
+        return CGRect(
+            x: normalizedX,
+            y: normalizedY,
+            width: normalizedWidth,
+            height: normalizedHeight
+        )
+    }
+
+    /// Filter pixels to only include those within the screen ROI
+    private func filterPixelsToROI(
+        pixels: [(x: Int, y: Int)],
+        screenRect: CGRect,
+        viewSize: CGSize,
+        imageSize: CGSize
+    ) -> [(x: Int, y: Int)] {
+        // Convert screen ROI to image pixel coordinates
+        // Screen (portrait, top-left origin) → Image (landscape, top-left origin)
+        //
+        // Screen point (sx, sy) → Image point (ix, iy):
+        // - ix = sy / screenHeight * imageWidth
+        // - iy = sx / screenWidth * imageHeight
+        //
+        // Note: Image Y increases downward, but screen X→image Y mapping
+        // means screen left→image top, screen right→image bottom
+
+        let imageMinX = Int(screenRect.minY / viewSize.height * imageSize.width)
+        let imageMaxX = Int(screenRect.maxY / viewSize.height * imageSize.width)
+        let imageMinY = Int(screenRect.minX / viewSize.width * imageSize.height)
+        let imageMaxY = Int(screenRect.maxX / viewSize.width * imageSize.height)
+
+        print("[ROIFilter] Image ROI bounds: x=\(imageMinX)-\(imageMaxX), y=\(imageMinY)-\(imageMaxY)")
+
+        var filtered: [(x: Int, y: Int)] = []
+        filtered.reserveCapacity(pixels.count)
+
+        for pixel in pixels {
+            if pixel.x >= imageMinX && pixel.x <= imageMaxX &&
+               pixel.y >= imageMinY && pixel.y <= imageMaxY {
+                filtered.append(pixel)
+            }
+        }
+
+        print("[ROIFilter] Filtered from \(pixels.count) to \(filtered.count) pixels")
+        return filtered
     }
 
     /// Convert screen coordinates to normalized image coordinates
@@ -246,17 +511,29 @@ class MeasurementCalculator {
         return CGPoint(x: normalizedX, y: normalizedY)
     }
 
-    /// Update measurement with an edited bounding box
-    func recalculate(boundingBox: BoundingBox3D, quality: MeasurementQuality) -> MeasurementResult {
-        let sorted = boundingBox.sortedDimensions
+    /// Update measurement with an edited bounding box, preserving the original axis mapping
+    /// - Parameters:
+    ///   - boundingBox: The modified bounding box
+    ///   - quality: The measurement quality
+    ///   - axisMapping: The original axis mapping from the initial measurement
+    /// - Returns: Updated MeasurementResult with recalculated dimensions
+    func recalculate(
+        boundingBox: BoundingBox3D,
+        quality: MeasurementQuality,
+        axisMapping: BoundingBox3D.AxisMapping
+    ) -> MeasurementResult {
+        let (height, length, width) = boundingBox.dimensions(withMapping: axisMapping)
 
         return MeasurementResult(
             boundingBox: boundingBox,
-            length: sorted[0].dimension,
-            width: sorted[1].dimension,
-            height: sorted[2].dimension,
+            length: length,
+            width: width,
+            height: height,
             volume: boundingBox.volume,
-            quality: quality
+            quality: quality,
+            heightAxisIndex: axisMapping.height,
+            lengthAxisIndex: axisMapping.length,
+            widthAxisIndex: axisMapping.width
         )
     }
 

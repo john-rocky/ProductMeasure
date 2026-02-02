@@ -97,6 +97,60 @@ struct BoundingBox3D: Codable {
         sortedDimensions[2].dimension
     }
 
+    // MARK: - Camera-based Axis Mapping
+
+    /// Axis mapping that defines which local axis corresponds to height, length, and width
+    /// - height: 0=x, 1=y, 2=z - axis most aligned with world Y (vertical)
+    /// - length: 0=x, 1=y, 2=z - axis most aligned with camera depth direction
+    /// - width: 0=x, 1=y, 2=z - axis most aligned with camera horizontal direction
+    typealias AxisMapping = (height: Int, length: Int, width: Int)
+
+    /// Calculate axis mapping based on camera orientation
+    /// - Parameter cameraTransform: The camera's transform matrix
+    /// - Returns: Tuple of (heightAxisIndex, lengthAxisIndex, widthAxisIndex)
+    func calculateAxisMapping(cameraTransform: simd_float4x4) -> AxisMapping {
+        let axes = localAxes
+        let worldUp = SIMD3<Float>(0, 1, 0)
+
+        // Camera forward direction (horizontal component only for depth)
+        let cameraForwardRaw = -SIMD3<Float>(
+            cameraTransform.columns.2.x,
+            0,
+            cameraTransform.columns.2.z
+        )
+        let cameraForwardNorm = simd_length(cameraForwardRaw) > 0.01
+            ? simd_normalize(cameraForwardRaw)
+            : SIMD3<Float>(0, 0, -1)
+
+        let axisArray = [axes.x, axes.y, axes.z]
+
+        // Height: axis most aligned with world Y (vertical direction)
+        let heightIndex = (0..<3).max { i, j in
+            abs(simd_dot(axisArray[i], worldUp)) < abs(simd_dot(axisArray[j], worldUp))
+        }!
+
+        // Remaining indices (the two horizontal axes)
+        let remaining = [0, 1, 2].filter { $0 != heightIndex }
+
+        // Length: remaining axis most aligned with camera forward (depth direction)
+        let lengthIndex = remaining.max { i, j in
+            abs(simd_dot(axisArray[i], cameraForwardNorm)) < abs(simd_dot(axisArray[j], cameraForwardNorm))
+        }!
+
+        // Width: the other remaining axis (horizontal/lateral direction)
+        let widthIndex = remaining.first { $0 != lengthIndex }!
+
+        return (heightIndex, lengthIndex, widthIndex)
+    }
+
+    /// Get dimensions using a fixed axis mapping
+    /// - Parameter mapping: The axis mapping to use
+    /// - Returns: Tuple of (height, length, width) in meters
+    func dimensions(withMapping mapping: AxisMapping) -> (height: Float, length: Float, width: Float) {
+        let dims = [dimensions.x, dimensions.y, dimensions.z]
+        return (dims[mapping.height], dims[mapping.length], dims[mapping.width])
+    }
+
     init(center: SIMD3<Float>, extents: SIMD3<Float>, rotation: simd_quatf) {
         self.center = center
         self.extents = extents
@@ -161,6 +215,40 @@ struct BoundingBox3D: Codable {
     mutating func rotateAroundY(by angle: Float) {
         let yRotation = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
         rotation = yRotation * rotation
+    }
+
+    /// Extend the bottom face to the floor while keeping the top face fixed
+    /// - Parameters:
+    ///   - floorY: The world Y coordinate of the floor
+    ///   - threshold: Maximum distance to extend (default 0.05m = 5cm)
+    /// - Returns: true if extension was performed
+    @discardableResult
+    mutating func extendBottomToFloor(floorY: Float, threshold: Float = 0.05) -> Bool {
+        // Calculate the world Y coordinate of the bottom center
+        let bottomCenterLocal = SIMD3<Float>(0, -extents.y, 0)
+        let bottomCenterWorld = localToWorld(bottomCenterLocal)
+
+        // Distance from floor (positive = above floor)
+        let distanceToFloor = bottomCenterWorld.y - floorY
+
+        // Only extend if above floor and within threshold
+        guard distanceToFloor > 0 && distanceToFloor <= threshold else {
+            return false
+        }
+
+        // Calculate current top face Y (this stays fixed)
+        let topCenterLocal = SIMD3<Float>(0, extents.y, 0)
+        let topCenterWorld = localToWorld(topCenterLocal)
+        let topWorldY = topCenterWorld.y
+
+        // Calculate new dimensions keeping top fixed
+        let newHalfHeight = (topWorldY - floorY) / 2
+        let newCenterY = floorY + newHalfHeight
+
+        center.y = newCenterY
+        extents.y = newHalfHeight
+
+        return true
     }
 }
 
