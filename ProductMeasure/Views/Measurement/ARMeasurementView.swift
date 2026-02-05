@@ -808,17 +808,20 @@ class ARMeasurementViewModel: ObservableObject {
             frame.camera.transform.columns.2.z
         )
 
-        // Find the most prominent box (largest apparent size in camera view)
-        var maxApparentSize: Float = 0
+        // Find the box closest to camera center (highest dot product with camera forward)
+        let visibilityThreshold: Float = 0.3  // ~70° cone
+        var maxDotProduct: Float = visibilityThreshold
         var mostProminentActiveBox = false
         var mostProminentCompletedIndex: Int? = nil
 
         // Check active box
         if let boxViz = boxVisualization {
-            if boxViz.isVisibleFromCamera(cameraPosition: cameraPosition, cameraForward: cameraForward) {
-                let apparentSize = boxViz.apparentSizeFromCamera(cameraPosition: cameraPosition)
-                if apparentSize > maxApparentSize {
-                    maxApparentSize = apparentSize
+            let toBox = boxViz.boundingBox.center - cameraPosition
+            let distance = simd_length(toBox)
+            if distance > 0.01 {
+                let dot = simd_dot(toBox / distance, cameraForward)
+                if dot > maxDotProduct {
+                    maxDotProduct = dot
                     mostProminentActiveBox = true
                     mostProminentCompletedIndex = nil
                 }
@@ -827,10 +830,12 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Check completed boxes
         for (index, visualization) in completedBoxVisualizations.enumerated() {
-            if visualization.isVisibleFromCamera(cameraPosition: cameraPosition, cameraForward: cameraForward) {
-                let apparentSize = visualization.apparentSizeFromCamera(cameraPosition: cameraPosition)
-                if apparentSize > maxApparentSize {
-                    maxApparentSize = apparentSize
+            let toBox = visualization.boundingBox.center - cameraPosition
+            let distance = simd_length(toBox)
+            if distance > 0.01 {
+                let dot = simd_dot(toBox / distance, cameraForward)
+                if dot > maxDotProduct {
+                    maxDotProduct = dot
                     mostProminentActiveBox = false
                     mostProminentCompletedIndex = index
                 }
