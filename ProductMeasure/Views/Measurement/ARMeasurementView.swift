@@ -844,6 +844,12 @@ class ARMeasurementViewModel: ObservableObject {
             return
         }
 
+        // Auto-save current measurement as completed box before starting new one
+        if let existingResult = currentMeasurement {
+            print("[ViewModel] Auto-saving existing measurement before new tap")
+            convertActiveBoxToCompleted(result: existingResult, unit: currentUnit)
+        }
+
         // Clean up previous measurement to free memory
         removeAllVisualizations()
         animationCoordinator.cancelAnimation()
@@ -922,6 +928,12 @@ class ARMeasurementViewModel: ObservableObject {
               (sessionManager.trackingState != .notAvailable) else {
             print("[ViewModel] Tracking state not ready: \(sessionManager.trackingState)")
             return
+        }
+
+        // Auto-save current measurement as completed box before starting new one
+        if let existingResult = currentMeasurement {
+            print("[ViewModel] Auto-saving existing measurement before new box selection")
+            convertActiveBoxToCompleted(result: existingResult, unit: currentUnit)
         }
 
         // Clean up previous measurement

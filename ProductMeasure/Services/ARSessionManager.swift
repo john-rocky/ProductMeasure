@@ -100,6 +100,20 @@ class ARSessionManager: NSObject, ObservableObject {
         arView.scene.addAnchor(anchor)
     }
 
+    /// Add an entity with a returned anchor for later selective removal
+    @discardableResult
+    func addEntityWithAnchor(_ entity: Entity) -> AnchorEntity {
+        let anchor = AnchorEntity(world: .zero)
+        anchor.addChild(entity)
+        arView.scene.addAnchor(anchor)
+        return anchor
+    }
+
+    /// Remove a specific anchor from the scene
+    func removeAnchor(_ anchor: AnchorEntity) {
+        anchor.removeFromParent()
+    }
+
     func removeAllEntities() {
         arView.scene.anchors.removeAll()
     }
