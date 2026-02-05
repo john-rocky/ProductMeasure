@@ -49,67 +49,101 @@ struct ARMeasurementView: View {
                 }
 
                 // Overlay UI (on top)
-                VStack {
-                    // Top bar with status and selection mode toggle
-                    HStack {
-                        StatusBar(
-                            trackingMessage: viewModel.trackingMessage,
-                            isProcessing: viewModel.isProcessing
-                        )
+                GeometryReader { geometry in
+                    ZStack {
+                        VStack {
+                            // Top bar with status, save button, and clear button
+                            HStack {
+                                StatusBar(
+                                    trackingMessage: viewModel.trackingMessage,
+                                    isProcessing: viewModel.isProcessing
+                                )
 
-                        Spacer()
+                                Spacer()
 
-                        // Selection mode toggle (visible when not measuring)
-                        if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
-                            SelectionModeToggle(selectionMode: $selectionMode)
-                        }
+                                // Save button (visible when measurement exists and not editing)
+                                if viewModel.currentMeasurement != nil && !viewModel.isEditing {
+                                    Button(action: {
+                                        viewModel.stopEditing()
+                                        viewModel.saveMeasurement(mode: measurementMode, unit: measurementUnit)
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "checkmark")
+                                            Text("Save")
+                                        }
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                        .background(Color.green)
+                                        .clipShape(Capsule())
+                                    }
+                                }
 
-                    }
+                                // Clear all button (visible when completed boxes exist)
+                                if viewModel.completedBoxCount > 0 {
+                                    Button(action: {
+                                        viewModel.clearAllMeasurements()
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "trash")
+                                            Text("\(viewModel.completedBoxCount)")
+                                                .font(.caption)
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color.red.opacity(0.8))
+                                        .clipShape(Capsule())
+                                    }
+                                }
 
-                    Spacer()
+                                // Selection mode toggle (visible when not measuring)
+                                if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                                    SelectionModeToggle(selectionMode: $selectionMode)
+                                }
 
-                    // Editing mode indicator
-                    if viewModel.isEditing {
-                        EditingIndicator(isDragging: viewModel.isDragging)
-                            .transition(.opacity)
-                    }
-
-                    // Measurement result card
-                    if let result = viewModel.currentMeasurement {
-                        MeasurementResultCard(
-                            result: result,
-                            unit: measurementUnit,
-                            isEditing: viewModel.isEditing,
-                            onSave: {
-                                viewModel.stopEditing()
-                                viewModel.saveMeasurement(mode: measurementMode)
-                            },
-                            onEdit: {
-                                viewModel.startEditing()
-                            },
-                            onFit: {
-                                viewModel.fitToPointCloud(mode: measurementMode)
-                            },
-                            onDone: {
-                                viewModel.stopEditing()
-                            },
-                            onDiscard: {
-                                viewModel.discardMeasurement()
                             }
-                        )
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
 
-                    // Instruction text when in targeting mode
-                    if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
-                        if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
-                            InstructionCard(mode: .tap)
-                        } else if selectionMode == .box {
-                            InstructionCard(mode: .box)
+                            Spacer()
+
+                            // Instruction text when in targeting mode
+                            if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                                if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
+                                    InstructionCard(mode: .tap)
+                                } else if selectionMode == .box {
+                                    InstructionCard(mode: .box)
+                                }
+                            }
+                        }
+                        .padding()
+
+                        // Floating buttons near the box
+                        if viewModel.currentMeasurement != nil {
+                            FloatingBoxButtons(
+                                isEditing: viewModel.isEditing,
+                                isDragging: viewModel.isDragging,
+                                boxCenterScreenPosition: viewModel.boxCenterScreenPosition,
+                                screenSize: geometry.size,
+                                onDiscard: {
+                                    viewModel.discardMeasurement()
+                                },
+                                onEdit: {
+                                    viewModel.startEditing()
+                                },
+                                onCancel: {
+                                    viewModel.discardMeasurement()
+                                },
+                                onFit: {
+                                    viewModel.fitToPointCloud(mode: measurementMode)
+                                },
+                                onDone: {
+                                    viewModel.stopEditing()
+                                }
+                            )
                         }
                     }
                 }
-                .padding()
                 .animation(.easeInOut(duration: 0.3), value: viewModel.currentMeasurement != nil)
                 .onChange(of: boxSelectionComplete) { _, isComplete in
                     if isComplete, let rect = boxSelectionRect {
@@ -142,9 +176,13 @@ struct ARMeasurementView: View {
         }
         .onAppear {
             viewModel.startSession()
+            viewModel.currentUnit = measurementUnit
         }
         .onDisappear {
             viewModel.pauseSession()
+        }
+        .onChange(of: measurementUnit) { _, newUnit in
+            viewModel.currentUnit = newUnit
         }
     }
 }
@@ -541,26 +579,130 @@ struct QualityIndicator: View {
     }
 }
 
-// MARK: - Editing Indicator
+// MARK: - Floating Box Buttons
 
-struct EditingIndicator: View {
-    var isDragging: Bool
+struct FloatingBoxButtons: View {
+    let isEditing: Bool
+    let isDragging: Bool
+    let boxCenterScreenPosition: CGPoint?
+    let screenSize: CGSize
+    let onDiscard: () -> Void
+    let onEdit: () -> Void
+    let onCancel: () -> Void
+    let onFit: () -> Void
+    let onDone: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: isDragging ? "hand.draw.fill" : "hand.point.up.left.fill")
-                .font(.title2)
-                .foregroundColor(.white)
+        let buttonY = calculateButtonY()
 
-            Text(isDragging ? "Dragging..." : "Drag handles to resize")
-                .font(.subheadline)
-                .foregroundColor(.white)
+        VStack(spacing: 0) {
+            Spacer()
+                .frame(height: buttonY)
+
+            if isEditing {
+                // Editing mode buttons
+                HStack(spacing: 12) {
+                    // Cancel button
+                    Button(action: onCancel) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "xmark")
+                            Text("Cancel")
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.red.opacity(0.9))
+                        .clipShape(Capsule())
+                    }
+
+                    // Fit button
+                    Button(action: onFit) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "crop")
+                            Text("Fit")
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.blue.opacity(0.9))
+                        .clipShape(Capsule())
+                    }
+
+                    // Done button
+                    Button(action: onDone) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark")
+                            Text("Done")
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.green.opacity(0.9))
+                        .clipShape(Capsule())
+                    }
+                }
+                .transition(.opacity.combined(with: .scale))
+
+                // Editing hint
+                if !isDragging {
+                    Text("Drag handles to resize")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.top, 8)
+                }
+            } else {
+                // Normal mode buttons
+                HStack(spacing: 12) {
+                    // Discard button
+                    Button(action: onDiscard) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "xmark")
+                            Text("Discard")
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.red.opacity(0.9))
+                        .clipShape(Capsule())
+                    }
+
+                    // Edit button
+                    Button(action: onEdit) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "pencil")
+                            Text("Edit")
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.orange.opacity(0.9))
+                        .clipShape(Capsule())
+                    }
+                }
+                .transition(.opacity.combined(with: .scale))
+            }
+
+            Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(Color.orange.opacity(0.9))
-        .clipShape(Capsule())
-        .animation(.easeInOut(duration: 0.2), value: isDragging)
+        .animation(.easeInOut(duration: 0.2), value: isEditing)
+    }
+
+    private func calculateButtonY() -> CGFloat {
+        // Position buttons below the box center
+        if let boxCenter = boxCenterScreenPosition {
+            // Clamp to reasonable screen range
+            let minY: CGFloat = screenSize.height * 0.4
+            let maxY: CGFloat = screenSize.height * 0.75
+            let targetY = boxCenter.y + 120  // 120pt below box center
+            return min(max(targetY, minY), maxY)
+        }
+        // Default to lower third of screen
+        return screenSize.height * 0.65
     }
 }
 
@@ -602,6 +744,9 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var debugMaskImage: UIImage?
     @Published var debugDepthImage: UIImage?
 
+    // Box center screen position for floating buttons
+    @Published var boxCenterScreenPosition: CGPoint?
+
     // Animation state - start with target brackets visible
     @Published var animationPhase: BoundingBoxAnimationPhase = .showingTargetBrackets
     @Published var animationContext: BoundingBoxAnimationContext?
@@ -611,15 +756,35 @@ class ARMeasurementViewModel: ObservableObject {
     private let measurementCalculator = MeasurementCalculator()
     private let boxEditingService = BoxEditingService()
     private var boxVisualization: BoxVisualization?
+    private var boxVisualizationAnchor: AnchorEntity?
     private var pointCloudEntity: Entity?
     private var animatedBoxVisualization: AnimatedBoxVisualization?
+    private var animatedBoxAnchor: AnchorEntity?
 
     // Stored point cloud for Fit functionality
     private var storedPointCloud: [SIMD3<Float>]?
 
+    // Current measurement unit (passed from view)
+    var currentUnit: MeasurementUnit = .centimeters
+
+    // Completed (saved) box visualizations
+    private var completedBoxVisualizations: [CompletedBoxVisualization] = []
+    private var completedBoxAnchors: [AnchorEntity] = []
+    private let maxCompletedBoxes = 10
+
+    // Published count for UI
+    @Published var completedBoxCount: Int = 0
+
     init() {
         sessionManager.$trackingStateMessage
             .assign(to: &$trackingMessage)
+
+        // Setup frame update callback for billboard updates
+        sessionManager.onFrameUpdate = { [weak self] frame in
+            Task { @MainActor in
+                self?.onFrameUpdate(frame: frame)
+            }
+        }
     }
 
     func startSession() {
@@ -627,6 +792,30 @@ class ARMeasurementViewModel: ObservableObject {
         // Configure animation coordinator with AR view
         if let arView = sessionManager.arView {
             animationCoordinator.configure(arView: arView)
+        }
+    }
+
+    /// Called on each AR frame update
+    private func onFrameUpdate(frame: ARFrame) {
+        let cameraPosition = SIMD3<Float>(
+            frame.camera.transform.columns.3.x,
+            frame.camera.transform.columns.3.y,
+            frame.camera.transform.columns.3.z
+        )
+
+        // Update billboard orientations for active box
+        boxVisualization?.updateLabelOrientations(cameraPosition: cameraPosition)
+
+        // Update billboard orientations for completed boxes
+        for visualization in completedBoxVisualizations {
+            visualization.updateLabelOrientations(cameraPosition: cameraPosition)
+        }
+
+        // Update box center screen position for floating buttons
+        if let result = currentMeasurement {
+            boxCenterScreenPosition = sessionManager.projectToScreen(worldPosition: result.boundingBox.center)
+        } else {
+            boxCenterScreenPosition = nil
         }
     }
 
@@ -817,7 +1006,7 @@ class ARMeasurementViewModel: ObservableObject {
             distanceFromCamera: 0.5,
             rectSize: 0.25
         )
-        sessionManager.addEntity(animatedBox.entity)
+        animatedBoxAnchor = sessionManager.addEntityWithAnchor(animatedBox.entity)
 
         // Animate flying to bottom position
         animatedBox.animateFlyToBottom(duration: BoxAnimationTiming.flyToBottom) { [weak self] in
@@ -832,8 +1021,11 @@ class ARMeasurementViewModel: ObservableObject {
                 // Phase 3: Complete - swap to regular BoxVisualization for editing
                 self.animationPhase = .complete
 
-                // Remove animated visualization
-                animatedBox.entity.removeFromParent()
+                // Remove animated visualization and its anchor
+                if let anchor = self.animatedBoxAnchor {
+                    self.sessionManager.removeAnchor(anchor)
+                }
+                self.animatedBoxAnchor = nil
                 self.animatedBoxVisualization = nil
 
                 // Show regular editable box visualization
@@ -854,15 +1046,20 @@ class ARMeasurementViewModel: ObservableObject {
                 adjustedResult.debugMaskImage = result.debugMaskImage
                 adjustedResult.debugDepthImage = result.debugDepthImage
                 self.currentMeasurement = adjustedResult
-                self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY)
+                self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY, unit: self.currentUnit)
 
                 self.isProcessing = false
             }
         }
     }
 
-    func saveMeasurement(mode: MeasurementMode) {
-        guard let result = currentMeasurement else { return }
+    func saveMeasurement(mode: MeasurementMode, unit: MeasurementUnit = .centimeters) {
+        print("🔴 [ViewModel] saveMeasurement START")
+        guard let result = currentMeasurement else {
+            print("🔴 [ViewModel] No current measurement to save!")
+            return
+        }
+        print("🔴 [ViewModel] Has measurement, proceeding...")
 
         // Capture annotated image
         let imageData = captureAnnotatedImage()
@@ -880,8 +1077,95 @@ class ARMeasurementViewModel: ObservableObject {
             name: .saveMeasurement,
             object: measurement
         )
+        print("🔴 [ViewModel] Posted notification")
 
-        discardMeasurement()
+        // Convert current box to CompletedBoxVisualization (keep it displayed)
+        print("🔴 [ViewModel] Calling convertActiveBoxToCompleted...")
+        convertActiveBoxToCompleted(result: result, unit: unit)
+        print("🔴 [ViewModel] convertActiveBoxToCompleted done. Count: \(completedBoxCount)")
+
+        // Clear active box state (but don't call discardMeasurement which removes all)
+        print("🔴 [ViewModel] Calling clearActiveBoxOnly...")
+        clearActiveBoxOnly()
+        print("🔴 [ViewModel] saveMeasurement END")
+    }
+
+    /// Convert the active box to a completed visualization and keep it displayed
+    private func convertActiveBoxToCompleted(result: MeasurementCalculator.MeasurementResult, unit: MeasurementUnit) {
+        print("[ViewModel] Converting active box to completed visualization")
+        print("[ViewModel] Dimensions: H=\(result.height*100)cm, L=\(result.length*100)cm, W=\(result.width*100)cm")
+
+        // Remove oldest if at max capacity
+        if completedBoxVisualizations.count >= maxCompletedBoxes {
+            if let oldAnchor = completedBoxAnchors.first {
+                sessionManager.removeAnchor(oldAnchor)
+            }
+            completedBoxVisualizations.removeFirst()
+            completedBoxAnchors.removeFirst()
+        }
+
+        // Create completed visualization with dimension labels
+        let completedViz = CompletedBoxVisualization(
+            boundingBox: result.boundingBox,
+            height: result.height,
+            length: result.length,
+            width: result.width,
+            unit: unit
+        )
+
+        // Add to scene with its own anchor
+        let anchor = sessionManager.addEntityWithAnchor(completedViz.entity)
+        print("[ViewModel] Added completed box anchor. Total completed boxes: \(completedBoxVisualizations.count + 1)")
+
+        completedBoxVisualizations.append(completedViz)
+        completedBoxAnchors.append(anchor)
+        completedBoxCount = completedBoxVisualizations.count
+    }
+
+    /// Clear only the active box, keeping completed boxes
+    private func clearActiveBoxOnly() {
+        print("[ViewModel] clearActiveBoxOnly called")
+        print("[ViewModel] boxVisualizationAnchor exists: \(boxVisualizationAnchor != nil)")
+        print("[ViewModel] completedBoxAnchors count: \(completedBoxAnchors.count)")
+
+        // Remove active box visualization
+        if let anchor = boxVisualizationAnchor {
+            sessionManager.removeAnchor(anchor)
+            print("[ViewModel] Removed active box anchor")
+        }
+        boxVisualization = nil
+        boxVisualizationAnchor = nil
+        pointCloudEntity = nil
+
+        // Remove animation anchor if exists
+        if let anchor = animatedBoxAnchor {
+            sessionManager.removeAnchor(anchor)
+        }
+        animatedBoxAnchor = nil
+        animatedBoxVisualization = nil
+
+        // Reset active measurement state
+        currentMeasurement = nil
+        isEditing = false
+        isDragging = false
+        storedPointCloud = nil
+        debugMaskImage = nil
+        debugDepthImage = nil
+        animationPhase = .showingTargetBrackets
+        animationContext = nil
+        animationCoordinator.cancelAnimation()
+
+        print("[ViewModel] clearActiveBoxOnly completed. Completed boxes preserved: \(completedBoxAnchors.count)")
+    }
+
+    /// Clear all completed boxes from the scene
+    func clearAllMeasurements() {
+        for anchor in completedBoxAnchors {
+            sessionManager.removeAnchor(anchor)
+        }
+        completedBoxVisualizations.removeAll()
+        completedBoxAnchors.removeAll()
+        completedBoxCount = 0
     }
 
     func startEditing() {
@@ -941,6 +1225,11 @@ class ARMeasurementViewModel: ObservableObject {
 
             // Update visualization
             boxVisualization?.update(boundingBox: editResult.boundingBox)
+            boxVisualization?.updateDimensions(
+                height: updatedResult.height,
+                length: updatedResult.length,
+                width: updatedResult.width
+            )
         }
     }
 
@@ -1000,6 +1289,11 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Update visualization
         boxVisualization?.update(boundingBox: newBox)
+        boxVisualization?.updateDimensions(
+            height: updatedResult.height,
+            length: updatedResult.length,
+            width: updatedResult.width
+        )
     }
 
     func finishDrag() {
@@ -1042,6 +1336,11 @@ class ARMeasurementViewModel: ObservableObject {
 
             // Update visualization
             boxVisualization?.update(boundingBox: fittedBox)
+            boxVisualization?.updateDimensions(
+                height: updatedResult.height,
+                length: updatedResult.length,
+                width: updatedResult.width
+            )
 
             print("[ViewModel] Fit successful - new dimensions: L=\(fittedBox.length*100)cm, W=\(fittedBox.width*100)cm, H=\(fittedBox.height*100)cm")
         } else {
@@ -1050,18 +1349,8 @@ class ARMeasurementViewModel: ObservableObject {
     }
 
     func discardMeasurement() {
-        currentMeasurement = nil
-        isEditing = false
-        isDragging = false
-        storedPointCloud = nil
-        debugMaskImage = nil
-        debugDepthImage = nil
-        animationPhase = .showingTargetBrackets  // Return to targeting mode
-        animationContext = nil
-        animationCoordinator.cancelAnimation()
-        animatedBoxVisualization?.entity.removeFromParent()
-        animatedBoxVisualization = nil
-        removeAllVisualizations()
+        // Only discard the active box, not completed boxes
+        clearActiveBoxOnly()
     }
 
     func toggleDebugMask() {
@@ -1072,7 +1361,7 @@ class ARMeasurementViewModel: ObservableObject {
         showDebugDepth.toggle()
     }
 
-    private func showBoxVisualization(for box: BoundingBox3D, pointCloud: [SIMD3<Float>]? = nil, floorY: Float? = nil) {
+    private func showBoxVisualization(for box: BoundingBox3D, pointCloud: [SIMD3<Float>]? = nil, floorY: Float? = nil, unit: MeasurementUnit = .centimeters) {
         // Store point cloud for Fit functionality
         storedPointCloud = pointCloud
 
@@ -1083,8 +1372,18 @@ class ARMeasurementViewModel: ObservableObject {
             boxVisualization?.floorY = floorY
         }
 
+        // Set dimensions for labels on the wireframe
+        if let result = currentMeasurement {
+            boxVisualization?.setDimensions(
+                height: result.height,
+                length: result.length,
+                width: result.width,
+                unit: unit
+            )
+        }
+
         if let entity = boxVisualization?.entity {
-            sessionManager.addEntity(entity)
+            boxVisualizationAnchor = sessionManager.addEntityWithAnchor(entity)
         }
     }
 
@@ -1104,10 +1403,28 @@ class ARMeasurementViewModel: ObservableObject {
         sessionManager.addEntity(axesEntity)
     }
 
+    /// Remove active visualizations but preserve completed boxes
     private func removeAllVisualizations() {
-        sessionManager.removeAllEntities()
+        print("[ViewModel] removeAllVisualizations called. Completed boxes: \(completedBoxAnchors.count)")
+
+        // Remove active box anchor if exists
+        if let anchor = boxVisualizationAnchor {
+            sessionManager.removeAnchor(anchor)
+            print("[ViewModel] Removed active box anchor")
+        }
         boxVisualization = nil
+        boxVisualizationAnchor = nil
+
+        // Remove animation anchor if exists
+        if let anchor = animatedBoxAnchor {
+            sessionManager.removeAnchor(anchor)
+            print("[ViewModel] Removed animation anchor")
+        }
+        animatedBoxAnchor = nil
+        animatedBoxVisualization = nil
+
         pointCloudEntity = nil
+        print("[ViewModel] Completed boxes preserved: \(completedBoxAnchors.count)")
     }
 
     private func captureAnnotatedImage() -> Data? {

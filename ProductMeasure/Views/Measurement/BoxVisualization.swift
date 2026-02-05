@@ -19,6 +19,18 @@ class BoxVisualization {
     private var floorDistanceEntity: Entity?      // Floor distance indicator
     private var floorDistanceLabel: Entity?
 
+    // Dimension labels (Apple Measure style - on wireframe edges)
+    private var heightLabelEntity: Entity?
+    private var lengthLabelEntity: Entity?
+    private var widthLabelEntity: Entity?
+    private var volumeLabelEntity: Entity?
+
+    // Stored dimensions for label updates
+    private var storedHeight: Float = 0
+    private var storedLength: Float = 0
+    private var storedWidth: Float = 0
+    private var storedUnit: MeasurementUnit = .centimeters
+
     private(set) var boundingBox: BoundingBox3D
 
     /// Floor Y position (default 0)
@@ -50,6 +62,12 @@ class BoxVisualization {
     private let handleRadius: Float = 0.004      // Radius of capsule (4mm)
     private let handleCollisionRadius: Float = 0.015  // Larger for easy touch
 
+    // Dimension label styling (Apple Measure style)
+    private let dimensionLabelFontSize: CGFloat = 0.010  // Smaller, stylish
+    private let dimensionLabelTextColor: UIColor = UIColor(white: 1.0, alpha: 0.85)
+    private let dimensionLabelBackgroundColor: UIColor = UIColor(white: 0.0, alpha: 0.4)
+    private let dimensionLabelOffset: Float = 0.02  // Offset from edge
+
     // Rotation handle (corner arc that looks like part of the box frame)
     private let rotationArcThickness: Float = 0.001  // Same thickness as edge lines
     private let rotationArcAngle: Float = .pi / 2    // 90 degree arc (quarter circle at corner)
@@ -71,6 +89,40 @@ class BoxVisualization {
         updateFaceHandlePositions()
         updateRotationRingPosition()
         updateFloorDistanceIndicator()
+        updateDimensionLabelPositions()
+    }
+
+    /// Set dimensions and create/update labels on the wireframe
+    func setDimensions(height: Float, length: Float, width: Float, unit: MeasurementUnit) {
+        storedHeight = height
+        storedLength = length
+        storedWidth = width
+        storedUnit = unit
+        createDimensionLabels()
+    }
+
+    /// Update dimensions when box is edited (recreates labels with new values)
+    func updateDimensions(height: Float, length: Float, width: Float) {
+        storedHeight = height
+        storedLength = length
+        storedWidth = width
+        createDimensionLabels()
+    }
+
+    /// Update label orientations to face the camera (billboard effect)
+    func updateLabelOrientations(cameraPosition: SIMD3<Float>) {
+        let labels = [heightLabelEntity, lengthLabelEntity, widthLabelEntity, volumeLabelEntity]
+        for label in labels {
+            guard let label = label else { continue }
+            let labelWorldPos = label.position(relativeTo: nil)
+            let toCamera = cameraPosition - labelWorldPos
+            let toCameraHorizontal = SIMD3<Float>(toCamera.x, 0, toCamera.z)
+
+            if simd_length(toCameraHorizontal) > 0.01 {
+                let angle = atan2(toCameraHorizontal.x, toCameraHorizontal.z)
+                label.orientation = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
+            }
+        }
     }
 
     /// Identify what was hit: face handle, rotation ring, or nothing
@@ -147,6 +199,10 @@ class BoxVisualization {
         floorDistanceEntity = nil
         floorDistanceLabel = nil
         labelEntities.removeAll()
+        heightLabelEntity = nil
+        lengthLabelEntity = nil
+        widthLabelEntity = nil
+        volumeLabelEntity = nil
     }
 
     // MARK: - Edge Creation
@@ -567,70 +623,167 @@ class BoxVisualization {
 
         return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
     }
-}
 
-// MARK: - Dimension Labels
+    // MARK: - Dimension Labels (Apple Measure Style)
 
-extension BoxVisualization {
-    func addDimensionLabels(unit: MeasurementUnit) {
-        // Remove existing labels
-        for label in labelEntities {
-            label.removeFromParent()
-        }
-        labelEntities.removeAll()
+    private func createDimensionLabels() {
+        // Remove existing dimension labels
+        heightLabelEntity?.removeFromParent()
+        lengthLabelEntity?.removeFromParent()
+        widthLabelEntity?.removeFromParent()
+        volumeLabelEntity?.removeFromParent()
 
-        let corners = boundingBox.corners
-        let dimensions = boundingBox.dimensions
+        let edges = boundingBox.edges
 
-        // Add labels for each dimension
-        // Length label (between corners 0-1)
-        let lengthMidpoint = (corners[0] + corners[1]) / 2
-        let lengthLabel = createLabelEntity(
-            text: formatDimension(dimensions.x, unit: unit),
-            at: lengthMidpoint + SIMD3<Float>(0, 0.03, 0)
+        // Edge indices from BoundingBox3D:
+        // Bottom face: (0,1), (1,2), (2,3), (3,0) - indices 0-3
+        // Top face: (4,5), (5,6), (6,7), (7,4) - indices 4-7
+        // Vertical edges: (0,4), (1,5), (2,6), (3,7) - indices 8-11
+
+        // Height label: on vertical edge 8 (front-left), offset outward
+        let heightEdge = edges[8]
+        let heightMidpoint = (heightEdge.0 + heightEdge.1) / 2
+        let heightLabelPos = heightMidpoint + boundingBox.localAxes.x * dimensionLabelOffset
+        heightLabelEntity = createDimensionLabelEntity(
+            text: formatDimensionValue(storedHeight),
+            at: heightLabelPos
         )
-        entity.addChild(lengthLabel)
-        labelEntities.append(lengthLabel)
+        entity.addChild(heightLabelEntity!)
 
-        // Width label (between corners 0-3)
-        let widthMidpoint = (corners[0] + corners[3]) / 2
-        let widthLabel = createLabelEntity(
-            text: formatDimension(dimensions.y, unit: unit),
-            at: widthMidpoint + SIMD3<Float>(0, 0.03, 0)
+        // Length label: on top edge 4 (along depth), offset upward
+        let lengthEdge = edges[4]
+        let lengthMidpoint = (lengthEdge.0 + lengthEdge.1) / 2
+        let lengthLabelPos = lengthMidpoint + SIMD3<Float>(0, dimensionLabelOffset * 0.75, 0)
+        lengthLabelEntity = createDimensionLabelEntity(
+            text: formatDimensionValue(storedLength),
+            at: lengthLabelPos
         )
-        entity.addChild(widthLabel)
-        labelEntities.append(widthLabel)
+        entity.addChild(lengthLabelEntity!)
 
-        // Height label (between corners 0-4)
-        let heightMidpoint = (corners[0] + corners[4]) / 2
-        let heightLabel = createLabelEntity(
-            text: formatDimension(dimensions.z, unit: unit),
-            at: heightMidpoint + SIMD3<Float>(0.03, 0, 0)
+        // Width label: on top edge 7 (perpendicular), offset upward
+        let widthEdge = edges[7]
+        let widthMidpoint = (widthEdge.0 + widthEdge.1) / 2
+        let widthLabelPos = widthMidpoint + SIMD3<Float>(0, dimensionLabelOffset * 0.75, 0)
+        widthLabelEntity = createDimensionLabelEntity(
+            text: formatDimensionValue(storedWidth),
+            at: widthLabelPos
         )
-        entity.addChild(heightLabel)
-        labelEntities.append(heightLabel)
+        entity.addChild(widthLabelEntity!)
+
+        // Volume label: at box center
+        let volumeText = formatVolumeValue(storedHeight * storedLength * storedWidth)
+        volumeLabelEntity = createDimensionLabelEntity(
+            text: volumeText,
+            at: boundingBox.center
+        )
+        entity.addChild(volumeLabelEntity!)
     }
 
-    private func createLabelEntity(text: String, at position: SIMD3<Float>) -> Entity {
+    private func updateDimensionLabelPositions() {
+        guard storedHeight > 0 else { return }  // Labels not yet created
+
+        let edges = boundingBox.edges
+
+        // Update height label position
+        if let label = heightLabelEntity {
+            let heightEdge = edges[8]
+            let heightMidpoint = (heightEdge.0 + heightEdge.1) / 2
+            label.position = heightMidpoint + boundingBox.localAxes.x * dimensionLabelOffset
+        }
+
+        // Update length label position
+        if let label = lengthLabelEntity {
+            let lengthEdge = edges[4]
+            let lengthMidpoint = (lengthEdge.0 + lengthEdge.1) / 2
+            label.position = lengthMidpoint + SIMD3<Float>(0, dimensionLabelOffset * 0.75, 0)
+        }
+
+        // Update width label position
+        if let label = widthLabelEntity {
+            let widthEdge = edges[7]
+            let widthMidpoint = (widthEdge.0 + widthEdge.1) / 2
+            label.position = widthMidpoint + SIMD3<Float>(0, dimensionLabelOffset * 0.75, 0)
+        }
+
+        // Update volume label position
+        if let label = volumeLabelEntity {
+            label.position = boundingBox.center
+        }
+
+        // Update label texts (dimensions may have changed during editing)
+        updateDimensionLabelTexts()
+    }
+
+    private func updateDimensionLabelTexts() {
+        // Recalculate dimensions from the bounding box
+        // We need the axis mapping to get H/L/W correctly, but for now just update based on extents
+        // The stored values are already in H/L/W format from setDimensions
+    }
+
+    private func createDimensionLabelEntity(text: String, at position: SIMD3<Float>) -> Entity {
+        let containerEntity = Entity()
+        containerEntity.position = position
+
+        // Create text mesh - Apple Measure style
         let textMesh = MeshResource.generateText(
             text,
             extrusionDepth: 0.001,
-            font: .systemFont(ofSize: 0.02),
+            font: .systemFont(ofSize: dimensionLabelFontSize, weight: .medium),
             containerFrame: .zero,
             alignment: .center,
             lineBreakMode: .byTruncatingTail
         )
 
-        var material = UnlitMaterial(color: .white)
+        let textMaterial = UnlitMaterial(color: dimensionLabelTextColor)
+        let textEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
 
-        let textEntity = ModelEntity(mesh: textMesh, materials: [material])
-        textEntity.position = position
+        // Get text bounds for background sizing
+        let textBounds = textMesh.bounds
+        let textWidth = textBounds.extents.x
+        let textHeight = textBounds.extents.y
 
-        return textEntity
+        // Create pill-shaped background
+        let padding: Float = 0.004
+        let backgroundWidth = textWidth + padding * 2
+        let backgroundHeight = textHeight + padding * 2
+        let cornerRadius = backgroundHeight / 2
+
+        let backgroundMesh = MeshResource.generateBox(
+            size: [backgroundWidth, backgroundHeight, 0.001],
+            cornerRadius: cornerRadius
+        )
+        let backgroundMaterial = UnlitMaterial(color: dimensionLabelBackgroundColor)
+        let backgroundEntity = ModelEntity(mesh: backgroundMesh, materials: [backgroundMaterial])
+
+        // Position background behind text, centered
+        backgroundEntity.position = SIMD3<Float>(textWidth / 2, textHeight / 2, -0.001)
+        textEntity.position = SIMD3<Float>(0, 0, 0)
+
+        containerEntity.addChild(backgroundEntity)
+        containerEntity.addChild(textEntity)
+
+        return containerEntity
     }
 
-    private func formatDimension(_ meters: Float, unit: MeasurementUnit) -> String {
-        let value = unit.convert(meters: meters)
-        return String(format: "%.1f %@", value, unit.rawValue)
+    private func formatDimensionValue(_ meters: Float) -> String {
+        let value = storedUnit.convert(meters: meters)
+        if value >= 100 {
+            return String(format: "%.0f %@", value, storedUnit.rawValue)
+        } else if value >= 10 {
+            return String(format: "%.1f %@", value, storedUnit.rawValue)
+        } else {
+            return String(format: "%.2f %@", value, storedUnit.rawValue)
+        }
+    }
+
+    private func formatVolumeValue(_ cubicMeters: Float) -> String {
+        let value = storedUnit.convertVolume(cubicMeters: cubicMeters)
+        if value >= 1000 {
+            return String(format: "Vol: %.0f %@", value, storedUnit.volumeUnit())
+        } else if value >= 100 {
+            return String(format: "Vol: %.1f %@", value, storedUnit.volumeUnit())
+        } else {
+            return String(format: "Vol: %.2f %@", value, storedUnit.volumeUnit())
+        }
     }
 }
