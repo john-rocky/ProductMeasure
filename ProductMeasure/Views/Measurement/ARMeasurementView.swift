@@ -802,13 +802,56 @@ class ARMeasurementViewModel: ObservableObject {
             frame.camera.transform.columns.3.y,
             frame.camera.transform.columns.3.z
         )
+        let cameraForward = -SIMD3<Float>(
+            frame.camera.transform.columns.2.x,
+            frame.camera.transform.columns.2.y,
+            frame.camera.transform.columns.2.z
+        )
 
-        // Update billboard orientations for active box
-        boxVisualization?.updateLabelOrientations(cameraPosition: cameraPosition)
+        // Find the most prominent box (largest apparent size in camera view)
+        var maxApparentSize: Float = 0
+        var mostProminentActiveBox = false
+        var mostProminentCompletedIndex: Int? = nil
 
-        // Update billboard orientations for completed boxes
-        for visualization in completedBoxVisualizations {
-            visualization.updateLabelOrientations(cameraPosition: cameraPosition)
+        // Check active box
+        if let boxViz = boxVisualization {
+            if boxViz.isVisibleFromCamera(cameraPosition: cameraPosition, cameraForward: cameraForward) {
+                let apparentSize = boxViz.apparentSizeFromCamera(cameraPosition: cameraPosition)
+                if apparentSize > maxApparentSize {
+                    maxApparentSize = apparentSize
+                    mostProminentActiveBox = true
+                    mostProminentCompletedIndex = nil
+                }
+            }
+        }
+
+        // Check completed boxes
+        for (index, visualization) in completedBoxVisualizations.enumerated() {
+            if visualization.isVisibleFromCamera(cameraPosition: cameraPosition, cameraForward: cameraForward) {
+                let apparentSize = visualization.apparentSizeFromCamera(cameraPosition: cameraPosition)
+                if apparentSize > maxApparentSize {
+                    maxApparentSize = apparentSize
+                    mostProminentActiveBox = false
+                    mostProminentCompletedIndex = index
+                }
+            }
+        }
+
+        // Update billboard visibility and orientation for active box
+        if let boxViz = boxVisualization {
+            boxViz.setDimensionBillboardVisible(mostProminentActiveBox)
+            if mostProminentActiveBox {
+                boxViz.updateLabelOrientations(cameraPosition: cameraPosition)
+            }
+        }
+
+        // Update billboard visibility and orientation for completed boxes
+        for (index, visualization) in completedBoxVisualizations.enumerated() {
+            let isProminent = (mostProminentCompletedIndex == index)
+            visualization.setDimensionBillboardVisible(isProminent)
+            if isProminent {
+                visualization.updateLabelOrientations(cameraPosition: cameraPosition)
+            }
         }
 
         // Update box center screen position for floating buttons

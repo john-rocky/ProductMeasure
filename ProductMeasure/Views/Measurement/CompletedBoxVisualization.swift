@@ -8,13 +8,13 @@ import UIKit
 import simd
 
 /// Simplified visualization for saved/completed boxes
-/// Shows edges and dimension labels only (no handles or rotation ring)
+/// Shows edges and dimension billboard only (no handles or rotation ring)
 class CompletedBoxVisualization {
     // MARK: - Properties
 
     private(set) var entity: Entity
     private var edgeEntities: [ModelEntity] = []
-    private var labelEntities: [Entity] = []
+    private var dimensionBillboardEntity: Entity?
 
     private(set) var boundingBox: BoundingBox3D
     private let height: Float
@@ -28,11 +28,10 @@ class CompletedBoxVisualization {
     private let lineColor: UIColor = UIColor(white: 1.0, alpha: 0.5)
     private let lineRadius: Float = 0.0004  // Thin (0.4mm)
 
-    // Label styling (Apple Measure style - matching BoxVisualization)
+    // Label styling (Apple Measure style - white background, black text)
     private let labelFontSize: CGFloat = 0.010
-    private let labelBackgroundColor: UIColor = UIColor(white: 0.0, alpha: 0.4)
-    private let labelTextColor: UIColor = UIColor(white: 1.0, alpha: 0.85)
-    private let labelOffset: Float = 0.02  // 2cm offset from edge
+    private let labelBackgroundColor: UIColor = UIColor(white: 1.0, alpha: 0.9)
+    private let labelTextColor: UIColor = UIColor(white: 0.0, alpha: 0.9)
 
     // MARK: - Initialization
 
@@ -48,25 +47,47 @@ class CompletedBoxVisualization {
 
     // MARK: - Public Methods
 
-    /// Update label orientations to face the camera (billboard effect)
+    /// Update billboard orientation to face the camera
     func updateLabelOrientations(cameraPosition: SIMD3<Float>) {
-        for label in labelEntities {
-            let labelWorldPos = label.position(relativeTo: nil)
-            let toCamera = cameraPosition - labelWorldPos
-            let toCameraHorizontal = SIMD3<Float>(toCamera.x, 0, toCamera.z)
+        guard let billboard = dimensionBillboardEntity else { return }
 
-            if simd_length(toCameraHorizontal) > 0.01 {
-                let angle = atan2(toCameraHorizontal.x, toCameraHorizontal.z)
-                label.orientation = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
-            }
+        let billboardPos = billboard.position(relativeTo: nil)
+        let toCamera = cameraPosition - billboardPos
+        let toCameraHorizontal = SIMD3<Float>(toCamera.x, 0, toCamera.z)
+
+        if simd_length(toCameraHorizontal) > 0.01 {
+            let angle = atan2(toCameraHorizontal.x, toCameraHorizontal.z)
+            billboard.orientation = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
         }
+    }
+
+    /// Show or hide the dimension billboard
+    func setDimensionBillboardVisible(_ visible: Bool) {
+        dimensionBillboardEntity?.isEnabled = visible
+    }
+
+    /// Check if this box is visible from camera
+    func isVisibleFromCamera(cameraPosition: SIMD3<Float>, cameraForward: SIMD3<Float>) -> Bool {
+        let toBox = boundingBox.center - cameraPosition
+        let distance = simd_length(toBox)
+        let toBoxNormalized = toBox / distance
+        let dot = simd_dot(toBoxNormalized, cameraForward)
+        return dot > 0.3
+    }
+
+    /// Get the apparent size of this box from the camera
+    func apparentSizeFromCamera(cameraPosition: SIMD3<Float>) -> Float {
+        let distance = simd_length(boundingBox.center - cameraPosition)
+        if distance < 0.01 { return 0 }
+        let boxSize = boundingBox.extents.x * boundingBox.extents.y * boundingBox.extents.z
+        return boxSize / (distance * distance)
     }
 
     // MARK: - Private Methods
 
     private func createVisualization() {
         createEdges()
-        createDimensionLabels()
+        createDimensionBillboard()
     }
 
     // MARK: - Edge Creation
@@ -96,70 +117,30 @@ class CompletedBoxVisualization {
         return edgeEntity
     }
 
-    // MARK: - Dimension Labels
+    // MARK: - Dimension Billboard
 
-    private func createDimensionLabels() {
-        let edges = boundingBox.edges
+    private func createDimensionBillboard() {
+        let billboardPos = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y + 0.03, 0)
 
-        // Edge indices from BoundingBox3D:
-        // Bottom face: (0,1), (1,2), (2,3), (3,0) - indices 0-3
-        // Top face: (4,5), (5,6), (6,7), (7,4) - indices 4-7
-        // Vertical edges: (0,4), (1,5), (2,6), (3,7) - indices 8-11
-
-        // Height label: on a vertical edge (edge 8: corners 0-4)
-        let heightEdge = edges[8]
-        let heightMidpoint = (heightEdge.0 + heightEdge.1) / 2
-        let heightLabelPos = heightMidpoint + boundingBox.localAxes.x * labelOffset
-        let heightLabel = createLabelEntity(
-            text: formatDimension(height),
-            at: heightLabelPos
-        )
-        entity.addChild(heightLabel)
-        labelEntities.append(heightLabel)
-
-        // Length label: on top edge (edge 4: corners 4-5)
-        let lengthEdge = edges[4]
-        let lengthMidpoint = (lengthEdge.0 + lengthEdge.1) / 2
-        let lengthLabelPos = lengthMidpoint + SIMD3<Float>(0, labelOffset * 0.75, 0)
-        let lengthLabel = createLabelEntity(
-            text: formatDimension(length),
-            at: lengthLabelPos
-        )
-        entity.addChild(lengthLabel)
-        labelEntities.append(lengthLabel)
-
-        // Width label: on top edge perpendicular to length (edge 7: corners 7-4)
-        let widthEdge = edges[7]
-        let widthMidpoint = (widthEdge.0 + widthEdge.1) / 2
-        let widthLabelPos = widthMidpoint + SIMD3<Float>(0, labelOffset * 0.75, 0)
-        let widthLabel = createLabelEntity(
-            text: formatDimension(width),
-            at: widthLabelPos
-        )
-        entity.addChild(widthLabel)
-        labelEntities.append(widthLabel)
-
-        // Volume label: at box center
-        let volumeLabel = createLabelEntity(
-            text: formatVolume(),
-            at: boundingBox.center
-        )
-        entity.addChild(volumeLabel)
-        labelEntities.append(volumeLabel)
-    }
-
-    private func createLabelEntity(text: String, at position: SIMD3<Float>) -> Entity {
         let containerEntity = Entity()
-        containerEntity.position = position
+        containerEntity.position = billboardPos
 
-        // Create text mesh - Apple Measure style
+        // Format all dimension text
+        let heightText = "H: \(formatDimension(height))"
+        let depthText = "D: \(formatDimension(length))"
+        let widthText = "W: \(formatDimension(width))"
+        let volumeText = formatVolume()
+
+        // Create multi-line text
+        let fullText = "\(heightText)  \(widthText)  \(depthText)\n\(volumeText)"
+
         let textMesh = MeshResource.generateText(
-            text,
+            fullText,
             extrusionDepth: 0.001,
             font: .systemFont(ofSize: labelFontSize, weight: .medium),
             containerFrame: .zero,
             alignment: .center,
-            lineBreakMode: .byTruncatingTail
+            lineBreakMode: .byWordWrapping
         )
 
         let textMaterial = UnlitMaterial(color: labelTextColor)
@@ -170,11 +151,11 @@ class CompletedBoxVisualization {
         let textWidth = textBounds.extents.x
         let textHeight = textBounds.extents.y
 
-        // Create pill-shaped background
-        let padding: Float = 0.004
+        // Create rounded rectangle background
+        let padding: Float = 0.006
         let backgroundWidth = textWidth + padding * 2
         let backgroundHeight = textHeight + padding * 2
-        let cornerRadius = backgroundHeight / 2
+        let cornerRadius = min(backgroundHeight, backgroundWidth) * 0.15
 
         let backgroundMesh = MeshResource.generateBox(
             size: [backgroundWidth, backgroundHeight, 0.001],
@@ -183,14 +164,18 @@ class CompletedBoxVisualization {
         let backgroundMaterial = UnlitMaterial(color: labelBackgroundColor)
         let backgroundEntity = ModelEntity(mesh: backgroundMesh, materials: [backgroundMaterial])
 
-        // Position background behind text, centered
+        // Center the text and background
         backgroundEntity.position = SIMD3<Float>(textWidth / 2, textHeight / 2, -0.001)
         textEntity.position = SIMD3<Float>(0, 0, 0)
 
         containerEntity.addChild(backgroundEntity)
         containerEntity.addChild(textEntity)
 
-        return containerEntity
+        // Initially hidden
+        containerEntity.isEnabled = false
+
+        entity.addChild(containerEntity)
+        dimensionBillboardEntity = containerEntity
     }
 
     private func formatDimension(_ meters: Float) -> String {
