@@ -204,8 +204,9 @@ class MeasurementCalculator {
 
         // 6. Estimate bounding box with plane assistance
         let centroid = pointCloud.centroid
+        let pointCloudMinY = pointCloud.points.map(\.y).min() ?? centroid.y
         let (supportPlaneY, verticalPlanes): (Float?, [ARPlaneAnchor]) = await MainActor.run {
-            let planeY: Float? = (mode == .boxPriority) ? (sessionManager?.getFloorPlaneY() ?? raycastHitPosition?.y) : nil
+            let planeY: Float? = (mode == .boxPriority) ? (sessionManager?.getSupportPlaneY(belowY: pointCloudMinY) ?? sessionManager?.getFloorPlaneY() ?? raycastHitPosition?.y) : nil
             let planes: [ARPlaneAnchor] = (mode == .boxPriority) ? (sessionManager?.getNearbyVerticalPlanes(near: centroid) ?? []) : []
             return (planeY, planes)
         }
@@ -225,7 +226,7 @@ class MeasurementCalculator {
 
         // Phase 3.2: Iterative box refinement
         if mode == .boxPriority {
-            boundingBox = iterativeRefine(box: boundingBox, points: pointCloud.points, verticalPlanes: verticalPlanes)
+            boundingBox = iterativeRefine(box: boundingBox, points: pointCloud.points, verticalPlanes: verticalPlanes, supportPlaneY: supportPlaneY)
         }
 
         // 7. Calculate dimensions using camera-based axis mapping
@@ -398,8 +399,9 @@ class MeasurementCalculator {
 
         // 7. Estimate bounding box with plane assistance
         let roiCentroid = pointCloud.centroid
+        let roiPointCloudMinY = pointCloud.points.map(\.y).min() ?? roiCentroid.y
         let (roiSupportPlaneY, roiVerticalPlanes): (Float?, [ARPlaneAnchor]) = await MainActor.run {
-            let planeY: Float? = (mode == .boxPriority) ? (sessionManager?.getFloorPlaneY() ?? raycastHitPosition?.y) : nil
+            let planeY: Float? = (mode == .boxPriority) ? (sessionManager?.getSupportPlaneY(belowY: roiPointCloudMinY) ?? sessionManager?.getFloorPlaneY() ?? raycastHitPosition?.y) : nil
             let planes: [ARPlaneAnchor] = (mode == .boxPriority) ? (sessionManager?.getNearbyVerticalPlanes(near: roiCentroid) ?? []) : []
             return (planeY, planes)
         }
@@ -417,7 +419,7 @@ class MeasurementCalculator {
 
         // Phase 3.2: Iterative box refinement
         if mode == .boxPriority {
-            boundingBox = iterativeRefine(box: boundingBox, points: pointCloud.points, verticalPlanes: roiVerticalPlanes)
+            boundingBox = iterativeRefine(box: boundingBox, points: pointCloud.points, verticalPlanes: roiVerticalPlanes, supportPlaneY: roiSupportPlaneY)
         }
 
         // 8. Calculate dimensions using camera-based axis mapping
@@ -800,7 +802,7 @@ class MeasurementCalculator {
 
     /// Re-estimate the bounding box by filtering to inlier points and re-fitting
     /// Repeats for the configured number of iterations for tighter fit
-    private func iterativeRefine(box: BoundingBox3D, points: [SIMD3<Float>], verticalPlanes: [ARPlaneAnchor] = []) -> BoundingBox3D {
+    private func iterativeRefine(box: BoundingBox3D, points: [SIMD3<Float>], verticalPlanes: [ARPlaneAnchor] = [], supportPlaneY: Float? = nil) -> BoundingBox3D {
         var currentBox = box
         let margin = AppConstants.refinementMargin
         let iterations = AppConstants.refinementIterations
@@ -826,6 +828,7 @@ class MeasurementCalculator {
             if let refined = boundingBoxEstimator.estimateBoundingBox(
                 points: inliers,
                 mode: .boxPriority,
+                supportPlaneY: supportPlaneY,
                 verticalPlanes: verticalPlanes
             ) {
                 currentBox = refined

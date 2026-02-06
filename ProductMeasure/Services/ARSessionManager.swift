@@ -123,6 +123,32 @@ class ARSessionManager: NSObject, ObservableObject {
         return bestPlaneY
     }
 
+    /// Get the Y coordinate of the nearest horizontal plane below the given Y coordinate.
+    /// Used to find the support surface (table/floor) beneath an object's point cloud.
+    func getSupportPlaneY(belowY: Float) -> Float? {
+        guard let anchors = session.currentFrame?.anchors else { return nil }
+
+        var bestPlaneY: Float? = nil
+        var bestDistance: Float = .greatestFiniteMagnitude
+
+        for anchor in anchors {
+            guard let plane = anchor as? ARPlaneAnchor,
+                  plane.alignment == .horizontal else { continue }
+
+            let planeY = anchor.transform.columns.3.y
+            let distance = belowY - planeY
+            // Only consider planes below (or at) the point cloud bottom
+            guard distance >= 0 else { continue }
+
+            if distance < bestDistance {
+                bestDistance = distance
+                bestPlaneY = planeY
+            }
+        }
+
+        return bestPlaneY
+    }
+
     /// Get nearby vertical plane anchors for direction snapping
     func getNearbyVerticalPlanes(near position: SIMD3<Float>, maxDistance: Float = 2.0) -> [ARPlaneAnchor] {
         guard let anchors = session.currentFrame?.anchors else { return [] }

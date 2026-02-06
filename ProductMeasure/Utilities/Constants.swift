@@ -27,8 +27,8 @@ enum AppConstants {
     static let depthFilterMaxTolerance: Float = 0.50
 
     // MARK: - Floor Extension
-    static let floorExtensionThresholdWithPlane: Float = 0.10
-    static let floorExtensionThresholdDefault: Float = 0.05
+    static let floorExtensionThresholdWithPlane: Float = 0.50
+    static let floorExtensionThresholdDefault: Float = 0.15
 
     // MARK: - Multi-Frame Accumulation
     static let depthAccumulationFrameCount = 5
