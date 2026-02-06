@@ -50,8 +50,8 @@ class CompletedBoxVisualization {
     private let cornerMarkerColor: UIColor = PMTheme.uiCornerMarkerDim
 
     // Label styling
-    private let billboardIdFontSize: CGFloat = 0.010
-    private let billboardBodyFontSize: CGFloat = 0.007
+    private let billboardIdFontSize: CGFloat = 0.015
+    private let billboardBodyFontSize: CGFloat = 0.0105
     private let labelTextColor: UIColor = PMTheme.uiBillboardText
     private let labelBackgroundColor: UIColor = PMTheme.uiBillboardBg
     private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent

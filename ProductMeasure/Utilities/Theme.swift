@@ -47,10 +47,10 @@ enum PMTheme {
 
     // MARK: 3D Edge Dimensions
 
-    static let innerEdgeRadius: Float = 0.0002   // 0.4mm diameter -> 0.2mm radius
-    static let outerEdgeRadius: Float = 0.00075  // 1.5mm diameter -> 0.75mm radius
-    static let cornerMarkerRadius: Float = 0.002 // 4mm diameter sphere
-    static let cornerMarkerRadiusSmall: Float = 0.0015 // 3mm for completed
+    static let innerEdgeRadius: Float = 0.0004   // 0.8mm diameter -> 0.4mm radius
+    static let outerEdgeRadius: Float = 0.0015   // 3.0mm diameter -> 1.5mm radius
+    static let cornerMarkerRadius: Float = 0.004 // 8mm diameter sphere
+    static let cornerMarkerRadiusSmall: Float = 0.003 // 6mm for completed
 
     // MARK: 3D Edge Colors
 

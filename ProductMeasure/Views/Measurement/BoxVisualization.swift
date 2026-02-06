@@ -81,8 +81,8 @@ class BoxVisualization {
     private let handleCollisionRadius: Float = 0.015
 
     // Dimension label styling
-    private let billboardIdFontSize: CGFloat = 0.010
-    private let billboardBodyFontSize: CGFloat = 0.007
+    private let billboardIdFontSize: CGFloat = 0.015
+    private let billboardBodyFontSize: CGFloat = 0.0105
     private let dimensionLabelTextColor: UIColor = PMTheme.uiBillboardText
     private let dimensionLabelBackgroundColor: UIColor = PMTheme.uiBillboardBg
     private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
