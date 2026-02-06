@@ -50,99 +50,53 @@ struct ARMeasurementView: View {
 
                 // Overlay UI (on top)
                 GeometryReader { geometry in
-                    ZStack {
-                        VStack {
-                            // Top bar with status, save button, and clear button
-                            HStack {
-                                StatusBar(
-                                    trackingMessage: viewModel.trackingMessage,
-                                    isProcessing: viewModel.isProcessing
-                                )
-
-                                Spacer()
-
-                                // Save button (visible when measurement exists and not editing)
-                                if viewModel.currentMeasurement != nil && !viewModel.isEditing {
-                                    Button(action: {
-                                        viewModel.stopEditing()
-                                        viewModel.saveMeasurement(mode: measurementMode, unit: measurementUnit)
-                                    }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "checkmark")
-                                            Text("Save")
-                                        }
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 8)
-                                        .background(Color.green)
-                                        .clipShape(Capsule())
-                                    }
-                                }
-
-                                // Clear all button (visible when completed boxes exist)
-                                if viewModel.completedBoxCount > 0 {
-                                    Button(action: {
-                                        viewModel.clearAllMeasurements()
-                                    }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "trash")
-                                            Text("\(viewModel.completedBoxCount)")
-                                                .font(.caption)
-                                        }
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(Color.red.opacity(0.8))
-                                        .clipShape(Capsule())
-                                    }
-                                }
-
-                                // Selection mode toggle (visible when not measuring)
-                                if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
-                                    SelectionModeToggle(selectionMode: $selectionMode)
-                                }
-
-                            }
+                    VStack {
+                        // Top bar with status and clear button
+                        HStack {
+                            StatusBar(
+                                trackingMessage: viewModel.trackingMessage,
+                                isProcessing: viewModel.isProcessing
+                            )
 
                             Spacer()
 
-                            // Instruction text when in targeting mode
-                            if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
-                                if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
-                                    InstructionCard(mode: .tap)
-                                } else if selectionMode == .box {
-                                    InstructionCard(mode: .box)
+                            // Clear all button (visible when completed boxes exist)
+                            if viewModel.completedBoxCount > 0 {
+                                Button(action: {
+                                    viewModel.clearAllMeasurements()
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "trash")
+                                        Text("\(viewModel.completedBoxCount)")
+                                            .font(.caption)
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Color.red.opacity(0.8))
+                                    .clipShape(Capsule())
                                 }
                             }
-                        }
-                        .padding()
 
-                        // Floating buttons near the box
-                        if viewModel.currentMeasurement != nil {
-                            FloatingBoxButtons(
-                                isEditing: viewModel.isEditing,
-                                isDragging: viewModel.isDragging,
-                                boxCenterScreenPosition: viewModel.boxCenterScreenPosition,
-                                screenSize: geometry.size,
-                                onDiscard: {
-                                    viewModel.discardMeasurement()
-                                },
-                                onEdit: {
-                                    viewModel.startEditing()
-                                },
-                                onCancel: {
-                                    viewModel.discardMeasurement()
-                                },
-                                onFit: {
-                                    viewModel.fitToPointCloud(mode: measurementMode)
-                                },
-                                onDone: {
-                                    viewModel.stopEditing()
-                                }
-                            )
+                            // Selection mode toggle (visible when not measuring)
+                            if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                                SelectionModeToggle(selectionMode: $selectionMode)
+                            }
+
+                        }
+
+                        Spacer()
+
+                        // Instruction text when in targeting mode
+                        if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                            if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
+                                InstructionCard(mode: .tap)
+                            } else if selectionMode == .box {
+                                InstructionCard(mode: .box)
+                            }
                         }
                     }
+                    .padding()
                 }
                 .animation(.easeInOut(duration: 0.3), value: viewModel.currentMeasurement != nil)
                 .onChange(of: boxSelectionComplete) { _, isComplete in
@@ -177,12 +131,16 @@ struct ARMeasurementView: View {
         .onAppear {
             viewModel.startSession()
             viewModel.currentUnit = measurementUnit
+            viewModel.currentMeasurementMode = measurementMode
         }
         .onDisappear {
             viewModel.pauseSession()
         }
         .onChange(of: measurementUnit) { _, newUnit in
             viewModel.currentUnit = newUnit
+        }
+        .onChange(of: measurementMode) { _, newMode in
+            viewModel.currentMeasurementMode = newMode
         }
     }
 }
@@ -224,7 +182,9 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
 
         // In box mode without measurement, disable tap/pan to allow BoxSelectionOverlay to work
         // But if editing, keep pan enabled for handle dragging
-        context.coordinator.tapGesture?.isEnabled = !isBoxMode || hasMeasurement
+        // Always enable tap if there are completed boxes (for billboard tap detection)
+        let hasCompletedBoxes = viewModel.completedBoxCount > 0
+        context.coordinator.tapGesture?.isEnabled = !isBoxMode || hasMeasurement || hasCompletedBoxes
         context.coordinator.panGesture?.isEnabled = !isBoxMode || hasMeasurement || isEditing
     }
 
@@ -259,15 +219,50 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
 
         @MainActor @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard gesture.state == .ended else { return }
+            guard let arView = arView else { return }
 
-            // If editing, ignore taps
+            let location = gesture.location(in: arView)
+            print("[Tap] Location: \(location)")
+
+            // Hit test for 3D entities first
+            let results = arView.hitTest(location, query: .nearest, mask: .all)
+
+            for result in results {
+                var entity: Entity? = result.entity
+                while let current = entity {
+                    // 1. Check for action icon tap
+                    if ActionIconBuilder.isActionEntity(current.name),
+                       let actionType = ActionIconBuilder.parseActionType(entityName: current.name) {
+                        print("[Tap] Action icon tapped: \(actionType)")
+                        viewModel.handleActionTap(actionType, mode: measurementMode)
+                        return
+                    }
+
+                    // 2. Check for completed billboard background tap
+                    if current.name == "completed_billboard_bg" {
+                        // Find which completed box this belongs to
+                        if let boxId = viewModel.findCompletedBoxId(for: current) {
+                            print("[Tap] Completed billboard tapped, boxId: \(boxId)")
+                            viewModel.showCompletedBoxActions(boxId: boxId)
+                            return
+                        }
+                    }
+
+                    entity = current.parent
+                }
+            }
+
+            // 3. If a completed box has action icons showing, dismiss them on empty tap
+            if viewModel.selectedCompletedBoxId != nil {
+                viewModel.dismissCompletedBoxActions()
+                return
+            }
+
+            // 4. If editing, ignore taps (handle dragging is via pan)
             if viewModel.isEditing { return }
 
-            // Only handle taps in tap mode
+            // 5. Only handle new measurement taps in tap mode
             guard selectionMode == .tap else { return }
-
-            let location = gesture.location(in: gesture.view)
-            print("[Tap] Location: \(location)")
 
             Task {
                 await viewModel.handleTap(at: location, mode: measurementMode)
@@ -416,295 +411,6 @@ struct InstructionCard: View {
     }
 }
 
-// MARK: - Measurement Result Card
-
-struct MeasurementResultCard: View {
-    let result: MeasurementCalculator.MeasurementResult
-    let unit: MeasurementUnit
-    var isEditing: Bool = false
-    let onSave: () -> Void
-    let onEdit: () -> Void
-    var onFit: (() -> Void)? = nil
-    var onDone: (() -> Void)? = nil
-    let onDiscard: () -> Void
-
-    var body: some View {
-        VStack(spacing: 16) {
-            // Quality indicator or editing badge
-            HStack {
-                if isEditing {
-                    HStack(spacing: 4) {
-                        Image(systemName: "pencil.circle.fill")
-                            .foregroundColor(.orange)
-                        Text("Editing Mode")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-                } else {
-                    QualityIndicator(quality: result.quality.overallQuality)
-                }
-                Spacer()
-            }
-
-            // Dimensions
-            VStack(spacing: 8) {
-                HStack {
-                    DimensionLabel(label: "L", value: formatDimension(result.length))
-                    DimensionLabel(label: "W", value: formatDimension(result.width))
-                    DimensionLabel(label: "H", value: formatDimension(result.height))
-                }
-
-                Text("Volume: \(formatVolume(result.volume))")
-                    .font(.headline)
-            }
-
-            // Action buttons - different based on editing mode
-            if isEditing {
-                // Editing mode buttons
-                HStack(spacing: 12) {
-                    Button(action: onDiscard) {
-                        Label("Cancel", systemImage: "xmark")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-
-                    Button(action: { onFit?() }) {
-                        Label("Fit", systemImage: "crop")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.blue)
-
-                    Button(action: { onDone?() }) {
-                        Label("Done", systemImage: "checkmark")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            } else {
-                // Normal mode buttons
-                HStack(spacing: 12) {
-                    Button(action: onDiscard) {
-                        Label("Discard", systemImage: "xmark")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
-
-                    Button(action: onEdit) {
-                        Label("Edit", systemImage: "pencil")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button(action: onSave) {
-                        Label("Save", systemImage: "checkmark")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .animation(.easeInOut(duration: 0.2), value: isEditing)
-    }
-
-    private func formatDimension(_ meters: Float) -> String {
-        let value = unit.convert(meters: meters)
-        if value >= 100 {
-            return String(format: "%.0f %@", value, unit.rawValue)
-        } else if value >= 10 {
-            return String(format: "%.1f %@", value, unit.rawValue)
-        } else {
-            return String(format: "%.2f %@", value, unit.rawValue)
-        }
-    }
-
-    private func formatVolume(_ cubicMeters: Float) -> String {
-        let value = unit.convertVolume(cubicMeters: cubicMeters)
-        if value >= 1000 {
-            return String(format: "%.0f %@", value, unit.volumeUnit())
-        } else if value >= 100 {
-            return String(format: "%.1f %@", value, unit.volumeUnit())
-        } else {
-            return String(format: "%.2f %@", value, unit.volumeUnit())
-        }
-    }
-}
-
-// MARK: - Dimension Label
-
-struct DimensionLabel: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(label)
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Text(value)
-                .font(.title3)
-                .fontWeight(.semibold)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: - Quality Indicator
-
-struct QualityIndicator: View {
-    let quality: QualityLevel
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(qualityColor)
-                .frame(width: 8, height: 8)
-            Text(quality.description)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-    }
-
-    private var qualityColor: Color {
-        switch quality {
-        case .high: return .green
-        case .medium: return .yellow
-        case .low: return .red
-        }
-    }
-}
-
-// MARK: - Floating Box Buttons
-
-struct FloatingBoxButtons: View {
-    let isEditing: Bool
-    let isDragging: Bool
-    let boxCenterScreenPosition: CGPoint?
-    let screenSize: CGSize
-    let onDiscard: () -> Void
-    let onEdit: () -> Void
-    let onCancel: () -> Void
-    let onFit: () -> Void
-    let onDone: () -> Void
-
-    var body: some View {
-        let buttonY = calculateButtonY()
-
-        VStack(spacing: 0) {
-            Spacer()
-                .frame(height: buttonY)
-
-            if isEditing {
-                // Editing mode buttons
-                HStack(spacing: 12) {
-                    // Cancel button
-                    Button(action: onCancel) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "xmark")
-                            Text("Cancel")
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.red.opacity(0.9))
-                        .clipShape(Capsule())
-                    }
-
-                    // Fit button
-                    Button(action: onFit) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "crop")
-                            Text("Fit")
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.blue.opacity(0.9))
-                        .clipShape(Capsule())
-                    }
-
-                    // Done button
-                    Button(action: onDone) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark")
-                            Text("Done")
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.green.opacity(0.9))
-                        .clipShape(Capsule())
-                    }
-                }
-                .transition(.opacity.combined(with: .scale))
-
-                // Editing hint
-                if !isDragging {
-                    Text("Drag handles to resize")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding(.top, 8)
-                }
-            } else {
-                // Normal mode buttons
-                HStack(spacing: 12) {
-                    // Discard button
-                    Button(action: onDiscard) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "xmark")
-                            Text("Discard")
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.red.opacity(0.9))
-                        .clipShape(Capsule())
-                    }
-
-                    // Edit button
-                    Button(action: onEdit) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "pencil")
-                            Text("Edit")
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.orange.opacity(0.9))
-                        .clipShape(Capsule())
-                    }
-                }
-                .transition(.opacity.combined(with: .scale))
-            }
-
-            Spacer()
-        }
-        .animation(.easeInOut(duration: 0.2), value: isEditing)
-    }
-
-    private func calculateButtonY() -> CGFloat {
-        // Position buttons below the box center
-        if let boxCenter = boxCenterScreenPosition {
-            // Clamp to reasonable screen range
-            let minY: CGFloat = screenSize.height * 0.4
-            let maxY: CGFloat = screenSize.height * 0.75
-            let targetY = boxCenter.y + 120  // 120pt below box center
-            return min(max(targetY, minY), maxY)
-        }
-        // Default to lower third of screen
-        return screenSize.height * 0.65
-    }
-}
 
 // MARK: - LiDAR Not Available View
 
@@ -744,8 +450,11 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var debugMaskImage: UIImage?
     @Published var debugDepthImage: UIImage?
 
-    // Box center screen position for floating buttons
-    @Published var boxCenterScreenPosition: CGPoint?
+    // Selected completed box for action icons
+    @Published var selectedCompletedBoxId: Int? = nil
+
+    // Current measurement mode (synced from view)
+    var currentMeasurementMode: MeasurementMode = .boxPriority
 
     // Animation state - start with target brackets visible
     @Published var animationPhase: BoundingBoxAnimationPhase = .showingTargetBrackets
@@ -811,27 +520,17 @@ class ARMeasurementViewModel: ObservableObject {
             frame.camera.transform.columns.2.z
         )
 
-        // Find the box closest to camera center (highest dot product with camera forward)
-        let visibilityThreshold: Float = 0.3  // ~70° cone
-        var maxDotProduct: Float = visibilityThreshold
-        var mostProminentActiveBox = false
-        var mostProminentCompletedIndex: Int? = nil
-
-        // Check active box
+        // Active box billboard is always visible (excluded from prominence logic)
         if let boxViz = boxVisualization {
-            let toBox = boxViz.boundingBox.center - cameraPosition
-            let distance = simd_length(toBox)
-            if distance > 0.01 {
-                let dot = simd_dot(toBox / distance, cameraForward)
-                if dot > maxDotProduct {
-                    maxDotProduct = dot
-                    mostProminentActiveBox = true
-                    mostProminentCompletedIndex = nil
-                }
-            }
+            boxViz.setDimensionBillboardVisible(true, forceShow: true)
+            boxViz.updateLabelOrientations(cameraPosition: cameraPosition)
         }
 
-        // Check completed boxes
+        // Find the most prominent completed box for billboard visibility
+        let visibilityThreshold: Float = 0.3  // ~70° cone
+        var maxDotProduct: Float = visibilityThreshold
+        var mostProminentCompletedIndex: Int? = nil
+
         for (index, visualization) in completedBoxVisualizations.enumerated() {
             let toBox = visualization.boundingBox.center - cameraPosition
             let distance = simd_length(toBox)
@@ -839,17 +538,8 @@ class ARMeasurementViewModel: ObservableObject {
                 let dot = simd_dot(toBox / distance, cameraForward)
                 if dot > maxDotProduct {
                     maxDotProduct = dot
-                    mostProminentActiveBox = false
                     mostProminentCompletedIndex = index
                 }
-            }
-        }
-
-        // Update billboard visibility and orientation for active box
-        if let boxViz = boxVisualization {
-            boxViz.setDimensionBillboardVisible(mostProminentActiveBox)
-            if mostProminentActiveBox {
-                boxViz.updateLabelOrientations(cameraPosition: cameraPosition)
             }
         }
 
@@ -860,13 +550,6 @@ class ARMeasurementViewModel: ObservableObject {
             if isProminent {
                 visualization.updateLabelOrientations(cameraPosition: cameraPosition)
             }
-        }
-
-        // Update box center screen position for floating buttons
-        if let result = currentMeasurement {
-            boxCenterScreenPosition = sessionManager.projectToScreen(worldPosition: result.boundingBox.center)
-        } else {
-            boxCenterScreenPosition = nil
         }
     }
 
@@ -1167,14 +850,18 @@ class ARMeasurementViewModel: ObservableObject {
             completedBoxAnchors.removeFirst()
         }
 
-        // Create completed visualization with dimension labels
+        // Create completed visualization with dimension labels and re-edit data
         let completedViz = CompletedBoxVisualization(
             boundingBox: result.boundingBox,
             height: result.height,
             length: result.length,
             width: result.width,
             unit: unit,
-            boxId: nextBoxId
+            boxId: nextBoxId,
+            quality: result.quality,
+            axisMapping: result.axisMapping,
+            pointCloud: result.pointCloud,
+            floorY: boxVisualization?.floorY
         )
         nextBoxId += 1
 
@@ -1236,14 +923,15 @@ class ARMeasurementViewModel: ObservableObject {
 
     func startEditing() {
         isEditing = true
-        // Enable handle interactivity
         boxVisualization?.isInteractive = true
+        boxVisualization?.updateActionMode(.editing)
     }
 
     func stopEditing() {
         isEditing = false
         isDragging = false
         boxVisualization?.isInteractive = false
+        boxVisualization?.updateActionMode(.normal)
     }
 
     func handleFaceDrag(handleType: HandleType, screenDelta: CGPoint, mode: MeasurementMode) {
@@ -1412,6 +1100,118 @@ class ARMeasurementViewModel: ObservableObject {
         } else {
             print("[ViewModel] Fit failed - not enough points in current box")
         }
+    }
+
+    // MARK: - Action Icon Handling
+
+    /// Handle tap on a 3D action icon
+    func handleActionTap(_ actionType: ActionType, mode: MeasurementMode) {
+        switch actionType {
+        case .save:
+            stopEditing()
+            saveMeasurement(mode: mode, unit: currentUnit)
+        case .edit:
+            startEditing()
+        case .discard:
+            discardMeasurement()
+        case .done:
+            stopEditing()
+        case .fit:
+            fitToPointCloud(mode: mode)
+        case .cancel:
+            discardMeasurement()
+        case .reEdit:
+            reEditCompletedBox()
+        case .delete:
+            deleteCompletedBox()
+        }
+    }
+
+    /// Find the completed box ID that owns a given entity
+    func findCompletedBoxId(for entity: Entity) -> Int? {
+        for viz in completedBoxVisualizations {
+            // Walk up from the entity to check if it belongs to this visualization
+            var current: Entity? = entity
+            while let node = current {
+                if node === viz.entity {
+                    return viz.id
+                }
+                current = node.parent
+            }
+        }
+        return nil
+    }
+
+    /// Show action icons on a completed box
+    func showCompletedBoxActions(boxId: Int) {
+        // Dismiss any existing actions first
+        dismissCompletedBoxActions()
+
+        selectedCompletedBoxId = boxId
+        if let viz = completedBoxVisualizations.first(where: { $0.id == boxId }) {
+            viz.showActionIcons()
+        }
+    }
+
+    /// Dismiss action icons on completed boxes
+    func dismissCompletedBoxActions() {
+        if let selectedId = selectedCompletedBoxId,
+           let viz = completedBoxVisualizations.first(where: { $0.id == selectedId }) {
+            viz.hideActionIcons()
+        }
+        selectedCompletedBoxId = nil
+    }
+
+    /// Re-edit a completed box (make it active again)
+    private func reEditCompletedBox() {
+        guard let selectedId = selectedCompletedBoxId,
+              let index = completedBoxVisualizations.firstIndex(where: { $0.id == selectedId }) else {
+            return
+        }
+
+        let completedViz = completedBoxVisualizations[index]
+
+        // Auto-save current active box if exists
+        if let existingResult = currentMeasurement {
+            convertActiveBoxToCompleted(result: existingResult, unit: currentUnit)
+            clearActiveBoxOnly()
+        }
+
+        // Get data from completed box
+        let result = completedViz.toMeasurementResult()
+        let floorY = completedViz.floorY
+        let pointCloud = completedViz.pointCloud
+
+        // Remove the completed box from scene
+        let anchor = completedBoxAnchors[index]
+        sessionManager.removeAnchor(anchor)
+        completedBoxVisualizations.remove(at: index)
+        completedBoxAnchors.remove(at: index)
+        completedBoxCount = completedBoxVisualizations.count
+        selectedCompletedBoxId = nil
+
+        // Set as current measurement and show editable box
+        currentMeasurement = result
+        showBoxVisualization(for: result.boundingBox, pointCloud: pointCloud, floorY: floorY, unit: currentUnit)
+        animationPhase = .complete
+
+        // Enter editing mode
+        startEditing()
+    }
+
+    /// Delete a specific completed box
+    private func deleteCompletedBox() {
+        guard let selectedId = selectedCompletedBoxId,
+              let index = completedBoxVisualizations.firstIndex(where: { $0.id == selectedId }) else {
+            return
+        }
+
+        let anchor = completedBoxAnchors[index]
+        sessionManager.removeAnchor(anchor)
+        completedBoxVisualizations.remove(at: index)
+        completedBoxAnchors.remove(at: index)
+        completedBoxCount = completedBoxVisualizations.count
+        selectedCompletedBoxId = nil
     }
 
     func discardMeasurement() {

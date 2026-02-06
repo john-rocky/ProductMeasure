@@ -15,13 +15,26 @@ class CompletedBoxVisualization {
     private(set) var entity: Entity
     private var edgeEntities: [ModelEntity] = []
     private var dimensionBillboardEntity: Entity?
+    private var billboardBackgroundEntity: ModelEntity?
+
+    // Action icon row (for completed box actions)
+    private var actionIconRow: Entity?
 
     private(set) var boundingBox: BoundingBox3D
-    private let boxId: Int
+    private(set) var boxId: Int
     private let height: Float
     private let length: Float
     private let width: Float
     private let unit: MeasurementUnit
+
+    /// Public accessor for box ID
+    var id: Int { boxId }
+
+    // Stored data for re-edit
+    private(set) var quality: MeasurementQuality
+    private(set) var axisMapping: BoundingBox3D.AxisMapping
+    private(set) var pointCloud: [SIMD3<Float>]?
+    private(set) var floorY: Float?
 
     // MARK: - Constants
 
@@ -38,13 +51,28 @@ class CompletedBoxVisualization {
 
     // MARK: - Initialization
 
-    init(boundingBox: BoundingBox3D, height: Float, length: Float, width: Float, unit: MeasurementUnit, boxId: Int = 0) {
+    init(
+        boundingBox: BoundingBox3D,
+        height: Float,
+        length: Float,
+        width: Float,
+        unit: MeasurementUnit,
+        boxId: Int = 0,
+        quality: MeasurementQuality,
+        axisMapping: BoundingBox3D.AxisMapping,
+        pointCloud: [SIMD3<Float>]? = nil,
+        floorY: Float? = nil
+    ) {
         self.boundingBox = boundingBox
         self.boxId = boxId
         self.height = height
         self.length = length
         self.width = width
         self.unit = unit
+        self.quality = quality
+        self.axisMapping = axisMapping
+        self.pointCloud = pointCloud
+        self.floorY = floorY
         self.entity = Entity()
         createVisualization()
     }
@@ -68,6 +96,48 @@ class CompletedBoxVisualization {
     /// Show or hide the dimension billboard
     func setDimensionBillboardVisible(_ visible: Bool) {
         dimensionBillboardEntity?.isEnabled = visible
+        // Hide action icons when billboard is hidden
+        if !visible {
+            hideActionIcons()
+        }
+    }
+
+    /// Show action icons below the billboard
+    func showActionIcons() {
+        guard actionIconRow == nil, let billboard = dimensionBillboardEntity else { return }
+
+        let row = ActionIconBuilder.createActionRow(actions: ActionIconBuilder.completedActions)
+        row.position = SIMD3<Float>(0, -0.005, 0)
+        billboard.addChild(row)
+        actionIconRow = row
+    }
+
+    /// Hide action icons
+    func hideActionIcons() {
+        actionIconRow?.removeFromParent()
+        actionIconRow = nil
+    }
+
+    /// Whether action icons are currently showing
+    var isShowingActionIcons: Bool {
+        actionIconRow != nil
+    }
+
+    /// Convert stored data back to a MeasurementResult for re-editing
+    func toMeasurementResult() -> MeasurementCalculator.MeasurementResult {
+        var result = MeasurementCalculator.MeasurementResult(
+            boundingBox: boundingBox,
+            length: length,
+            width: width,
+            height: height,
+            volume: boundingBox.volume,
+            quality: quality,
+            heightAxisIndex: axisMapping.height,
+            lengthAxisIndex: axisMapping.length,
+            widthAxisIndex: axisMapping.width
+        )
+        result.pointCloud = pointCloud
+        return result
     }
 
     /// Check if this box is visible from camera
@@ -184,7 +254,7 @@ class CompletedBoxVisualization {
         let totalHeight = contentHeight + padding * 2
         let cornerRadius = min(totalHeight, totalWidth) * 0.12
 
-        // -- Background (dark glass) --
+        // -- Background (dark glass) with collision for tap detection --
         let backgroundMesh = MeshResource.generateBox(
             size: [totalWidth, totalHeight, 0.001],
             cornerRadius: cornerRadius
@@ -192,6 +262,14 @@ class CompletedBoxVisualization {
         var backgroundMaterial = UnlitMaterial(color: labelBackgroundColor)
         backgroundMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.75))
         let backgroundEntity = ModelEntity(mesh: backgroundMesh, materials: [backgroundMaterial])
+        backgroundEntity.name = "completed_billboard_bg"
+
+        // Add collision component for tap detection on billboard
+        let collisionShape = ShapeResource.generateBox(
+            size: [totalWidth * 1.2, totalHeight * 1.2, 0.005]
+        )
+        backgroundEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
+        billboardBackgroundEntity = backgroundEntity
 
         // -- Accent bar (left edge stripe) --
         let accentHeight = contentHeight + padding

@@ -22,6 +22,16 @@ class BoxVisualization {
     // Single billboard label floating above the box (shows all dimensions)
     private var dimensionBillboardEntity: Entity?
 
+    // Action icon row (below billboard)
+    private var actionIconRow: Entity?
+
+    /// Current action mode (normal or editing)
+    enum ActionMode {
+        case normal
+        case editing
+    }
+    private var currentActionMode: ActionMode = .normal
+
     // Box identifier
     private var boxId: Int = 0
 
@@ -127,8 +137,36 @@ class BoxVisualization {
     }
 
     /// Show or hide the dimension billboard
-    func setDimensionBillboardVisible(_ visible: Bool) {
-        dimensionBillboardEntity?.isEnabled = visible
+    /// - Parameters:
+    ///   - visible: Whether the billboard should be visible
+    ///   - forceShow: If true, always show regardless of prominence logic
+    func setDimensionBillboardVisible(_ visible: Bool, forceShow: Bool = false) {
+        dimensionBillboardEntity?.isEnabled = forceShow || visible
+    }
+
+    /// Update the action icon row to match the current mode
+    func updateActionMode(_ mode: ActionMode) {
+        currentActionMode = mode
+        // Remove existing action row
+        actionIconRow?.removeFromParent()
+        actionIconRow = nil
+
+        guard let billboard = dimensionBillboardEntity else { return }
+
+        // Create new action row for the mode
+        let actions: [ActionIconConfig]
+        switch mode {
+        case .normal:
+            actions = ActionIconBuilder.activeNormalActions
+        case .editing:
+            actions = ActionIconBuilder.activeEditActions
+        }
+
+        let row = ActionIconBuilder.createActionRow(actions: actions)
+        // Position below the billboard (5mm below bottom edge)
+        row.position = SIMD3<Float>(0, -0.005, 0)
+        billboard.addChild(row)
+        actionIconRow = row
     }
 
     /// Check if this box is visible (for determining which box to show billboard on)
@@ -227,6 +265,7 @@ class BoxVisualization {
         floorDistanceLabel = nil
         labelEntities.removeAll()
         dimensionBillboardEntity = nil
+        actionIconRow = nil
     }
 
     // MARK: - Edge Creation
@@ -651,16 +690,20 @@ class BoxVisualization {
     // MARK: - Dimension Billboard (floating above box)
 
     private func createDimensionLabels() {
-        // Remove existing billboard
+        // Remove existing billboard and action row
         dimensionBillboardEntity?.removeFromParent()
+        actionIconRow = nil
 
         // Create billboard above the box showing all dimensions
         let billboardPos = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y + 0.03, 0)
         dimensionBillboardEntity = createDimensionBillboard(at: billboardPos)
         entity.addChild(dimensionBillboardEntity!)
 
-        // Initially hidden - will be shown only for the most prominent box
-        dimensionBillboardEntity?.isEnabled = false
+        // Add action icons below billboard
+        updateActionMode(currentActionMode)
+
+        // Active box billboard is always visible (forceShow)
+        dimensionBillboardEntity?.isEnabled = true
     }
 
     private func updateDimensionLabelPositions() {
