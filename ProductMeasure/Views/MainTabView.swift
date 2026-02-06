@@ -12,22 +12,23 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             ARMeasurementView()
                 .tabItem {
-                    Label("Measure", systemImage: "ruler")
+                    Label("Measure", systemImage: "viewfinder")
                 }
                 .tag(0)
 
             HistoryListView()
                 .tabItem {
-                    Label("History", systemImage: "clock")
+                    Label("History", systemImage: "clock.arrow.circlepath")
                 }
                 .tag(1)
 
             SettingsView()
                 .tabItem {
-                    Label("Settings", systemImage: "gear")
+                    Label("Settings", systemImage: "gearshape")
                 }
                 .tag(2)
         }
+        .tint(PMTheme.cyan)
     }
 }
 

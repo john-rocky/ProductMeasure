@@ -7,18 +7,22 @@ import Foundation
 import CoreGraphics
 import simd
 
-// Note: BoundingBox3D is defined in BoundingBox3D.swift
-
 /// Animation phases for the bounding box appearance animation
 enum BoundingBoxAnimationPhase: Equatable {
     /// Showing 2D target brackets - waiting for user tap
     case showingTargetBrackets
+
+    /// Edge trace: bottom edges draw sequentially with corner markers
+    case edgeTrace
 
     /// 3D rect flying from camera position to object bottom plane
     case flyingToBottom
 
     /// Growing vertically from the bottom plane
     case growingVertical
+
+    /// Completion pulse flash
+    case completionPulse
 
     /// Animation complete - box is fully visible
     case complete
@@ -63,12 +67,18 @@ struct BoundingBoxAnimationContext {
 
 /// Animation timing constants
 struct BoxAnimationTiming {
+    /// Duration for edge trace (bottom edges drawing sequentially)
+    static let edgeTrace: Double = PMTheme.edgeTraceDuration
+
     /// Duration for 3D rect to fly from camera to bottom plane
-    static let flyToBottom: Double = 0.4
+    static let flyToBottom: Double = PMTheme.flyToBottomDuration
 
     /// Duration for vertical edges to grow
-    static let growVertical: Double = 0.35
+    static let growVertical: Double = PMTheme.growVerticalDuration
+
+    /// Duration for completion pulse flash
+    static let completionPulse: Double = PMTheme.completionPulseDuration
 
     /// Total animation duration
-    static let total: Double = flyToBottom + growVertical
+    static let total: Double = edgeTrace + flyToBottom + growVertical + completionPulse
 }

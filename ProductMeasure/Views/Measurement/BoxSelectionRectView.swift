@@ -22,9 +22,14 @@ class BoxSelectionRectView: UIView {
     // Minimum selection size (points)
     static let minimumSize: CGFloat = 50
 
+    // Theme colors
+    private let cyanColor = PMTheme.uiCyan
+    private let greenColor = PMTheme.uiGreen
+    private let amberColor = PMTheme.uiAmber
+
     private let statusLabel: UILabel = {
         let label = UILabel()
-        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
         label.textColor = .white
         label.textAlignment = .center
         label.layer.cornerRadius = 10
@@ -60,12 +65,12 @@ class BoxSelectionRectView: UIView {
         ctx.fill(bounds)
         ctx.clear(selRect)
 
-        // Selection rectangle fill
-        ctx.setFillColor(UIColor.white.withAlphaComponent(0.2).cgColor)
+        // Selection rectangle fill (cyan glow)
+        ctx.setFillColor(cyanColor.withAlphaComponent(0.15).cgColor)
         ctx.fill(selRect)
 
-        // Selection rectangle border
-        ctx.setStrokeColor(UIColor.white.cgColor)
+        // Selection rectangle border (cyan)
+        ctx.setStrokeColor(cyanColor.cgColor)
         ctx.setLineWidth(2)
         ctx.stroke(selRect)
 
@@ -85,10 +90,10 @@ class BoxSelectionRectView: UIView {
     private func updateStatusLabel() {
         if isRectValid {
             statusLabel.text = "Release to select"
-            statusLabel.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.8)
+            statusLabel.backgroundColor = greenColor.withAlphaComponent(0.8)
         } else {
             statusLabel.text = "Make it bigger"
-            statusLabel.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.8)
+            statusLabel.backgroundColor = amberColor.withAlphaComponent(0.8)
         }
     }
 

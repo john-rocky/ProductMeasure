@@ -12,11 +12,12 @@ class BoxVisualization {
     // MARK: - Properties
 
     private(set) var entity: Entity
-    private var edgeEntities: [ModelEntity] = []  // 12 edge entities
-    private var faceHandleEntities: [Entity] = [] // 6 face handles
-    private var rotationRingEntity: Entity?       // Rotation ring on top
+    private var edgeEntities: [Entity] = []          // 12 dual-layer edge groups
+    private var cornerMarkerEntities: [ModelEntity] = [] // 8 corner spheres
+    private var faceHandleEntities: [Entity] = []    // 6 face handles
+    private var rotationRingEntity: Entity?          // Rotation ring on top
     private var labelEntities: [Entity] = []
-    private var floorDistanceEntity: Entity?      // Floor distance indicator
+    private var floorDistanceEntity: Entity?         // Floor distance indicator
     private var floorDistanceLabel: Entity?
 
     // Single billboard label floating above the box (shows all dimensions)
@@ -61,28 +62,35 @@ class BoxVisualization {
 
     // MARK: - Constants
 
-    private let lineColor: UIColor = UIColor(white: 1.0, alpha: 0.5)  // Semi-transparent white
-    private let lineRadius: Float = 0.0004  // Very thin (0.4mm)
+    // Dual-layer edge: inner bright + outer glow
+    private let innerEdgeColor: UIColor = PMTheme.uiEdgeInner
+    private let outerEdgeColor: UIColor = PMTheme.uiEdgeOuter
+    private let innerEdgeRadius: Float = PMTheme.innerEdgeRadius
+    private let outerEdgeRadius: Float = PMTheme.outerEdgeRadius
+
+    // Corner markers
+    private let cornerMarkerRadius: Float = PMTheme.cornerMarkerRadius
+    private let cornerMarkerColor: UIColor = PMTheme.uiCornerMarker
 
     // Handle color (white, semi-transparent for Apple-style appearance)
     private let handleColor: UIColor = UIColor(white: 1.0, alpha: 0.85)
 
     // Handle dimensions (capsule shape)
-    private let handleLength: Float = 0.018      // Length of capsule (18mm)
-    private let handleRadius: Float = 0.004      // Radius of capsule (4mm)
-    private let handleCollisionRadius: Float = 0.015  // Larger for easy touch
+    private let handleLength: Float = 0.018
+    private let handleRadius: Float = 0.004
+    private let handleCollisionRadius: Float = 0.015
 
     // Dimension label styling
-    private let billboardIdFontSize: CGFloat = 0.010      // Box ID header
-    private let billboardBodyFontSize: CGFloat = 0.007    // Detail lines
-    private let dimensionLabelTextColor: UIColor = UIColor(white: 1.0, alpha: 0.95)  // White text
-    private let billboardSubTextColor: UIColor = UIColor(white: 1.0, alpha: 0.7)     // Dimmed white
-    private let dimensionLabelBackgroundColor: UIColor = UIColor(white: 0.0, alpha: 0.75) // Dark glass
-    private let billboardAccentColor: UIColor = UIColor(red: 0.3, green: 0.8, blue: 1.0, alpha: 1.0) // Cyan accent
+    private let billboardIdFontSize: CGFloat = 0.010
+    private let billboardBodyFontSize: CGFloat = 0.007
+    private let dimensionLabelTextColor: UIColor = PMTheme.uiBillboardText
+    private let dimensionLabelBackgroundColor: UIColor = PMTheme.uiBillboardBg
+    private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
+    private let billboardTopBorderColor: UIColor = PMTheme.uiBillboardTopBorder
 
-    // Rotation handle (corner arc that looks like part of the box frame)
-    private let rotationArcThickness: Float = 0.001  // Same thickness as edge lines
-    private let rotationArcAngle: Float = .pi / 2    // 90 degree arc (quarter circle at corner)
+    // Rotation handle
+    private let rotationArcThickness: Float = 0.001
+    private let rotationArcAngle: Float = .pi / 2
 
     // MARK: - Initialization
 
@@ -98,6 +106,7 @@ class BoxVisualization {
     func update(boundingBox: BoundingBox3D) {
         self.boundingBox = boundingBox
         updateEdgePositions()
+        updateCornerMarkerPositions()
         updateFaceHandlePositions()
         updateRotationRingPosition()
         updateFloorDistanceIndicator()
@@ -137,9 +146,6 @@ class BoxVisualization {
     }
 
     /// Show or hide the dimension billboard
-    /// - Parameters:
-    ///   - visible: Whether the billboard should be visible
-    ///   - forceShow: If true, always show regardless of prominence logic
     func setDimensionBillboardVisible(_ visible: Bool, forceShow: Bool = false) {
         dimensionBillboardEntity?.isEnabled = forceShow || visible
     }
@@ -147,13 +153,11 @@ class BoxVisualization {
     /// Update the action icon row to match the current mode
     func updateActionMode(_ mode: ActionMode) {
         currentActionMode = mode
-        // Remove existing action row
         actionIconRow?.removeFromParent()
         actionIconRow = nil
 
         guard let billboard = dimensionBillboardEntity else { return }
 
-        // Create new action row for the mode
         let actions: [ActionIconConfig]
         switch mode {
         case .normal:
@@ -163,29 +167,24 @@ class BoxVisualization {
         }
 
         let row = ActionIconBuilder.createActionRow(actions: actions)
-        // Position below the billboard (5mm below bottom edge)
         row.position = SIMD3<Float>(0, -0.005, 0)
         billboard.addChild(row)
         actionIconRow = row
     }
 
-    /// Check if this box is visible (for determining which box to show billboard on)
+    /// Check if this box is visible
     func isVisibleFromCamera(cameraPosition: SIMD3<Float>, cameraForward: SIMD3<Float>) -> Bool {
         let toBox = boundingBox.center - cameraPosition
         let distance = simd_length(toBox)
         let toBoxNormalized = toBox / distance
-
-        // Check if box is in front of camera (dot product > 0)
         let dot = simd_dot(toBoxNormalized, cameraForward)
-        return dot > 0.3  // Within ~70 degree cone in front
+        return dot > 0.3
     }
 
-    /// Get the apparent size of this box from the camera (larger = more prominent)
+    /// Get the apparent size of this box from the camera
     func apparentSizeFromCamera(cameraPosition: SIMD3<Float>) -> Float {
         let distance = simd_length(boundingBox.center - cameraPosition)
         if distance < 0.01 { return 0 }
-
-        // Approximate apparent size: box volume / distance^2
         let boxSize = boundingBox.extents.x * boundingBox.extents.y * boundingBox.extents.z
         return boxSize / (distance * distance)
     }
@@ -208,7 +207,7 @@ class BoxVisualization {
         return .none
     }
 
-    /// Highlight a handle to show it's being touched
+    /// Highlight a handle
     func highlightHandle(_ handleType: HandleType) {
         let handleTypes: [HandleType] = [
             .faceNegX, .facePosX,
@@ -219,8 +218,7 @@ class BoxVisualization {
         guard let index = handleTypes.firstIndex(of: handleType),
               index < faceHandleEntities.count else { return }
 
-        let handle = faceHandleEntities[index]
-        handle.scale = SIMD3<Float>(repeating: 1.3)  // Scale up 30%
+        faceHandleEntities[index].scale = SIMD3<Float>(repeating: 1.3)
     }
 
     /// Highlight rotation handle
@@ -240,6 +238,7 @@ class BoxVisualization {
 
     private func createVisualization() {
         createEdges()
+        createCornerMarkers()
         createFaceHandles()
         createRotationRing()
         createFloorDistanceIndicator()
@@ -247,7 +246,6 @@ class BoxVisualization {
     }
 
     private func updateInteractiveState() {
-        // Show/hide face handles and rotation ring
         for handle in faceHandleEntities {
             handle.isEnabled = isInteractive
         }
@@ -259,6 +257,7 @@ class BoxVisualization {
             child.removeFromParent()
         }
         edgeEntities.removeAll()
+        cornerMarkerEntities.removeAll()
         faceHandleEntities.removeAll()
         rotationRingEntity = nil
         floorDistanceEntity = nil
@@ -268,15 +267,15 @@ class BoxVisualization {
         actionIconRow = nil
     }
 
-    // MARK: - Edge Creation
+    // MARK: - Dual-Layer Edge Creation
 
     private func createEdges() {
         let edges = boundingBox.edges
 
         for (index, (start, end)) in edges.enumerated() {
-            let edgeEntity = createEdgeEntity(from: start, to: end, index: index)
-            entity.addChild(edgeEntity)
-            edgeEntities.append(edgeEntity)
+            let edgeGroup = createDualEdgeEntity(from: start, to: end, index: index)
+            entity.addChild(edgeGroup)
+            edgeEntities.append(edgeGroup)
         }
     }
 
@@ -291,32 +290,88 @@ class BoxVisualization {
         }
 
         for (index, (start, end)) in edges.enumerated() {
-            updateEdgeEntity(edgeEntities[index], from: start, to: end)
+            updateDualEdgeEntity(edgeEntities[index], from: start, to: end)
         }
     }
 
-    private func createEdgeEntity(from start: SIMD3<Float>, to end: SIMD3<Float>, index: Int) -> ModelEntity {
+    /// Create a dual-layer edge: inner bright line + outer glow
+    private func createDualEdgeEntity(from start: SIMD3<Float>, to end: SIMD3<Float>, index: Int) -> Entity {
+        let parent = Entity()
+        parent.name = "edge_\(index)"
+
         let direction = end - start
         let length = simd_length(direction)
+        let midpoint = (start + end) / 2
+        let orientation = calculateOrientation(direction: direction)
 
-        let mesh = MeshResource.generateBox(size: [lineRadius * 2, lineRadius * 2, length])
-        var material = UnlitMaterial(color: lineColor)
+        // Outer glow layer
+        let outerMesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
+        var outerMaterial = UnlitMaterial(color: outerEdgeColor)
+        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.15))
+        let outerEntity = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
+        outerEntity.name = "edge_outer_\(index)"
+        outerEntity.position = midpoint
+        outerEntity.orientation = orientation
 
-        let edgeEntity = ModelEntity(mesh: mesh, materials: [material])
-        edgeEntity.name = "edge_\(index)"
-        edgeEntity.position = (start + end) / 2
-        edgeEntity.orientation = calculateOrientation(direction: direction)
+        // Inner bright layer
+        let innerMesh = MeshResource.generateBox(size: [innerEdgeRadius * 2, innerEdgeRadius * 2, length])
+        let innerMaterial = UnlitMaterial(color: innerEdgeColor)
+        let innerEntity = ModelEntity(mesh: innerMesh, materials: [innerMaterial])
+        innerEntity.name = "edge_inner_\(index)"
+        innerEntity.position = midpoint
+        innerEntity.orientation = orientation
 
-        return edgeEntity
+        parent.addChild(outerEntity)
+        parent.addChild(innerEntity)
+
+        return parent
     }
 
-    private func updateEdgeEntity(_ edgeEntity: ModelEntity, from start: SIMD3<Float>, to end: SIMD3<Float>) {
+    private func updateDualEdgeEntity(_ edgeGroup: Entity, from start: SIMD3<Float>, to end: SIMD3<Float>) {
         let direction = end - start
         let length = simd_length(direction)
+        let midpoint = (start + end) / 2
+        let orientation = calculateOrientation(direction: direction)
 
-        edgeEntity.position = (start + end) / 2
-        edgeEntity.model?.mesh = MeshResource.generateBox(size: [lineRadius * 2, lineRadius * 2, length])
-        edgeEntity.orientation = calculateOrientation(direction: direction)
+        let children = edgeGroup.children.compactMap { $0 as? ModelEntity }
+        for child in children {
+            child.position = midpoint
+            child.orientation = orientation
+            if child.name.contains("outer") {
+                child.model?.mesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
+            } else {
+                child.model?.mesh = MeshResource.generateBox(size: [innerEdgeRadius * 2, innerEdgeRadius * 2, length])
+            }
+        }
+    }
+
+    // MARK: - Corner Markers
+
+    private func createCornerMarkers() {
+        let corners = boundingBox.corners
+        for (index, corner) in corners.enumerated() {
+            let sphere = ModelEntity(
+                mesh: MeshResource.generateSphere(radius: cornerMarkerRadius),
+                materials: [UnlitMaterial(color: cornerMarkerColor)]
+            )
+            sphere.name = "corner_\(index)"
+            sphere.position = corner
+            entity.addChild(sphere)
+            cornerMarkerEntities.append(sphere)
+        }
+    }
+
+    private func updateCornerMarkerPositions() {
+        let corners = boundingBox.corners
+        guard cornerMarkerEntities.count == corners.count else {
+            for m in cornerMarkerEntities { m.removeFromParent() }
+            cornerMarkerEntities.removeAll()
+            createCornerMarkers()
+            return
+        }
+        for (index, corner) in corners.enumerated() {
+            cornerMarkerEntities[index].position = corner
+        }
     }
 
     // MARK: - Face Handle Creation
@@ -339,27 +394,20 @@ class BoxVisualization {
         let parentEntity = Entity()
         parentEntity.name = handleType.entityName
 
-        // Create clean capsule handle using a single rounded box
-        var material = UnlitMaterial(color: handleColor)
-
-        // Single rounded box with full corner radius for smooth capsule appearance
+        let material = UnlitMaterial(color: handleColor)
         let capsuleMesh = MeshResource.generateBox(
             size: [handleRadius * 2, handleRadius * 2, handleLength],
             cornerRadius: handleRadius
         )
         let capsuleEntity = ModelEntity(mesh: capsuleMesh, materials: [material])
-
         parentEntity.addChild(capsuleEntity)
 
-        // Add collision (capsule approximated as box)
         let collisionShape = ShapeResource.generateCapsule(height: handleLength, radius: handleCollisionRadius)
         parentEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
 
-        // Set position and orientation
         let localPos = handleType.localPosition(extents: boundingBox.extents)
         parentEntity.position = boundingBox.localToWorld(localPos)
         parentEntity.orientation = calculateHandleOrientation(for: handleType)
-
         parentEntity.isEnabled = isInteractive
 
         return parentEntity
@@ -374,7 +422,6 @@ class BoxVisualization {
 
         for (index, handleType) in handleTypes.enumerated() {
             guard index < faceHandleEntities.count else { continue }
-
             let localPos = handleType.localPosition(extents: boundingBox.extents)
             faceHandleEntities[index].position = boundingBox.localToWorld(localPos)
             faceHandleEntities[index].orientation = calculateHandleOrientation(for: handleType)
@@ -383,42 +430,29 @@ class BoxVisualization {
 
     private func calculateHandleOrientation(for handleType: HandleType) -> simd_quatf {
         let axes = boundingBox.localAxes
-
-        // Capsule default orientation is along Z axis
-        // For edge handles, orient along the edge direction
-        // For face handles (Y), orient perpendicular to the face (up/down)
         let targetDirection: SIMD3<Float>
         switch handleType {
         case .faceNegX, .facePosX:
-            // X edge handles on top face - orient along Z axis (edge direction)
             targetDirection = axes.z
         case .faceNegZ, .facePosZ:
-            // Z edge handles on top face - orient along X axis (edge direction)
             targetDirection = axes.x
         case .faceNegY, .facePosY:
-            // Y handles (top/bottom center) - orient along X axis (horizontal capsule)
             targetDirection = axes.x
         default:
             return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
         }
-
         return calculateOrientation(direction: targetDirection)
     }
 
-    // MARK: - Rotation Handle Creation (Smooth torus arc at bottom corner)
+    // MARK: - Rotation Handle Creation
 
     private func createRotationRing() {
         let handleEntity = Entity()
         handleEntity.name = "rotation_ring"
 
-        // Use same semi-transparent white as edges for consistency
-        var material = UnlitMaterial(color: UIColor(white: 1.0, alpha: 0.6))
-
-        // Arc radius will be calculated based on box size in updateRotationRingTransform
-        // Use a placeholder radius here, it will be updated
+        let material = UnlitMaterial(color: PMTheme.uiCyan.withAlphaComponent(0.6))
         let placeholderRadius: Float = 0.03
 
-        // Create smooth torus arc mesh (quarter circle at corner)
         if let torusMesh = createTorusArcMesh(
             majorRadius: placeholderRadius,
             minorRadius: rotationArcThickness,
@@ -430,21 +464,17 @@ class BoxVisualization {
             handleEntity.addChild(torusEntity)
         }
 
-        // Add small arrow indicators at both ends to show rotation direction
         let arrowSize: Float = 0.004
         let arrowMesh = MeshResource.generateBox(
             size: [arrowSize, arrowSize * 0.5, arrowSize],
             cornerRadius: arrowSize * 0.2
         )
-
-        // Arrow at the end of arc (pointing in rotation direction)
         let arrowHead = ModelEntity(mesh: arrowMesh, materials: [material])
         arrowHead.name = "rotation_arrow"
         arrowHead.position = SIMD3<Float>(0, 0, placeholderRadius)
         arrowHead.orientation = simd_quatf(angle: .pi / 4, axis: SIMD3<Float>(0, 1, 0))
         handleEntity.addChild(arrowHead)
 
-        // Add collision for touch detection
         let collisionShape = ShapeResource.generateBox(
             size: [placeholderRadius * 2.5, 0.02, placeholderRadius * 2.5]
         )
@@ -457,28 +487,24 @@ class BoxVisualization {
         rotationRingEntity = handleEntity
     }
 
-    /// Create a smooth torus arc mesh
     private func createTorusArcMesh(
         majorRadius: Float,
         minorRadius: Float,
         startAngle: Float,
         arcAngle: Float
     ) -> MeshResource? {
-        let majorSegments = 32  // Segments along the arc
-        let minorSegments = 12  // Segments around the tube
+        let majorSegments = 32
+        let minorSegments = 12
 
         var positions: [SIMD3<Float>] = []
         var normals: [SIMD3<Float>] = []
         var uvs: [SIMD2<Float>] = []
         var indices: [UInt32] = []
 
-        // Generate vertices
         for i in 0...majorSegments {
             let majorAngle = startAngle + arcAngle * Float(i) / Float(majorSegments)
             let majorCos = cos(majorAngle)
             let majorSin = sin(majorAngle)
-
-            // Center of tube at this point
             let centerX = majorCos * majorRadius
             let centerZ = majorSin * majorRadius
 
@@ -487,45 +513,25 @@ class BoxVisualization {
                 let minorCos = cos(minorAngle)
                 let minorSin = sin(minorAngle)
 
-                // Position on tube surface
                 let x = centerX + majorCos * minorRadius * minorCos
                 let y = minorRadius * minorSin
                 let z = centerZ + majorSin * minorRadius * minorCos
 
                 positions.append(SIMD3<Float>(x, y, z))
-
-                // Normal points outward from tube center
-                let nx = majorCos * minorCos
-                let ny = minorSin
-                let nz = majorSin * minorCos
-                normals.append(SIMD3<Float>(nx, ny, nz))
-
-                // UV coordinates
-                let u = Float(i) / Float(majorSegments)
-                let v = Float(j) / Float(minorSegments)
-                uvs.append(SIMD2<Float>(u, v))
+                normals.append(SIMD3<Float>(majorCos * minorCos, minorSin, majorSin * minorCos))
+                uvs.append(SIMD2<Float>(Float(i) / Float(majorSegments), Float(j) / Float(minorSegments)))
             }
         }
 
-        // Generate indices
         let minorCount = minorSegments + 1
         for i in 0..<majorSegments {
             for j in 0..<minorSegments {
                 let current = UInt32(i * minorCount + j)
                 let next = UInt32((i + 1) * minorCount + j)
-
-                // Two triangles per quad
-                indices.append(current)
-                indices.append(next)
-                indices.append(current + 1)
-
-                indices.append(current + 1)
-                indices.append(next)
-                indices.append(next + 1)
+                indices.append(contentsOf: [current, next, current + 1, current + 1, next, next + 1])
             }
         }
 
-        // Create mesh descriptor
         var descriptor = MeshDescriptor(name: "torusArc")
         descriptor.positions = MeshBuffer(positions)
         descriptor.normals = MeshBuffer(normals)
@@ -541,22 +547,15 @@ class BoxVisualization {
     }
 
     private func updateRotationRingTransform(_ ringEntity: Entity) {
-        // Calculate arc radius based on box size (proportional to smaller horizontal dimension)
         let arcRadius = min(boundingBox.extents.x, boundingBox.extents.z) * 0.4
 
-        // Position at bottom corner of the box (+X, -Y, +Z corner)
-        // The arc connects the X edge to the Z edge at this corner
         let bottomY = -boundingBox.extents.y
         let cornerX = boundingBox.extents.x
         let cornerZ = boundingBox.extents.z
         let localPos = SIMD3<Float>(cornerX, bottomY, cornerZ)
         ringEntity.position = boundingBox.localToWorld(localPos)
-
-        // Align with box rotation - arc should extend outward from corner
-        // No additional rotation needed since arc naturally goes from +X to +Z direction
         ringEntity.orientation = boundingBox.rotation
 
-        // Update the arc mesh with correct radius
         if let arcEntity = ringEntity.children.first(where: { $0.name == "rotation_arc" }) as? ModelEntity {
             if let newMesh = createTorusArcMesh(
                 majorRadius: arcRadius,
@@ -568,12 +567,10 @@ class BoxVisualization {
             }
         }
 
-        // Update arrow position
         if let arrowEntity = ringEntity.children.first(where: { $0.name == "rotation_arrow" }) as? ModelEntity {
             arrowEntity.position = SIMD3<Float>(0, 0, arcRadius)
         }
 
-        // Update collision size
         let collisionShape = ShapeResource.generateBox(
             size: [arcRadius * 2.5, 0.02, arcRadius * 2.5]
         )
@@ -587,55 +584,48 @@ class BoxVisualization {
         indicatorEntity.name = "floor_distance"
         entity.addChild(indicatorEntity)
         floorDistanceEntity = indicatorEntity
-
         updateFloorDistanceIndicator()
     }
 
     private func updateFloorDistanceIndicator() {
         guard let indicatorEntity = floorDistanceEntity else { return }
 
-        // Remove old children
         for child in indicatorEntity.children {
             child.removeFromParent()
         }
 
-        // Calculate bottom center of box
         let bottomLocalY = -boundingBox.extents.y
         let bottomCenter = boundingBox.localToWorld(SIMD3<Float>(0, bottomLocalY, 0))
-
-        // Distance to floor
         let distanceToFloor = bottomCenter.y - floorY
 
-        // Only show if box is above floor
         guard distanceToFloor > 0.001 else {
             indicatorEntity.isEnabled = false
             return
         }
         indicatorEntity.isEnabled = true
 
-        // Create vertical dashed line from bottom to floor
         let floorPoint = SIMD3<Float>(bottomCenter.x, floorY, bottomCenter.z)
-        let lineHeight = distanceToFloor
 
-        // Create line segments (dashed effect)
+        // Dashed line
         let dashLength: Float = 0.01
         let gapLength: Float = 0.008
         let segmentLength = dashLength + gapLength
-        let numSegments = Int(lineHeight / segmentLength)
+        let numSegments = Int(distanceToFloor / segmentLength)
+
+        let dashColor = PMTheme.uiCyan.withAlphaComponent(0.5)
 
         for i in 0..<max(1, numSegments) {
             let segmentY = floorY + Float(i) * segmentLength + dashLength / 2
             if segmentY > bottomCenter.y { break }
 
             let dashMesh = MeshResource.generateBox(size: [0.001, dashLength, 0.001])
-            var material = UnlitMaterial(color: UIColor(white: 0.8, alpha: 0.7))
-
+            let material = UnlitMaterial(color: dashColor)
             let dashEntity = ModelEntity(mesh: dashMesh, materials: [material])
             dashEntity.position = SIMD3<Float>(bottomCenter.x, segmentY, bottomCenter.z)
             indicatorEntity.addChild(dashEntity)
         }
 
-        // Create distance label
+        // Distance label
         let labelPosition = SIMD3<Float>(bottomCenter.x + 0.02, (bottomCenter.y + floorY) / 2, bottomCenter.z)
         let distanceCm = distanceToFloor * 100
         let labelText = String(format: "%.1f cm", distanceCm)
@@ -643,22 +633,19 @@ class BoxVisualization {
         let textMesh = MeshResource.generateText(
             labelText,
             extrusionDepth: 0.001,
-            font: .systemFont(ofSize: 0.012, weight: .medium),
+            font: .monospacedDigitSystemFont(ofSize: 0.012, weight: .medium),
             containerFrame: .zero,
             alignment: .left,
             lineBreakMode: .byTruncatingTail
         )
-
-        var textMaterial = UnlitMaterial(color: UIColor(white: 0.9, alpha: 0.9))
-
+        let textMaterial = UnlitMaterial(color: PMTheme.uiCyan.withAlphaComponent(0.8))
         let labelEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
         labelEntity.position = labelPosition
         indicatorEntity.addChild(labelEntity)
 
-        // Small floor marker
+        // Floor marker
         let markerMesh = MeshResource.generateBox(size: [0.02, 0.001, 0.02])
-        var markerMaterial = UnlitMaterial(color: UIColor(white: 0.7, alpha: 0.5))
-
+        let markerMaterial = UnlitMaterial(color: PMTheme.uiCyan.withAlphaComponent(0.3))
         let markerEntity = ModelEntity(mesh: markerMesh, materials: [markerMaterial])
         markerEntity.position = floorPoint
         indicatorEntity.addChild(markerEntity)
@@ -690,26 +677,19 @@ class BoxVisualization {
     // MARK: - Dimension Billboard (floating above box)
 
     private func createDimensionLabels() {
-        // Remove existing billboard and action row
         dimensionBillboardEntity?.removeFromParent()
         actionIconRow = nil
 
-        // Create billboard above the box showing all dimensions
         let billboardPos = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y + 0.03, 0)
         dimensionBillboardEntity = createDimensionBillboard(at: billboardPos)
         entity.addChild(dimensionBillboardEntity!)
 
-        // Add action icons below billboard
         updateActionMode(currentActionMode)
-
-        // Active box billboard is always visible (forceShow)
         dimensionBillboardEntity?.isEnabled = true
     }
 
     private func updateDimensionLabelPositions() {
-        guard storedHeight > 0 else { return }  // Labels not yet created
-
-        // Update billboard position - above box top
+        guard storedHeight > 0 else { return }
         if let billboard = dimensionBillboardEntity {
             billboard.position = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y + 0.03, 0)
         }
@@ -722,9 +702,9 @@ class BoxVisualization {
         let cubicMeters = storedHeight * storedLength * storedWidth
         let accentBarWidth: Float = 0.0015
         let padding: Float = 0.005
-        let innerPadding: Float = 0.003  // Space between accent bar and text
+        let innerPadding: Float = 0.003
 
-        // -- Header: Box ID (larger, bold) --
+        // -- Header: Box ID --
         let idText = String(format: "#%03d", boxId)
         let idMesh = MeshResource.generateText(
             idText,
@@ -739,7 +719,7 @@ class BoxVisualization {
         let idWidth = idMesh.bounds.extents.x
         let idHeight = idMesh.bounds.extents.y
 
-        // -- Body: detail lines (smaller) --
+        // -- Body --
         let lVal = formatDimensionValue(storedLength)
         let wVal = formatDimensionValue(storedWidth)
         let hVal = formatDimensionValue(storedHeight)
@@ -766,8 +746,8 @@ class BoxVisualization {
         let bodyWidth = bodyMesh.bounds.extents.x
         let bodyHeight = bodyMesh.bounds.extents.y
 
-        // -- Layout calculation --
-        let gap: Float = 0.003  // Gap between header and body
+        // -- Layout --
+        let gap: Float = 0.003
         let contentWidth = max(idWidth, bodyWidth)
         let contentHeight = idHeight + gap + bodyHeight
         let totalWidth = accentBarWidth + innerPadding + contentWidth + padding * 2
@@ -780,7 +760,7 @@ class BoxVisualization {
             cornerRadius: cornerRadius
         )
         var backgroundMaterial = UnlitMaterial(color: dimensionLabelBackgroundColor)
-        backgroundMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.75))
+        backgroundMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.85))
         let backgroundEntity = ModelEntity(mesh: backgroundMesh, materials: [backgroundMaterial])
 
         // -- Accent bar (left edge stripe) --
@@ -792,25 +772,34 @@ class BoxVisualization {
         let accentMaterial = UnlitMaterial(color: billboardAccentColor)
         let accentEntity = ModelEntity(mesh: accentMesh, materials: [accentMaterial])
 
-        // -- Position everything centered on container origin --
+        // -- Top border line (thin cyan line at top edge) --
+        let topBorderMesh = MeshResource.generateBox(
+            size: [totalWidth * 0.9, 0.0005, 0.0012]
+        )
+        var topBorderMaterial = UnlitMaterial(color: billboardTopBorderColor)
+        topBorderMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.40))
+        let topBorderEntity = ModelEntity(mesh: topBorderMesh, materials: [topBorderMaterial])
+
+        // -- Position everything --
         let leftEdge = -totalWidth / 2
         let accentX = leftEdge + padding / 2 + accentBarWidth / 2
         let textLeftX = leftEdge + padding + accentBarWidth + innerPadding
 
         backgroundEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.001)
         accentEntity.position = SIMD3<Float>(accentX, totalHeight / 2, 0.0)
+        topBorderEntity.position = SIMD3<Float>(0, totalHeight - 0.0003, 0.0005)
         idEntity.position = SIMD3<Float>(textLeftX, padding + bodyHeight + gap, 0)
         bodyEntity.position = SIMD3<Float>(textLeftX, padding, 0)
 
         containerEntity.addChild(backgroundEntity)
         containerEntity.addChild(accentEntity)
+        containerEntity.addChild(topBorderEntity)
         containerEntity.addChild(idEntity)
         containerEntity.addChild(bodyEntity)
 
         return containerEntity
     }
 
-    /// Format dimension value without unit suffix (unit shown once at end of line)
     private func formatDimensionValue(_ meters: Float) -> String {
         let value = storedUnit.convert(meters: meters)
         if value >= 100 {

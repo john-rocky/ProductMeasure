@@ -57,12 +57,12 @@ struct ARMeasurementView: View {
                                     HStack(spacing: 4) {
                                         Image(systemName: "trash")
                                         Text("\(viewModel.completedBoxCount)")
-                                            .font(.caption)
+                                            .font(PMTheme.mono(11))
                                     }
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 8)
-                                    .background(Color.red.opacity(0.8))
+                                    .background(PMTheme.red.opacity(0.8))
                                     .clipShape(Capsule())
                                 }
                             }
@@ -370,24 +370,29 @@ struct StatusBar: View {
     let isProcessing: Bool
 
     var body: some View {
-        HStack {
+        HStack(spacing: 8) {
             if isProcessing {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(0.8)
+                ScanningIndicator()
+                    .frame(width: 18, height: 18)
                 Text("Processing...")
-                    .foregroundColor(.white)
+                    .font(PMTheme.mono(13))
+                    .foregroundColor(PMTheme.textPrimary)
             } else {
                 Image(systemName: trackingStatusIcon)
                     .foregroundColor(trackingStatusColor)
+                    .symbolEffect(.pulse, options: .repeating, value: trackingMessage == "Ready to measure")
                 Text(trackingMessage)
-                    .foregroundColor(.white)
+                    .font(PMTheme.mono(13))
+                    .foregroundColor(PMTheme.textPrimary)
             }
         }
-        .font(.subheadline)
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.black.opacity(0.6))
+        .background(PMTheme.surfaceDark.opacity(0.85))
+        .overlay(
+            Capsule()
+                .strokeBorder(PMTheme.cyan.opacity(0.30), lineWidth: 0.5)
+        )
         .clipShape(Capsule())
     }
 
@@ -403,11 +408,33 @@ struct StatusBar: View {
 
     private var trackingStatusColor: Color {
         if trackingMessage == "Ready to measure" {
-            return .green
+            return PMTheme.green
         } else if trackingMessage.contains("not") || trackingMessage.contains("Not") {
-            return .red
+            return PMTheme.red
         } else {
-            return .yellow
+            return PMTheme.amber
+        }
+    }
+}
+
+// MARK: - Scanning Indicator
+
+struct ScanningIndicator: View {
+    @State private var rotation: Double = 0
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(PMTheme.cyan.opacity(0.2), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: 0.3)
+                .stroke(PMTheme.cyan, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(rotation))
+        }
+        .onAppear {
+            withAnimation(.linear(duration: 1.0).repeatForever(autoreverses: false)) {
+                rotation = 360
+            }
         }
     }
 }
@@ -416,23 +443,46 @@ struct StatusBar: View {
 
 struct InstructionCard: View {
     var mode: SelectionMode = .tap
+    @State private var iconScale: CGFloat = 1.0
 
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: mode == .tap ? "hand.tap.fill" : "rectangle.dashed")
-                .font(.title)
+        VStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(PMTheme.cyan.opacity(0.12))
+                    .frame(width: 52, height: 52)
+                    .scaleEffect(iconScale)
+
+                Image(systemName: mode == .tap ? "hand.tap.fill" : "rectangle.dashed")
+                    .font(.title2)
+                    .foregroundStyle(PMTheme.cyanGradient)
+                    .scaleEffect(iconScale)
+            }
+
             Text(mode == .tap ? "Tap on an object to measure" : "Draw a box to select")
-                .font(.headline)
+                .font(PMTheme.mono(14, weight: .semibold))
+                .foregroundColor(PMTheme.textPrimary)
+
             Text(mode == .tap
-                 ? "Point your device at an object and tap to measure its dimensions"
-                 : "Drag to draw a rectangle around the object you want to measure")
-                .font(.caption)
+                 ? "Point your device at an object and tap"
+                 : "Drag to draw a rectangle around the object")
+                .font(PMTheme.mono(11))
                 .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
+                .foregroundColor(PMTheme.textDimmed)
         }
-        .padding()
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(PMTheme.surfaceGlass)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(PMTheme.cyan.opacity(0.20), lineWidth: 0.5)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                iconScale = 1.08
+            }
+        }
     }
 }
 
@@ -761,8 +811,8 @@ class ARMeasurementViewModel: ObservableObject {
         // Get camera transform for starting position
         let cameraTransform = frame.camera.transform
 
-        // Phase 1: Hide 2D brackets and create 3D rect at camera position
-        animationPhase = .flyingToBottom
+        // Phase 1: Edge trace - draw bottom edges sequentially
+        animationPhase = .edgeTrace
 
         // Create animated box visualization
         animatedBoxVisualization = AnimatedBoxVisualization(boundingBox: boundingBox)
@@ -771,7 +821,7 @@ class ARMeasurementViewModel: ObservableObject {
             return
         }
 
-        // Setup the 3D rect at camera position (facing camera, matching bracket size)
+        // Setup the 3D rect at camera position
         animatedBox.setupAtCameraPosition(
             cameraTransform: cameraTransform,
             distanceFromCamera: 0.5,
@@ -779,47 +829,56 @@ class ARMeasurementViewModel: ObservableObject {
         )
         animatedBoxAnchor = sessionManager.addEntityWithAnchor(animatedBox.entity)
 
-        // Animate flying to bottom position
-        animatedBox.animateFlyToBottom(duration: BoxAnimationTiming.flyToBottom) { [weak self] in
+        // Phase 1: Edge trace animation
+        animatedBox.animateEdgeTrace(duration: BoxAnimationTiming.edgeTrace) { [weak self] in
             guard let self = self else { return }
 
-            // Phase 2: Grow vertical edges
-            self.animationPhase = .growingVertical
+            // Phase 2: Fly to bottom position
+            self.animationPhase = .flyingToBottom
 
-            animatedBox.animateGrowVertical(duration: BoxAnimationTiming.growVertical) { [weak self] in
+            animatedBox.animateFlyToBottom(duration: BoxAnimationTiming.flyToBottom) { [weak self] in
                 guard let self = self else { return }
 
-                // Phase 3: Complete - swap to regular BoxVisualization for editing
-                self.animationPhase = .complete
+                // Phase 3: Grow vertical edges
+                self.animationPhase = .growingVertical
 
-                // Remove animated visualization and its anchor
-                if let anchor = self.animatedBoxAnchor {
-                    self.sessionManager.removeAnchor(anchor)
+                animatedBox.animateGrowVertical(duration: BoxAnimationTiming.growVertical) { [weak self] in
+                    guard let self = self else { return }
+
+                    // Phase 4: Completion pulse
+                    self.animationPhase = .completionPulse
+
+                    animatedBox.animateCompletionPulse(duration: BoxAnimationTiming.completionPulse) { [weak self] in
+                        guard let self = self else { return }
+
+                        // Phase 5: Complete - swap to regular BoxVisualization
+                        self.animationPhase = .complete
+
+                        if let anchor = self.animatedBoxAnchor {
+                            self.sessionManager.removeAnchor(anchor)
+                        }
+                        self.animatedBoxAnchor = nil
+                        self.animatedBoxVisualization = nil
+
+                        var adjustedBox = boundingBox
+                        if let floorY = floorY {
+                            adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                        }
+
+                        var adjustedResult = self.measurementCalculator.recalculate(
+                            boundingBox: adjustedBox,
+                            quality: result.quality,
+                            axisMapping: result.axisMapping
+                        )
+                        adjustedResult.pointCloud = result.pointCloud
+                        adjustedResult.debugMaskImage = result.debugMaskImage
+                        adjustedResult.debugDepthImage = result.debugDepthImage
+                        self.currentMeasurement = adjustedResult
+                        self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY, unit: self.currentUnit)
+
+                        self.isProcessing = false
+                    }
                 }
-                self.animatedBoxAnchor = nil
-                self.animatedBoxVisualization = nil
-
-                // Show regular editable box visualization
-                // Apply bottom extension if within threshold of floor
-                var adjustedBox = boundingBox
-                if let floorY = floorY {
-                    adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
-                }
-
-                // Recalculate measurement with adjusted box dimensions
-                // Use the original axis mapping from the initial measurement
-                var adjustedResult = self.measurementCalculator.recalculate(
-                    boundingBox: adjustedBox,
-                    quality: result.quality,
-                    axisMapping: result.axisMapping
-                )
-                adjustedResult.pointCloud = result.pointCloud
-                adjustedResult.debugMaskImage = result.debugMaskImage
-                adjustedResult.debugDepthImage = result.debugDepthImage
-                self.currentMeasurement = adjustedResult
-                self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY, unit: self.currentUnit)
-
-                self.isProcessing = false
             }
         }
     }

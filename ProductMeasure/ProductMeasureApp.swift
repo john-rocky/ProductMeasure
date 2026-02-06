@@ -26,6 +26,8 @@ struct ProductMeasureApp: App {
     var body: some Scene {
         WindowGroup {
             MainTabView()
+                .preferredColorScheme(.dark)
+                .tint(PMTheme.cyan)
         }
         .modelContainer(sharedModelContainer)
     }

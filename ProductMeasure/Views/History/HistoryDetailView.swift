@@ -42,6 +42,7 @@ struct HistoryDetailView: View {
                 }
                 .padding()
             }
+            .background(PMTheme.surfaceDark)
             .navigationTitle("Measurement Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -92,16 +93,17 @@ struct HistoryDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             } else {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.systemGray6))
+                    .fill(PMTheme.surfaceCard)
                     .frame(height: 200)
                     .overlay {
                         VStack {
                             Image(systemName: "cube")
                                 .font(.largeTitle)
+                                .foregroundColor(PMTheme.cyan.opacity(0.30))
                             Text("No image available")
-                                .font(.caption)
+                                .font(PMTheme.mono(11))
+                                .foregroundColor(PMTheme.textSecondary)
                         }
-                        .foregroundColor(.secondary)
                     }
             }
         }
@@ -109,8 +111,7 @@ struct HistoryDetailView: View {
 
     private var dimensionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Dimensions")
-                .font(.headline)
+            sectionHeader("DIMENSIONS")
 
             HStack(spacing: 16) {
                 dimensionCard(label: "Length", value: measurement.lengthMeters)
@@ -124,15 +125,19 @@ struct HistoryDetailView: View {
     private func dimensionCard(label: String, value: Float) -> some View {
         VStack(spacing: 4) {
             Text(label)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(PMTheme.mono(11))
+                .foregroundColor(PMTheme.cyan)
             Text(formatDimension(value))
-                .font(.title3)
-                .fontWeight(.semibold)
+                .font(PMTheme.mono(16, weight: .semibold))
+                .foregroundColor(PMTheme.textPrimary)
         }
         .frame(maxWidth: .infinity)
         .padding()
-        .background(Color(.systemGray6))
+        .background(PMTheme.surfaceCard)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(PMTheme.cyan.opacity(0.15), lineWidth: 0.5)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
@@ -140,59 +145,84 @@ struct HistoryDetailView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Bounding Box Volume")
-                    .font(.headline)
+                    .font(PMTheme.mono(14, weight: .semibold))
+                    .foregroundColor(PMTheme.textPrimary)
                 Text("(Estimated)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(PMTheme.mono(11))
+                    .foregroundColor(PMTheme.textSecondary)
             }
 
             Spacer()
 
             Text(measurement.formattedVolume(unit: measurementUnit))
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(PMTheme.mono(20, weight: .semibold))
+                .foregroundColor(PMTheme.cyan)
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(PMTheme.surfaceCard)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(PMTheme.cyan.opacity(0.20), lineWidth: 0.5)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private var qualitySection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Quality Metrics")
-                .font(.headline)
+            sectionHeader("QUALITY METRICS")
 
-            VStack(spacing: 8) {
-                qualityRow(label: "Overall Quality", value: measurement.quality.overallQuality.rawValue.capitalized)
+            VStack(spacing: 0) {
+                qualityRow(label: "Overall Quality", value: measurement.quality.overallQuality.rawValue.capitalized, isFirst: true)
                 qualityRow(label: "Depth Coverage", value: String(format: "%.0f%%", measurement.depthCoverage * 100))
                 qualityRow(label: "Depth Confidence", value: String(format: "%.0f%%", measurement.depthConfidence * 100))
                 qualityRow(label: "Point Count", value: "\(measurement.pointCount)")
-                qualityRow(label: "Tracking State", value: measurement.trackingStateDescription)
+                qualityRow(label: "Tracking State", value: measurement.trackingStateDescription, isLast: true)
             }
+            .background(PMTheme.surfaceCard)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(PMTheme.cyan.opacity(0.10), lineWidth: 0.5)
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func qualityRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .foregroundColor(.secondary)
-            Spacer()
-            Text(value)
+    private func qualityRow(label: String, value: String, isFirst: Bool = false, isLast: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            if !isFirst {
+                Divider()
+                    .background(PMTheme.surfaceElevated)
+            }
+            HStack {
+                Text(label)
+                    .font(PMTheme.mono(13))
+                    .foregroundColor(PMTheme.textSecondary)
+                Spacer()
+                Text(value)
+                    .font(PMTheme.mono(13, weight: .medium))
+                    .foregroundColor(PMTheme.textPrimary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
         }
-        .font(.subheadline)
     }
 
     private var notesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Notes")
-                .font(.headline)
+            sectionHeader("NOTES")
 
             TextEditor(text: $notes)
+                .font(PMTheme.mono(13))
                 .frame(minHeight: 80)
                 .padding(8)
-                .background(Color(.systemGray6))
+                .scrollContentBackground(.hidden)
+                .background(PMTheme.surfaceCard)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(PMTheme.cyan.opacity(0.10), lineWidth: 0.5)
+                )
                 .onChange(of: notes) { _, newValue in
                     measurement.notes = newValue
                 }
@@ -202,30 +232,52 @@ struct HistoryDetailView: View {
 
     private var metadataSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Details")
-                .font(.headline)
+            sectionHeader("DETAILS")
 
-            VStack(spacing: 8) {
-                metadataRow(label: "Date", value: formattedDate)
+            VStack(spacing: 0) {
+                metadataRow(label: "Date", value: formattedDate, isFirst: true)
                 metadataRow(label: "Mode", value: measurement.measurementMode.displayName)
-                metadataRow(label: "ID", value: String(measurement.id.uuidString.prefix(8)))
+                metadataRow(label: "ID", value: String(measurement.id.uuidString.prefix(8)), isLast: true)
             }
+            .background(PMTheme.surfaceCard)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(PMTheme.cyan.opacity(0.10), lineWidth: 0.5)
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func metadataRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .foregroundColor(.secondary)
-            Spacer()
-            Text(value)
-                .foregroundColor(.primary)
+    private func metadataRow(label: String, value: String, isFirst: Bool = false, isLast: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            if !isFirst {
+                Divider()
+                    .background(PMTheme.surfaceElevated)
+            }
+            HStack {
+                Text(label)
+                    .font(PMTheme.mono(13))
+                    .foregroundColor(PMTheme.textSecondary)
+                Spacer()
+                Text(value)
+                    .font(PMTheme.mono(13, weight: .medium))
+                    .foregroundColor(PMTheme.textPrimary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
         }
-        .font(.subheadline)
     }
 
     // MARK: - Helpers
+
+    @ViewBuilder
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(PMTheme.mono(11, weight: .bold))
+            .foregroundColor(PMTheme.cyan)
+            .padding(.horizontal, 4)
+    }
 
     private var formattedDate: String {
         let formatter = DateFormatter()
@@ -274,10 +326,11 @@ struct ShareSheet: View {
 
                 // Share text preview
                 Text(shareText)
-                    .font(.subheadline)
+                    .font(PMTheme.mono(13))
+                    .foregroundColor(PMTheme.textPrimary)
                     .multilineTextAlignment(.center)
                     .padding()
-                    .background(Color(.systemGray6))
+                    .background(PMTheme.surfaceCard)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 Button("Share") {
@@ -289,6 +342,7 @@ struct ShareSheet: View {
                 Spacer()
             }
             .padding()
+            .background(PMTheme.surfaceDark)
             .navigationTitle("Share Measurement")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -21,48 +21,46 @@ enum ActionType: String, CaseIterable {
 /// Configuration for a single action icon
 struct ActionIconConfig {
     let type: ActionType
-    let label: String
+    let sfSymbol: String
     let color: UIColor
 }
 
-/// Utility for building 3D pill-shaped action icon rows
+/// Utility for building 3D pill-shaped action icon rows with SF Symbol icons
 enum ActionIconBuilder {
     // MARK: - Presets
 
     /// Actions for active box in normal mode: Discard, Edit, Save
     static let activeNormalActions: [ActionIconConfig] = [
-        ActionIconConfig(type: .discard, label: "X", color: UIColor(red: 0.9, green: 0.2, blue: 0.2, alpha: 1.0)),
-        ActionIconConfig(type: .edit, label: "Ed", color: UIColor(red: 0.95, green: 0.6, blue: 0.1, alpha: 1.0)),
-        ActionIconConfig(type: .save, label: "OK", color: UIColor(red: 0.2, green: 0.8, blue: 0.3, alpha: 1.0)),
+        ActionIconConfig(type: .discard, sfSymbol: "xmark", color: PMTheme.uiRed),
+        ActionIconConfig(type: .edit, sfSymbol: "pencil", color: PMTheme.uiAmber),
+        ActionIconConfig(type: .save, sfSymbol: "checkmark", color: PMTheme.uiGreen),
     ]
 
     /// Actions for active box in editing mode: Cancel, Fit, Done
     static let activeEditActions: [ActionIconConfig] = [
-        ActionIconConfig(type: .cancel, label: "X", color: UIColor(red: 0.9, green: 0.2, blue: 0.2, alpha: 1.0)),
-        ActionIconConfig(type: .fit, label: "Fit", color: UIColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 1.0)),
-        ActionIconConfig(type: .done, label: "OK", color: UIColor(red: 0.2, green: 0.8, blue: 0.3, alpha: 1.0)),
+        ActionIconConfig(type: .cancel, sfSymbol: "xmark", color: PMTheme.uiRed),
+        ActionIconConfig(type: .fit, sfSymbol: "square.resize", color: PMTheme.uiBlue),
+        ActionIconConfig(type: .done, sfSymbol: "checkmark", color: PMTheme.uiGreen),
     ]
 
     /// Actions for completed box: Re-edit, Delete
     static let completedActions: [ActionIconConfig] = [
-        ActionIconConfig(type: .reEdit, label: "Ed", color: UIColor(red: 0.95, green: 0.6, blue: 0.1, alpha: 1.0)),
-        ActionIconConfig(type: .delete, label: "X", color: UIColor(red: 0.9, green: 0.2, blue: 0.2, alpha: 1.0)),
+        ActionIconConfig(type: .reEdit, sfSymbol: "pencil", color: PMTheme.uiAmber),
+        ActionIconConfig(type: .delete, sfSymbol: "trash", color: PMTheme.uiRed),
     ]
 
     // MARK: - Constants
 
-    private static let pillWidth: Float = 0.012   // 12mm
-    private static let pillHeight: Float = 0.008   // 8mm
-    private static let pillDepth: Float = 0.002    // 2mm depth
-    private static let pillSpacing: Float = 0.004  // 4mm between pills
-    private static let fontSize: CGFloat = 0.005   // 5pt text
-    private static let collisionScale: Float = 1.5 // Hit area enlargement
+    private static let pillWidth: Float = 0.012
+    private static let pillHeight: Float = 0.008
+    private static let pillDepth: Float = 0.002
+    private static let pillSpacing: Float = 0.004
+    private static let iconSize: CGFloat = 24
+    private static let collisionScale: Float = 1.5
 
     // MARK: - Public Methods
 
     /// Create a horizontal row of action icon pills
-    /// - Parameter actions: Array of action configs to display
-    /// - Returns: Entity containing the row of pills
     static func createActionRow(actions: [ActionIconConfig]) -> Entity {
         let rowEntity = Entity()
         rowEntity.name = "action_row"
@@ -81,8 +79,6 @@ enum ActionIconBuilder {
     }
 
     /// Parse an entity name to determine the action type
-    /// - Parameter entityName: The name of the hit entity
-    /// - Returns: ActionType if the entity is an action icon
     static func parseActionType(entityName: String) -> ActionType? {
         return ActionType(rawValue: entityName)
     }
@@ -105,32 +101,24 @@ enum ActionIconBuilder {
             cornerRadius: cornerRadius
         )
         var bgMaterial = UnlitMaterial(color: config.color)
-        bgMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.9))
+        bgMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.85))
         let bgEntity = ModelEntity(mesh: bgMesh, materials: [bgMaterial])
         bgEntity.name = config.type.rawValue
         pillParent.addChild(bgEntity)
 
-        // Text label (white, centered)
-        let textMesh = MeshResource.generateText(
-            config.label,
-            extrusionDepth: 0.0005,
-            font: .systemFont(ofSize: fontSize, weight: .bold),
-            containerFrame: .zero,
-            alignment: .center,
-            lineBreakMode: .byTruncatingTail
-        )
-        let textMaterial = UnlitMaterial(color: .white)
-        let textEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
-
-        // Center text on pill
-        let textBounds = textMesh.bounds.extents
-        textEntity.position = SIMD3<Float>(
-            -textBounds.x / 2,
-            -textBounds.y / 2,
-            pillDepth / 2 + 0.0003
-        )
-        textEntity.name = config.type.rawValue
-        pillParent.addChild(textEntity)
+        // SF Symbol icon rendered as texture
+        if let textureResource = renderSFSymbolTexture(name: config.sfSymbol, size: iconSize) {
+            let iconWidth: Float = 0.006
+            let iconHeight: Float = 0.006
+            let iconMesh = MeshResource.generatePlane(width: iconWidth, height: iconHeight)
+            var iconMaterial = UnlitMaterial()
+            iconMaterial.color = .init(tint: .white, texture: .init(textureResource))
+            iconMaterial.blending = .transparent(opacity: .init(floatLiteral: 1.0))
+            let iconEntity = ModelEntity(mesh: iconMesh, materials: [iconMaterial])
+            iconEntity.name = config.type.rawValue
+            iconEntity.position = SIMD3<Float>(0, 0, pillDepth / 2 + 0.0003)
+            pillParent.addChild(iconEntity)
+        }
 
         // Collision component (enlarged hit area)
         let collisionShape = ShapeResource.generateBox(
@@ -139,5 +127,34 @@ enum ActionIconBuilder {
         pillParent.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
 
         return pillParent
+    }
+
+    /// Render an SF Symbol into a TextureResource for use on a 3D plane
+    private static func renderSFSymbolTexture(name: String, size: CGFloat) -> TextureResource? {
+        let config = UIImage.SymbolConfiguration(pointSize: size, weight: .bold)
+        guard let symbolImage = UIImage(systemName: name, withConfiguration: config) else {
+            return nil
+        }
+
+        let imageSize = CGSize(width: size * 2, height: size * 2)
+        let renderer = UIGraphicsImageRenderer(size: imageSize)
+        let renderedImage = renderer.image { context in
+            // Clear background (transparent)
+            UIColor.clear.setFill()
+            context.fill(CGRect(origin: .zero, size: imageSize))
+
+            // Draw symbol centered in white
+            let tintedImage = symbolImage.withTintColor(.white, renderingMode: .alwaysOriginal)
+            let symbolSize = tintedImage.size
+            let origin = CGPoint(
+                x: (imageSize.width - symbolSize.width) / 2,
+                y: (imageSize.height - symbolSize.height) / 2
+            )
+            tintedImage.draw(at: origin)
+        }
+
+        guard let cgImage = renderedImage.cgImage else { return nil }
+
+        return try? TextureResource.generate(from: cgImage, options: .init(semantic: .color))
     }
 }

@@ -8,12 +8,13 @@ import UIKit
 import simd
 
 /// Simplified visualization for saved/completed boxes
-/// Shows edges and dimension billboard only (no handles or rotation ring)
+/// Shows dual-layer edges, corner markers, and dimension billboard (no handles or rotation ring)
 class CompletedBoxVisualization {
     // MARK: - Properties
 
     private(set) var entity: Entity
-    private var edgeEntities: [ModelEntity] = []
+    private var edgeEntities: [Entity] = []
+    private var cornerMarkerEntities: [ModelEntity] = []
     private var dimensionBillboardEntity: Entity?
     private var billboardBackgroundEntity: ModelEntity?
 
@@ -38,16 +39,23 @@ class CompletedBoxVisualization {
 
     // MARK: - Constants
 
-    // White wireframe (same as BoxVisualization)
-    private let lineColor: UIColor = UIColor(white: 1.0, alpha: 0.5)
-    private let lineRadius: Float = 0.0004  // Thin (0.4mm)
+    // Dual-layer edges (dimmer than active box)
+    private let innerEdgeColor: UIColor = PMTheme.uiEdgeInnerDim
+    private let outerEdgeColor: UIColor = PMTheme.uiEdgeOuterDim
+    private let innerEdgeRadius: Float = PMTheme.innerEdgeRadius
+    private let outerEdgeRadius: Float = PMTheme.outerEdgeRadius
+
+    // Corner markers (smaller, dimmer)
+    private let cornerMarkerRadius: Float = PMTheme.cornerMarkerRadiusSmall
+    private let cornerMarkerColor: UIColor = PMTheme.uiCornerMarkerDim
 
     // Label styling
     private let billboardIdFontSize: CGFloat = 0.010
     private let billboardBodyFontSize: CGFloat = 0.007
-    private let labelTextColor: UIColor = UIColor(white: 1.0, alpha: 0.95)
-    private let labelBackgroundColor: UIColor = UIColor(white: 0.0, alpha: 0.75)
-    private let billboardAccentColor: UIColor = UIColor(red: 0.3, green: 0.8, blue: 1.0, alpha: 1.0)
+    private let labelTextColor: UIColor = PMTheme.uiBillboardText
+    private let labelBackgroundColor: UIColor = PMTheme.uiBillboardBg
+    private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
+    private let billboardTopBorderColor: UIColor = PMTheme.uiBillboardTopBorder
 
     // MARK: - Initialization
 
@@ -79,7 +87,6 @@ class CompletedBoxVisualization {
 
     // MARK: - Public Methods
 
-    /// Update billboard orientation to face the camera
     func updateLabelOrientations(cameraPosition: SIMD3<Float>) {
         guard let billboard = dimensionBillboardEntity else { return }
 
@@ -93,16 +100,13 @@ class CompletedBoxVisualization {
         }
     }
 
-    /// Show or hide the dimension billboard
     func setDimensionBillboardVisible(_ visible: Bool) {
         dimensionBillboardEntity?.isEnabled = visible
-        // Hide action icons when billboard is hidden
         if !visible {
             hideActionIcons()
         }
     }
 
-    /// Show action icons below the billboard
     func showActionIcons() {
         guard actionIconRow == nil, let billboard = dimensionBillboardEntity else { return }
 
@@ -112,18 +116,15 @@ class CompletedBoxVisualization {
         actionIconRow = row
     }
 
-    /// Hide action icons
     func hideActionIcons() {
         actionIconRow?.removeFromParent()
         actionIconRow = nil
     }
 
-    /// Whether action icons are currently showing
     var isShowingActionIcons: Bool {
         actionIconRow != nil
     }
 
-    /// Convert stored data back to a MeasurementResult for re-editing
     func toMeasurementResult() -> MeasurementCalculator.MeasurementResult {
         var result = MeasurementCalculator.MeasurementResult(
             boundingBox: boundingBox,
@@ -140,7 +141,6 @@ class CompletedBoxVisualization {
         return result
     }
 
-    /// Check if this box is visible from camera
     func isVisibleFromCamera(cameraPosition: SIMD3<Float>, cameraForward: SIMD3<Float>) -> Bool {
         let toBox = boundingBox.center - cameraPosition
         let distance = simd_length(toBox)
@@ -149,7 +149,6 @@ class CompletedBoxVisualization {
         return dot > 0.3
     }
 
-    /// Get the apparent size of this box from the camera
     func apparentSizeFromCamera(cameraPosition: SIMD3<Float>) -> Float {
         let distance = simd_length(boundingBox.center - cameraPosition)
         if distance < 0.01 { return 0 }
@@ -161,34 +160,69 @@ class CompletedBoxVisualization {
 
     private func createVisualization() {
         createEdges()
+        createCornerMarkers()
         createDimensionBillboard()
     }
 
-    // MARK: - Edge Creation
+    // MARK: - Dual-Layer Edge Creation
 
     private func createEdges() {
         let edges = boundingBox.edges
 
         for (index, (start, end)) in edges.enumerated() {
-            let edgeEntity = createEdgeEntity(from: start, to: end, index: index)
-            entity.addChild(edgeEntity)
-            edgeEntities.append(edgeEntity)
+            let edgeGroup = createDualEdgeEntity(from: start, to: end, index: index)
+            entity.addChild(edgeGroup)
+            edgeEntities.append(edgeGroup)
         }
     }
 
-    private func createEdgeEntity(from start: SIMD3<Float>, to end: SIMD3<Float>, index: Int) -> ModelEntity {
+    private func createDualEdgeEntity(from start: SIMD3<Float>, to end: SIMD3<Float>, index: Int) -> Entity {
+        let parent = Entity()
+        parent.name = "completed_edge_\(index)"
+
         let direction = end - start
         let length = simd_length(direction)
+        let midpoint = (start + end) / 2
+        let orientation = calculateOrientation(direction: direction)
 
-        let mesh = MeshResource.generateBox(size: [lineRadius * 2, lineRadius * 2, length])
-        let material = UnlitMaterial(color: lineColor)
+        // Outer glow layer
+        let outerMesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
+        var outerMaterial = UnlitMaterial(color: outerEdgeColor)
+        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.10))
+        let outerEntity = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
+        outerEntity.name = "completed_edge_outer_\(index)"
+        outerEntity.position = midpoint
+        outerEntity.orientation = orientation
 
-        let edgeEntity = ModelEntity(mesh: mesh, materials: [material])
-        edgeEntity.name = "completed_edge_\(index)"
-        edgeEntity.position = (start + end) / 2
-        edgeEntity.orientation = calculateOrientation(direction: direction)
+        // Inner line
+        let innerMesh = MeshResource.generateBox(size: [innerEdgeRadius * 2, innerEdgeRadius * 2, length])
+        var innerMaterial = UnlitMaterial(color: innerEdgeColor)
+        innerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.70))
+        let innerEntity = ModelEntity(mesh: innerMesh, materials: [innerMaterial])
+        innerEntity.name = "completed_edge_inner_\(index)"
+        innerEntity.position = midpoint
+        innerEntity.orientation = orientation
 
-        return edgeEntity
+        parent.addChild(outerEntity)
+        parent.addChild(innerEntity)
+
+        return parent
+    }
+
+    // MARK: - Corner Markers
+
+    private func createCornerMarkers() {
+        let corners = boundingBox.corners
+        for (index, corner) in corners.enumerated() {
+            let sphere = ModelEntity(
+                mesh: MeshResource.generateSphere(radius: cornerMarkerRadius),
+                materials: [UnlitMaterial(color: cornerMarkerColor)]
+            )
+            sphere.name = "completed_corner_\(index)"
+            sphere.position = corner
+            entity.addChild(sphere)
+            cornerMarkerEntities.append(sphere)
+        }
     }
 
     // MARK: - Dimension Billboard
@@ -204,7 +238,7 @@ class CompletedBoxVisualization {
         let padding: Float = 0.005
         let innerPadding: Float = 0.003
 
-        // -- Header: Box ID (larger, bold, accent color) --
+        // -- Header --
         let idText = String(format: "#%03d", boxId)
         let idMesh = MeshResource.generateText(
             idText,
@@ -219,7 +253,7 @@ class CompletedBoxVisualization {
         let idWidth = idMesh.bounds.extents.x
         let idHeight = idMesh.bounds.extents.y
 
-        // -- Body: detail lines (smaller) --
+        // -- Body --
         let lVal = formatDimension(length)
         let wVal = formatDimension(width)
         let hVal = formatDimension(height)
@@ -246,7 +280,7 @@ class CompletedBoxVisualization {
         let bodyWidth = bodyMesh.bounds.extents.x
         let bodyHeight = bodyMesh.bounds.extents.y
 
-        // -- Layout calculation --
+        // -- Layout --
         let gap: Float = 0.003
         let contentWidth = max(idWidth, bodyWidth)
         let contentHeight = idHeight + gap + bodyHeight
@@ -254,24 +288,24 @@ class CompletedBoxVisualization {
         let totalHeight = contentHeight + padding * 2
         let cornerRadius = min(totalHeight, totalWidth) * 0.12
 
-        // -- Background (dark glass) with collision for tap detection --
+        // -- Background --
         let backgroundMesh = MeshResource.generateBox(
             size: [totalWidth, totalHeight, 0.001],
             cornerRadius: cornerRadius
         )
         var backgroundMaterial = UnlitMaterial(color: labelBackgroundColor)
-        backgroundMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.75))
+        backgroundMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.85))
         let backgroundEntity = ModelEntity(mesh: backgroundMesh, materials: [backgroundMaterial])
         backgroundEntity.name = "completed_billboard_bg"
 
-        // Add collision component for tap detection on billboard
+        // Collision for tap detection
         let collisionShape = ShapeResource.generateBox(
             size: [totalWidth * 1.2, totalHeight * 1.2, 0.005]
         )
         backgroundEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
         billboardBackgroundEntity = backgroundEntity
 
-        // -- Accent bar (left edge stripe) --
+        // -- Accent bar --
         let accentHeight = contentHeight + padding
         let accentMesh = MeshResource.generateBox(
             size: [accentBarWidth, accentHeight, 0.0015],
@@ -280,18 +314,28 @@ class CompletedBoxVisualization {
         let accentMaterial = UnlitMaterial(color: billboardAccentColor)
         let accentEntity = ModelEntity(mesh: accentMesh, materials: [accentMaterial])
 
-        // -- Position everything centered on container origin --
+        // -- Top border line --
+        let topBorderMesh = MeshResource.generateBox(
+            size: [totalWidth * 0.9, 0.0005, 0.0012]
+        )
+        var topBorderMaterial = UnlitMaterial(color: billboardTopBorderColor)
+        topBorderMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.40))
+        let topBorderEntity = ModelEntity(mesh: topBorderMesh, materials: [topBorderMaterial])
+
+        // -- Position everything --
         let leftEdge = -totalWidth / 2
         let accentX = leftEdge + padding / 2 + accentBarWidth / 2
         let textLeftX = leftEdge + padding + accentBarWidth + innerPadding
 
         backgroundEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.001)
         accentEntity.position = SIMD3<Float>(accentX, totalHeight / 2, 0.0)
+        topBorderEntity.position = SIMD3<Float>(0, totalHeight - 0.0003, 0.0005)
         idEntity.position = SIMD3<Float>(textLeftX, padding + bodyHeight + gap, 0)
         bodyEntity.position = SIMD3<Float>(textLeftX, padding, 0)
 
         containerEntity.addChild(backgroundEntity)
         containerEntity.addChild(accentEntity)
+        containerEntity.addChild(topBorderEntity)
         containerEntity.addChild(idEntity)
         containerEntity.addChild(bodyEntity)
 
@@ -302,7 +346,6 @@ class CompletedBoxVisualization {
         dimensionBillboardEntity = containerEntity
     }
 
-    /// Format dimension value without unit suffix (unit shown once at end of line)
     private func formatDimension(_ meters: Float) -> String {
         let value = unit.convert(meters: meters)
         if value >= 100 {

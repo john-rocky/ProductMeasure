@@ -24,6 +24,7 @@ struct HistoryListView: View {
                     measurementList
                 }
             }
+            .background(PMTheme.surfaceDark)
             .navigationTitle("History")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -55,16 +56,17 @@ struct HistoryListView: View {
 
     private var emptyStateView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "ruler")
+            Image(systemName: "viewfinder")
                 .font(.system(size: 60))
-                .foregroundColor(.secondary)
+                .foregroundColor(PMTheme.cyan.opacity(0.30))
 
             Text("No Measurements")
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(PMTheme.mono(18, weight: .semibold))
+                .foregroundColor(PMTheme.textPrimary)
 
             Text("Measurements you take will appear here")
-                .foregroundColor(.secondary)
+                .font(PMTheme.mono(13))
+                .foregroundColor(PMTheme.textSecondary)
         }
     }
 
@@ -72,6 +74,8 @@ struct HistoryListView: View {
         List {
             ForEach(filteredMeasurements) { measurement in
                 MeasurementRow(measurement: measurement, unit: measurementUnit)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         selectedMeasurement = measurement
@@ -79,6 +83,8 @@ struct HistoryListView: View {
             }
             .onDelete(perform: deleteMeasurements)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .searchable(text: $searchText, prompt: "Search measurements")
     }
 
@@ -115,26 +121,42 @@ struct MeasurementRow: View {
             // Details
             VStack(alignment: .leading, spacing: 4) {
                 Text(measurement.formattedDimensions(unit: unit, precision: .millimeter1))
-                    .font(.headline)
+                    .font(PMTheme.mono(15, weight: .semibold))
+                    .foregroundColor(PMTheme.textPrimary)
 
                 Text(measurement.formattedVolume(unit: unit))
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(PMTheme.mono(13))
+                    .foregroundColor(PMTheme.cyan)
 
                 HStack(spacing: 8) {
                     qualityBadge
                     Text(formattedDate)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(PMTheme.mono(11))
+                        .foregroundColor(PMTheme.textSecondary)
                 }
             }
 
             Spacer()
 
             Image(systemName: "chevron.right")
-                .foregroundColor(.secondary)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(PMTheme.cyan.opacity(0.60))
         }
-        .padding(.vertical, 4)
+        .padding(12)
+        .background(PMTheme.surfaceCard)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [PMTheme.cyan.opacity(0.30), PMTheme.cyan.opacity(0.05)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.5
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 2)
     }
 
     private var thumbnailView: some View {
@@ -147,11 +169,11 @@ struct MeasurementRow: View {
             } else {
                 Image(systemName: "cube")
                     .font(.title2)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(PMTheme.cyan.opacity(0.40))
             }
         }
         .frame(width: 60, height: 60)
-        .background(Color(.systemGray6))
+        .background(PMTheme.surfaceElevated)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -161,19 +183,19 @@ struct MeasurementRow: View {
                 .fill(qualityColor)
                 .frame(width: 6, height: 6)
             Text(measurement.quality.overallQuality.rawValue.capitalized)
-                .font(.caption2)
+                .font(PMTheme.mono(9, weight: .bold))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(Color(.systemGray6))
+        .background(PMTheme.surfaceElevated)
         .clipShape(Capsule())
     }
 
     private var qualityColor: Color {
         switch measurement.quality.overallQuality {
-        case .high: return .green
-        case .medium: return .yellow
-        case .low: return .red
+        case .high: return PMTheme.green
+        case .medium: return PMTheme.amber
+        case .low: return PMTheme.red
         }
     }
 
@@ -216,6 +238,8 @@ struct ExportSheet: View {
                     Text("\(measurements.count) measurement(s)")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(PMTheme.surfaceDark)
             .navigationTitle("Export")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

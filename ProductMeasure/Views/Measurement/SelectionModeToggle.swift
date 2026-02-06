@@ -20,15 +20,14 @@ struct SelectionModeToggle: View {
                         Image(systemName: mode.icon)
                             .font(.system(size: 12, weight: .medium))
                         Text(mode.displayName)
-                            .font(.caption)
-                            .fontWeight(.medium)
+                            .font(PMTheme.mono(11))
                     }
-                    .foregroundColor(selectionMode == mode ? .white : .secondary)
+                    .foregroundColor(selectionMode == mode ? .white : PMTheme.textSecondary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
                         selectionMode == mode
-                            ? Color.blue.opacity(0.8)
+                            ? PMTheme.cyan.opacity(0.80)
                             : Color.clear
                     )
                     .clipShape(Capsule())
@@ -36,14 +35,18 @@ struct SelectionModeToggle: View {
             }
         }
         .padding(4)
-        .background(.ultraThinMaterial)
+        .background(PMTheme.surfaceDark.opacity(0.85))
+        .overlay(
+            Capsule()
+                .strokeBorder(PMTheme.cyan.opacity(0.20), lineWidth: 0.5)
+        )
         .clipShape(Capsule())
     }
 }
 
 #Preview {
     ZStack {
-        Color.gray
+        Color.black
         SelectionModeToggle(selectionMode: .constant(.tap))
     }
 }

@@ -28,7 +28,9 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Units")
+                    Text("UNITS")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
                 }
 
                 // Measurement mode section
@@ -43,17 +45,21 @@ struct SettingsView: View {
                     }
 
                     Text(measurementMode.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(PMTheme.mono(11))
+                        .foregroundColor(PMTheme.textSecondary)
                 } header: {
-                    Text("Measurement Mode")
+                    Text("MEASUREMENT MODE")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
                 }
 
                 // Display section
                 Section {
                     Toggle("Show Quality Indicators", isOn: $showQualityIndicators)
                 } header: {
-                    Text("Display")
+                    Text("DISPLAY")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
                 }
 
                 // Device info section
@@ -63,10 +69,10 @@ struct SettingsView: View {
                         Spacer()
                         if LiDARChecker.isLiDARAvailable {
                             Label("Available", systemImage: "checkmark.circle.fill")
-                                .foregroundColor(.green)
+                                .foregroundColor(PMTheme.green)
                         } else {
                             Label("Not Available", systemImage: "xmark.circle.fill")
-                                .foregroundColor(.red)
+                                .foregroundColor(PMTheme.red)
                         }
                     }
 
@@ -75,14 +81,16 @@ struct SettingsView: View {
                         Spacer()
                         if LiDARChecker.isARKitSupported {
                             Label("Supported", systemImage: "checkmark.circle.fill")
-                                .foregroundColor(.green)
+                                .foregroundColor(PMTheme.green)
                         } else {
                             Label("Not Supported", systemImage: "xmark.circle.fill")
-                                .foregroundColor(.red)
+                                .foregroundColor(PMTheme.red)
                         }
                     }
                 } header: {
-                    Text("Device Capabilities")
+                    Text("DEVICE CAPABILITIES")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
                 }
 
                 // Tips section
@@ -108,7 +116,9 @@ struct SettingsView: View {
                         description: "Keep 0.5-3m distance from objects"
                     )
                 } header: {
-                    Text("Tips for Accurate Measurements")
+                    Text("TIPS FOR ACCURATE MEASUREMENTS")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
                 }
 
                 // About section
@@ -117,21 +127,27 @@ struct SettingsView: View {
                         Text("Version")
                         Spacer()
                         Text("1.0.0")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(PMTheme.textSecondary)
                     }
 
                     HStack {
                         Text("Accuracy")
                         Spacer()
                         Text("±5-10mm (typical)")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(PMTheme.textSecondary)
                     }
                 } header: {
-                    Text("About")
+                    Text("ABOUT")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
                 } footer: {
                     Text("Measurements are estimates based on LiDAR depth sensing. Actual accuracy may vary based on lighting, surface properties, and distance.")
+                        .font(PMTheme.mono(11))
+                        .foregroundColor(PMTheme.textDimmed)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(PMTheme.surfaceDark)
             .navigationTitle("Settings")
         }
     }
@@ -148,16 +164,15 @@ struct TipRow: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundColor(.accentColor)
+                .foregroundColor(PMTheme.cyan)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(PMTheme.mono(13, weight: .medium))
                 Text(description)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(PMTheme.mono(11))
+                    .foregroundColor(PMTheme.textSecondary)
             }
         }
     }
