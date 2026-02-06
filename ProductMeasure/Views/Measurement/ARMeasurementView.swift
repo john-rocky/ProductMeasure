@@ -538,6 +538,9 @@ class ARMeasurementViewModel: ObservableObject {
 
     let sessionManager = ARSessionManager()
     private let measurementCalculator = MeasurementCalculator()
+
+    // Wire up sessionManager reference for plane detection and depth accumulation
+    private var isSessionManagerWired = false
     private let boxEditingService = BoxEditingService()
     private var boxVisualization: BoxVisualization?
     private var boxVisualizationAnchor: AnchorEntity?
@@ -579,6 +582,11 @@ class ARMeasurementViewModel: ObservableObject {
         // Configure animation coordinator with AR view
         if let arView = sessionManager.arView {
             animationCoordinator.configure(arView: arView)
+        }
+        // Wire up session manager reference for plane detection and depth accumulation
+        if !isSessionManagerWired {
+            measurementCalculator.sessionManager = sessionManager
+            isSessionManagerWired = true
         }
     }
 
@@ -861,8 +869,14 @@ class ARMeasurementViewModel: ObservableObject {
                         self.animatedBoxVisualization = nil
 
                         var adjustedBox = boundingBox
-                        if let floorY = floorY {
-                            adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                        // Use plane-detected floor if available (larger threshold), fallback to raycast
+                        let planeFloorY = self.sessionManager.getFloorPlaneY()
+                        let effectiveFloorY = planeFloorY ?? floorY
+                        let floorThreshold = planeFloorY != nil
+                            ? AppConstants.floorExtensionThresholdWithPlane
+                            : AppConstants.floorExtensionThresholdDefault
+                        if let effectiveFloorY = effectiveFloorY {
+                            adjustedBox.extendBottomToFloor(floorY: effectiveFloorY, threshold: floorThreshold)
                         }
 
                         var adjustedResult = self.measurementCalculator.recalculate(
@@ -1156,8 +1170,13 @@ class ARMeasurementViewModel: ObservableObject {
             mode: mode
         ) {
             // Apply bottom extension if within threshold of floor
-            if let floorY = boxVisualization?.floorY {
-                fittedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+            let fitPlaneFloorY = sessionManager.getFloorPlaneY()
+            let fitFloorY = fitPlaneFloorY ?? boxVisualization?.floorY
+            let fitThreshold = fitPlaneFloorY != nil
+                ? AppConstants.floorExtensionThresholdWithPlane
+                : AppConstants.floorExtensionThresholdDefault
+            if let fitFloorY = fitFloorY {
+                fittedBox.extendBottomToFloor(floorY: fitFloorY, threshold: fitThreshold)
             }
 
             // Update measurement result using the original axis mapping

@@ -16,15 +16,26 @@ enum AppConstants {
     static let minDepthCoverage: Float = 0.5
     static let highDepthCoverage: Float = 0.8
 
-    // MARK: - Outlier Removal
-    static let depthOutlierStdDevThreshold: Float = 2.5
-    static let spatialOutlierStdDevThreshold: Float = 3.0
+    // MARK: - Outlier Removal (MAD-based)
+    static let madOutlierThreshold: Float = 3.5 // median ± 3.5 * 1.4826 * MAD
     static let ransacIterations = 100
     static let ransacDistanceThreshold: Float = 0.02 // 2cm
 
     // MARK: - Depth Filtering
-    static let depthFilterPercentTolerance: Float = 0.5
-    static let depthFilterMinTolerance: Float = 0.30
+    static let depthFilterPercentTolerance: Float = 0.25
+    static let depthFilterMinTolerance: Float = 0.15
+    static let depthFilterMaxTolerance: Float = 0.50
+
+    // MARK: - Floor Extension
+    static let floorExtensionThresholdWithPlane: Float = 0.10
+    static let floorExtensionThresholdDefault: Float = 0.05
+
+    // MARK: - Multi-Frame Accumulation
+    static let depthAccumulationFrameCount = 5
+
+    // MARK: - Box Refinement
+    static let refinementIterations = 2
+    static let refinementMargin: Float = 0.01 // 1cm
 
     // MARK: - UI
     static let boxLineWidth: Float = 0.002

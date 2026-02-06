@@ -5,6 +5,7 @@
 
 import simd
 import Foundation
+import ARKit
 
 /// Estimates oriented bounding boxes from point clouds using MABR (box mode) or PCA (free object mode)
 class BoundingBoxEstimator {
@@ -14,16 +15,30 @@ class BoundingBoxEstimator {
     /// - Parameters:
     ///   - points: 3D points in world coordinates
     ///   - mode: Measurement mode (box priority or free object)
+    ///   - supportPlaneY: Y coordinate of the support surface (floor/table). Box mode only - extends bottom to this plane.
+    ///   - verticalPlanes: Nearby vertical plane anchors for direction snapping (box mode only)
     /// - Returns: Oriented bounding box
     func estimateBoundingBox(
         points: [SIMD3<Float>],
-        mode: MeasurementMode
+        mode: MeasurementMode,
+        supportPlaneY: Float? = nil,
+        verticalPlanes: [ARPlaneAnchor] = []
     ) -> BoundingBox3D? {
         guard points.count >= 4 else { return nil }
 
         switch mode {
         case .boxPriority:
-            return estimateBoxPriorityOBB(points: points)
+            var box = estimateBoxPriorityOBB(points: points, verticalPlanes: verticalPlanes)
+
+            // Extend bottom to support plane if available
+            if let box = box, let planeY = supportPlaneY {
+                var adjusted = box
+                let threshold = AppConstants.floorExtensionThresholdWithPlane
+                adjusted.extendBottomToFloor(floorY: planeY, threshold: threshold)
+                return adjusted
+            }
+
+            return box
         case .freeObject:
             return estimateFreeObjectOBB(points: points)
         }
@@ -33,14 +48,15 @@ class BoundingBoxEstimator {
 
     /// Estimate OBB with vertical axis locked to world Y-axis
     /// Uses Minimum-Area Bounding Rectangle (MABR) for edge-aligned orientation
-    private func estimateBoxPriorityOBB(points: [SIMD3<Float>]) -> BoundingBox3D? {
+    /// Optionally snaps to detected vertical plane normals (Phase 3.3)
+    private func estimateBoxPriorityOBB(points: [SIMD3<Float>], verticalPlanes: [ARPlaneAnchor] = []) -> BoundingBox3D? {
         let centroid = points.reduce(.zero, +) / Float(points.count)
 
         // Project points onto horizontal plane (XZ)
         let horizontalPoints = points.map { SIMD2<Float>($0.x, $0.z) }
 
         // Find horizontal orientation using MABR on convex hull
-        let direction: SIMD2<Float>
+        var direction: SIMD2<Float>
         let hull = computeConvexHull2D(horizontalPoints)
 
         if hull.count >= 3 {
@@ -51,6 +67,9 @@ class BoundingBoxEstimator {
             let (_, eigenvectors2D) = eigenDecomposition2D(covariance2D)
             direction = eigenvectors2D.columns.0
         }
+
+        // Phase 3.3: Snap direction to detected vertical plane normal if within 10 degrees
+        direction = snapToVerticalPlane(direction: direction, verticalPlanes: verticalPlanes)
 
         // Construct 3D rotation matrix with Y-axis as world up
         let xAxis = SIMD3<Float>(direction.x, 0, direction.y).normalized
@@ -173,6 +192,53 @@ class BoundingBoxEstimator {
         let (center, extents) = computeExtents(points: points, centroid: centroid, rotation: rotation)
 
         return BoundingBox3D(center: center, extents: extents, rotation: rotation)
+    }
+
+    // MARK: - Vertical Plane Snap (Phase 3.3)
+
+    /// Snap MABR direction to a detected vertical plane normal if within 10 degrees
+    /// This corrects slight angular errors from noisy point clouds
+    private func snapToVerticalPlane(direction: SIMD2<Float>, verticalPlanes: [ARPlaneAnchor]) -> SIMD2<Float> {
+        guard !verticalPlanes.isEmpty else { return direction }
+
+        let snapAngleThreshold: Float = 10.0 * .pi / 180.0 // 10 degrees
+
+        var bestDirection = direction
+        var bestAngleDiff: Float = snapAngleThreshold
+
+        for plane in verticalPlanes {
+            // Get plane normal in world space (Z axis of the plane's transform)
+            let planeNormal3D = SIMD3<Float>(
+                plane.transform.columns.2.x,
+                plane.transform.columns.2.y,
+                plane.transform.columns.2.z
+            )
+
+            // Project to horizontal (XZ) plane
+            let planeDir2D = SIMD2<Float>(planeNormal3D.x, planeNormal3D.z)
+            let len = simd_length(planeDir2D)
+            guard len > 0.01 else { continue }
+            let normalizedPlaneDir = planeDir2D / len
+
+            // Check angle between MABR direction and plane normal
+            // We check both the normal and its perpendicular (plane edge direction)
+            for candidate in [normalizedPlaneDir, SIMD2<Float>(-normalizedPlaneDir.y, normalizedPlaneDir.x)] {
+                let dot = abs(simd_dot(direction, candidate))
+                let angleDiff = acos(min(dot, 1.0))
+
+                if angleDiff < bestAngleDiff {
+                    bestAngleDiff = angleDiff
+                    // Choose the sign that matches the original direction
+                    bestDirection = simd_dot(direction, candidate) >= 0 ? candidate : -candidate
+                }
+            }
+        }
+
+        if bestAngleDiff < snapAngleThreshold && bestAngleDiff > 0 {
+            print("[PlaneSnap] Snapped direction by \(bestAngleDiff * 180 / .pi)°")
+        }
+
+        return bestDirection.normalized
     }
 
     // MARK: - Helper Methods

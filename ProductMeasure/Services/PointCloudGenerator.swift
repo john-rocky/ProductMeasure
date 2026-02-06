@@ -10,6 +10,12 @@ import simd
 class PointCloudGenerator {
     // MARK: - Types
 
+    /// A 3D point with associated confidence weight
+    struct WeightedPoint {
+        let position: SIMD3<Float>
+        let weight: Float // 0.5 for medium confidence, 1.0 for high confidence
+    }
+
     struct PointCloud {
         /// 3D points in world coordinates
         let points: [SIMD3<Float>]
@@ -34,21 +40,24 @@ class PointCloudGenerator {
     /// Generate a point cloud from segmented object
     /// - Parameters:
     ///   - frame: ARFrame with depth data
-    ///   - mask: Segmentation mask
+    ///   - maskedPixels: Pixels in the segmentation mask
     ///   - imageSize: Camera image size
+    ///   - depthAccumulator: Optional multi-frame depth accumulator for noise reduction
     /// - Returns: PointCloud with 3D world coordinates
     func generatePointCloud(
         frame: ARFrame,
         maskedPixels: [(x: Int, y: Int)],
-        imageSize: CGSize
+        imageSize: CGSize,
+        depthAccumulator: DepthAccumulator? = nil
     ) -> PointCloud {
         print("[PointCloud] Starting with \(maskedPixels.count) masked pixels")
 
-        // Extract depth data for masked pixels
+        // Extract depth data for masked pixels (with optional multi-frame accumulation)
         var depthData = depthProcessor.extractDepthForMask(
             frame: frame,
             maskedPixels: maskedPixels,
-            imageSize: imageSize
+            imageSize: imageSize,
+            depthAccumulator: depthAccumulator
         )
 
         let totalMaskedPixels = maskedPixels.count
@@ -76,9 +85,15 @@ class PointCloudGenerator {
             print("[PointCloud] After downsampling: \(depthData.count) points")
         }
 
-        // Get depth stats
+        // Get depth stats and compute adaptive grid size
         let stats = depthProcessor.getDepthStats(depthData: depthData)
         print("[PointCloud] Depth range: \(stats.minDepth)m - \(stats.maxDepth)m")
+
+        // Adaptive grid size based on median depth: closer objects get finer grid
+        let sortedDepths = depthData.map { $0.depth }.sorted()
+        let medianDepth = DepthProcessor.median(sorted: sortedDepths)
+        let adaptiveGridSize = min(max(medianDepth * 0.005, 0.003), 0.020)
+        print("[PointCloud] Median depth: \(medianDepth)m, adaptive grid size: \(adaptiveGridSize * 1000)mm")
 
         // Get depth map size
         guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
@@ -97,21 +112,21 @@ class PointCloudGenerator {
         let depthHeight = CVPixelBufferGetHeight(depthMap)
         print("[PointCloud] Depth map size: \(depthWidth)x\(depthHeight)")
 
-        // Unproject to 3D world coordinates
-        let points = unprojectToWorld(
+        // Unproject to 3D world coordinates with confidence weights
+        let weightedPoints = unprojectToWorld(
             depthData: depthData,
             frame: frame,
             depthWidth: depthWidth,
             depthHeight: depthHeight
         )
-        print("[PointCloud] Unprojected \(points.count) points")
+        print("[PointCloud] Unprojected \(weightedPoints.count) points")
 
-        // Filter outliers in 3D space
-        let filteredPoints = filter3DOutliers(points)
-        print("[PointCloud] After 3D outlier filter: \(filteredPoints.count) points")
+        // Filter outliers in 3D space (uses positions only)
+        let filteredWeighted = filter3DOutliersWeighted(weightedPoints)
+        print("[PointCloud] After 3D outlier filter: \(filteredWeighted.count) points")
 
-        // Grid-based downsampling in 3D
-        let downsampledPoints = downsample3D(filteredPoints, gridSize: AppConstants.pointCloudGridSize)
+        // Grid-based downsampling in 3D with confidence-weighted centroids (adaptive grid)
+        let downsampledPoints = downsample3DWeighted(filteredWeighted, gridSize: adaptiveGridSize)
         print("[PointCloud] Final point count: \(downsampledPoints.count)")
 
         if let first = downsampledPoints.first {
@@ -135,7 +150,7 @@ class PointCloudGenerator {
         frame: ARFrame,
         depthWidth: Int,
         depthHeight: Int
-    ) -> [SIMD3<Float>] {
+    ) -> [WeightedPoint] {
         let camera = frame.camera
 
         // Get the camera's transform (position and orientation in world space)
@@ -184,11 +199,14 @@ class PointCloudGenerator {
             print("[Unproject] Camera position: \(cameraTransform.columns.3)")
         }
 
-        var points: [SIMD3<Float>] = []
+        var points: [WeightedPoint] = []
         var debugCount = 0
 
         for data in depthData {
             let depth = data.depth
+
+            // Confidence weight: medium=0.5, high=1.0
+            let weight: Float = data.confidence == .high ? 1.0 : 0.5
 
             // Convert depth pixel coordinates to camera image coordinates
             let imageX = Float(data.pixelX) * scaleX
@@ -209,23 +227,27 @@ class PointCloudGenerator {
 
             // Debug first few points
             if debugCount < 3 {
-                print("[Unproject] Point \(debugCount): depth=\(depth)m, depthPx=(\(data.pixelX),\(data.pixelY)), imagePx=(\(imageX),\(imageY))")
+                print("[Unproject] Point \(debugCount): depth=\(depth)m, depthPx=(\(data.pixelX),\(data.pixelY)), imagePx=(\(imageX),\(imageY)), weight=\(weight)")
                 print("[Unproject]   -> camera local: (\(localX), \(-localY), \(-depth))")
                 print("[Unproject]   -> world: (\(worldPoint.x), \(worldPoint.y), \(worldPoint.z))")
                 debugCount += 1
             }
 
-            points.append(SIMD3(worldPoint.x, worldPoint.y, worldPoint.z))
+            points.append(WeightedPoint(
+                position: SIMD3(worldPoint.x, worldPoint.y, worldPoint.z),
+                weight: weight
+            ))
         }
 
         // Calculate and print point cloud bounds
         if !points.isEmpty {
-            let minX = points.map { $0.x }.min()!
-            let maxX = points.map { $0.x }.max()!
-            let minY = points.map { $0.y }.min()!
-            let maxY = points.map { $0.y }.max()!
-            let minZ = points.map { $0.z }.min()!
-            let maxZ = points.map { $0.z }.max()!
+            let positions = points.map { $0.position }
+            let minX = positions.map { $0.x }.min()!
+            let maxX = positions.map { $0.x }.max()!
+            let minY = positions.map { $0.y }.min()!
+            let maxY = positions.map { $0.y }.max()!
+            let minZ = positions.map { $0.z }.min()!
+            let maxZ = positions.map { $0.z }.max()!
             print("[Unproject] Point cloud bounds:")
             print("[Unproject]   X: \(minX) to \(maxX) (range: \((maxX - minX) * 100)cm)")
             print("[Unproject]   Y: \(minY) to \(maxY) (range: \((maxY - minY) * 100)cm)")
@@ -235,44 +257,63 @@ class PointCloudGenerator {
         return points
     }
 
-    private func filter3DOutliers(_ points: [SIMD3<Float>]) -> [SIMD3<Float>] {
+    /// Per-axis MAD outlier removal on weighted points
+    private func filter3DOutliersWeighted(_ points: [WeightedPoint]) -> [WeightedPoint] {
         guard points.count > 10 else { return points }
 
-        let centroid = points.reduce(.zero, +) / Float(points.count)
+        let threshold = AppConstants.madOutlierThreshold
 
-        // Calculate distances from centroid
-        let distances = points.map { simd_distance($0, centroid) }
-        let meanDistance = distances.reduce(0, +) / Float(distances.count)
-        let variance = distances.map { ($0 - meanDistance) * ($0 - meanDistance) }.reduce(0, +) / Float(distances.count)
-        let stdDev = sqrt(variance)
+        let xs = points.map { $0.position.x }.sorted()
+        let ys = points.map { $0.position.y }.sorted()
+        let zs = points.map { $0.position.z }.sorted()
 
-        let maxDistance = meanDistance + AppConstants.spatialOutlierStdDevThreshold * stdDev
+        let medX = DepthProcessor.median(sorted: xs)
+        let medY = DepthProcessor.median(sorted: ys)
+        let medZ = DepthProcessor.median(sorted: zs)
 
-        return zip(points, distances).compactMap { point, distance in
-            distance <= maxDistance ? point : nil
+        let madX = DepthProcessor.median(sorted: xs.map { abs($0 - medX) }.sorted())
+        let madY = DepthProcessor.median(sorted: ys.map { abs($0 - medY) }.sorted())
+        let madZ = DepthProcessor.median(sorted: zs.map { abs($0 - medZ) }.sorted())
+
+        let scaleX = madX > 1e-6 ? 1.4826 * madX : Float.infinity
+        let scaleY = madY > 1e-6 ? 1.4826 * madY : Float.infinity
+        let scaleZ = madZ > 1e-6 ? 1.4826 * madZ : Float.infinity
+
+        return points.filter { p in
+            abs(p.position.x - medX) <= threshold * scaleX &&
+            abs(p.position.y - medY) <= threshold * scaleY &&
+            abs(p.position.z - medZ) <= threshold * scaleZ
         }
     }
 
-    private func downsample3D(_ points: [SIMD3<Float>], gridSize: Float) -> [SIMD3<Float>] {
+    /// Grid-based 3D downsampling with confidence-weighted centroids
+    private func downsample3DWeighted(_ points: [WeightedPoint], gridSize: Float) -> [SIMD3<Float>] {
         guard !points.isEmpty else { return [] }
 
-        var grid: [String: [SIMD3<Float>]] = [:]
-
-        for point in points {
-            let cellX = Int(floor(point.x / gridSize))
-            let cellY = Int(floor(point.y / gridSize))
-            let cellZ = Int(floor(point.z / gridSize))
-            let key = "\(cellX)_\(cellY)_\(cellZ)"
-
-            if grid[key] == nil {
-                grid[key] = []
-            }
-            grid[key]!.append(point)
+        struct CellKey: Hashable {
+            let x, y, z: Int
         }
 
-        // Return the centroid of each cell
+        var grid: [CellKey: [WeightedPoint]] = [:]
+
+        for point in points {
+            let key = CellKey(
+                x: Int(floor(point.position.x / gridSize)),
+                y: Int(floor(point.position.y / gridSize)),
+                z: Int(floor(point.position.z / gridSize))
+            )
+            grid[key, default: []].append(point)
+        }
+
+        // Return confidence-weighted centroid of each cell
         return grid.values.map { cellPoints in
-            cellPoints.reduce(.zero, +) / Float(cellPoints.count)
+            var weightedSum = SIMD3<Float>.zero
+            var totalWeight: Float = 0
+            for p in cellPoints {
+                weightedSum += p.position * p.weight
+                totalWeight += p.weight
+            }
+            return totalWeight > 0 ? weightedSum / totalWeight : cellPoints[0].position
         }
     }
 }

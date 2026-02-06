@@ -41,11 +41,13 @@ class DepthProcessor {
     ///   - frame: ARFrame containing depth data
     ///   - maskedPixels: Pixels in the segmentation mask (in image coordinates)
     ///   - imageSize: Size of the camera image
+    ///   - depthAccumulator: Optional depth accumulator for multi-frame averaging
     /// - Returns: Array of depth data for valid pixels
     func extractDepthForMask(
         frame: ARFrame,
         maskedPixels: [(x: Int, y: Int)],
-        imageSize: CGSize
+        imageSize: CGSize,
+        depthAccumulator: DepthAccumulator? = nil
     ) -> [DepthData] {
         guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap,
               let confidenceMap = frame.smoothedSceneDepth?.confidenceMap ?? frame.sceneDepth?.confidenceMap else {
@@ -111,8 +113,17 @@ class DepthProcessor {
             }
 
             if depth.isFinite && depth > 0 && confidence.rawValue >= ARConfidenceLevel.medium.rawValue {
+                // Use accumulated depth if available (multi-frame temporal median)
+                let finalDepth: Float
+                if let accumulator = depthAccumulator,
+                   let accumulatedDepth = accumulator.getAccumulatedDepth(at: depthX, pixelY: depthY, width: depthWidth) {
+                    finalDepth = accumulatedDepth
+                } else {
+                    finalDepth = depth
+                }
+
                 results.append(DepthData(
-                    depth: depth,
+                    depth: finalDepth,
                     confidence: confidence,
                     pixelX: depthX,
                     pixelY: depthY
@@ -166,26 +177,40 @@ class DepthProcessor {
         depthData.filter { $0.confidence.rawValue >= minConfidence.rawValue }
     }
 
-    /// Remove outliers using statistical filtering
+    /// Remove outliers using MAD (Median Absolute Deviation) - robust to non-Gaussian distributions
     func removeOutliers(
         _ depthData: [DepthData],
-        stdDevThreshold: Float = AppConstants.depthOutlierStdDevThreshold
+        madThreshold: Float = AppConstants.madOutlierThreshold
     ) -> [DepthData] {
         guard depthData.count > 10 else { return depthData }
 
-        // Calculate mean depth
-        let depths = depthData.map { $0.depth }
-        let mean = depths.reduce(0, +) / Float(depths.count)
+        let depths = depthData.map { $0.depth }.sorted()
+        let median = Self.median(sorted: depths)
 
-        // Calculate standard deviation
-        let variance = depths.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Float(depths.count)
-        let stdDev = sqrt(variance)
+        // MAD = median(|xi - median|)
+        let absoluteDeviations = depths.map { abs($0 - median) }.sorted()
+        let mad = Self.median(sorted: absoluteDeviations)
 
-        // Filter outliers
-        let minDepth = mean - stdDevThreshold * stdDev
-        let maxDepth = mean + stdDevThreshold * stdDev
+        // If MAD is zero (all values identical or nearly so), fallback to no filtering
+        guard mad > 1e-6 else { return depthData }
+
+        // Scale factor 1.4826 makes MAD consistent with std dev for normal distributions
+        let scaledMAD = 1.4826 * mad
+        let minDepth = median - madThreshold * scaledMAD
+        let maxDepth = median + madThreshold * scaledMAD
 
         return depthData.filter { $0.depth >= minDepth && $0.depth <= maxDepth }
+    }
+
+    /// Compute median of a pre-sorted array
+    static func median(sorted: [Float]) -> Float {
+        guard !sorted.isEmpty else { return 0 }
+        let n = sorted.count
+        if n % 2 == 0 {
+            return (sorted[n / 2 - 1] + sorted[n / 2]) / 2
+        } else {
+            return sorted[n / 2]
+        }
     }
 
     /// Downsample depth data using grid-based sampling

@@ -81,6 +81,12 @@ class ARSessionManager: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Depth Accumulation
+
+    // nonisolated(unsafe) because DepthAccumulator is internally thread-safe (NSLock)
+    // and needs to be accessed from the nonisolated ARSessionDelegate callback
+    nonisolated(unsafe) let depthAccumulator = DepthAccumulator()
+
     // MARK: - Raycast
 
     func raycast(from point: CGPoint) -> ARRaycastResult? {
@@ -90,6 +96,47 @@ class ARSessionManager: NSObject, ObservableObject {
 
     func raycastWorldPosition(from point: CGPoint) -> SIMD3<Float>? {
         raycast(from: point)?.worldTransform.columns.3.xyz
+    }
+
+    // MARK: - Plane Detection
+
+    /// Get the Y coordinate of the largest detected horizontal floor plane
+    /// Returns nil if no horizontal planes are detected
+    func getFloorPlaneY() -> Float? {
+        guard let anchors = session.currentFrame?.anchors else { return nil }
+
+        var bestPlaneY: Float? = nil
+        var bestArea: Float = 0
+
+        for anchor in anchors {
+            guard let plane = anchor as? ARPlaneAnchor,
+                  plane.alignment == .horizontal else { continue }
+
+            let area = plane.planeExtent.width * plane.planeExtent.height
+            if area > bestArea {
+                bestArea = area
+                // The plane's Y in world coordinates
+                bestPlaneY = anchor.transform.columns.3.y
+            }
+        }
+
+        return bestPlaneY
+    }
+
+    /// Get nearby vertical plane anchors for direction snapping
+    func getNearbyVerticalPlanes(near position: SIMD3<Float>, maxDistance: Float = 2.0) -> [ARPlaneAnchor] {
+        guard let anchors = session.currentFrame?.anchors else { return [] }
+
+        return anchors.compactMap { anchor -> ARPlaneAnchor? in
+            guard let plane = anchor as? ARPlaneAnchor,
+                  plane.alignment == .vertical else { return nil }
+
+            let planePos = SIMD3<Float>(anchor.transform.columns.3.x,
+                                         anchor.transform.columns.3.y,
+                                         anchor.transform.columns.3.z)
+            let distance = simd_distance(planePos, position)
+            return distance <= maxDistance ? plane : nil
+        }
     }
 
     // MARK: - Entity Management
@@ -123,6 +170,9 @@ class ARSessionManager: NSObject, ObservableObject {
 
 extension ARSessionManager: ARSessionDelegate {
     nonisolated func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        // Feed frame to depth accumulator (nonisolated-safe since accumulator handles its own thread safety)
+        self.depthAccumulator.addFrame(frame)
+
         Task { @MainActor in
             self.currentFrame = frame
             self.updateTrackingState(frame.camera.trackingState)

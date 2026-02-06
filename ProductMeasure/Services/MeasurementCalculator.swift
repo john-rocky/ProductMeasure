@@ -59,6 +59,9 @@ class MeasurementCalculator {
     private let pointCloudGenerator = PointCloudGenerator()
     private let boundingBoxEstimator = BoundingBoxEstimator()
 
+    /// Reference to AR session manager for plane detection and depth accumulation
+    weak var sessionManager: ARSessionManager?
+
     // MARK: - Public Methods
 
     /// Perform a complete measurement from an AR frame at a tap location
@@ -142,11 +145,12 @@ class MeasurementCalculator {
         // Skip depth image to save memory
         let debugDepthImage: UIImage? = nil
 
-        // 4. Generate point cloud from filtered pixels
+        // 4. Generate point cloud from filtered pixels (with multi-frame depth accumulation)
         var pointCloud = pointCloudGenerator.generatePointCloud(
             frame: frame,
             maskedPixels: filteredPixels,
-            imageSize: imageSize
+            imageSize: imageSize,
+            depthAccumulator: sessionManager?.depthAccumulator
         )
 
         guard !pointCloud.isEmpty else {
@@ -198,10 +202,19 @@ class MeasurementCalculator {
             }
         }
 
-        // 6. Estimate bounding box
-        guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
+        // 6. Estimate bounding box with plane assistance
+        let centroid = pointCloud.centroid
+        let (supportPlaneY, verticalPlanes): (Float?, [ARPlaneAnchor]) = await MainActor.run {
+            let planeY: Float? = (mode == .boxPriority) ? (sessionManager?.getFloorPlaneY() ?? raycastHitPosition?.y) : nil
+            let planes: [ARPlaneAnchor] = (mode == .boxPriority) ? (sessionManager?.getNearbyVerticalPlanes(near: centroid) ?? []) : []
+            return (planeY, planes)
+        }
+
+        guard var boundingBox = boundingBoxEstimator.estimateBoundingBox(
             points: pointCloud.points,
-            mode: mode
+            mode: mode,
+            supportPlaneY: supportPlaneY,
+            verticalPlanes: verticalPlanes
         ) else {
             print("[Calculator] Failed to estimate bounding box")
             return nil
@@ -209,6 +222,11 @@ class MeasurementCalculator {
         print("[Calculator] Bounding box estimated")
         print("[Calculator] Box center: \(boundingBox.center)")
         print("[Calculator] Box extents: \(boundingBox.extents)")
+
+        // Phase 3.2: Iterative box refinement
+        if mode == .boxPriority {
+            boundingBox = iterativeRefine(box: boundingBox, points: pointCloud.points, verticalPlanes: verticalPlanes)
+        }
 
         // 7. Calculate dimensions using camera-based axis mapping
         let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
@@ -326,11 +344,12 @@ class MeasurementCalculator {
             tapPoint: normalizedCenter
         )
 
-        // 5. Generate point cloud
+        // 5. Generate point cloud (with multi-frame depth accumulation)
         var pointCloud = pointCloudGenerator.generatePointCloud(
             frame: frame,
             maskedPixels: depthFilteredPixels,
-            imageSize: imageSize
+            imageSize: imageSize,
+            depthAccumulator: sessionManager?.depthAccumulator
         )
 
         guard !pointCloud.isEmpty else {
@@ -377,15 +396,29 @@ class MeasurementCalculator {
             }
         }
 
-        // 7. Estimate bounding box
-        guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
+        // 7. Estimate bounding box with plane assistance
+        let roiCentroid = pointCloud.centroid
+        let (roiSupportPlaneY, roiVerticalPlanes): (Float?, [ARPlaneAnchor]) = await MainActor.run {
+            let planeY: Float? = (mode == .boxPriority) ? (sessionManager?.getFloorPlaneY() ?? raycastHitPosition?.y) : nil
+            let planes: [ARPlaneAnchor] = (mode == .boxPriority) ? (sessionManager?.getNearbyVerticalPlanes(near: roiCentroid) ?? []) : []
+            return (planeY, planes)
+        }
+
+        guard var boundingBox = boundingBoxEstimator.estimateBoundingBox(
             points: pointCloud.points,
-            mode: mode
+            mode: mode,
+            supportPlaneY: roiSupportPlaneY,
+            verticalPlanes: roiVerticalPlanes
         ) else {
             print("[Calculator] Failed to estimate bounding box")
             return nil
         }
         print("[Calculator] Bounding box estimated")
+
+        // Phase 3.2: Iterative box refinement
+        if mode == .boxPriority {
+            boundingBox = iterativeRefine(box: boundingBox, points: pointCloud.points, verticalPlanes: roiVerticalPlanes)
+        }
 
         // 8. Calculate dimensions using camera-based axis mapping
         let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
@@ -595,7 +628,7 @@ class MeasurementCalculator {
 
         // Filter pixels by depth - keep those within a tolerance of tap depth
         let percentTolerance = tapDepth * AppConstants.depthFilterPercentTolerance
-        let depthTolerance = max(percentTolerance, AppConstants.depthFilterMinTolerance)
+        let depthTolerance = min(max(percentTolerance, AppConstants.depthFilterMinTolerance), AppConstants.depthFilterMaxTolerance)
 
         print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m")
 
@@ -676,12 +709,20 @@ class MeasurementCalculator {
 
     /// Extract the main cluster of points around the center using density-based clustering
     /// This helps isolate the tapped object from other nearby objects
-    private func extractMainCluster(points: [SIMD3<Float>], center: SIMD3<Float>) -> [SIMD3<Float>] {
+    private func extractMainCluster(points: [SIMD3<Float>], center: SIMD3<Float>, medianDepth: Float? = nil) -> [SIMD3<Float>] {
         guard points.count > 20 else { return points }
 
         print("[Clustering] Starting with \(points.count) points")
 
-        let neighborThreshold: Float = 0.08  // 8cm
+        // Adaptive clustering threshold based on median depth
+        let baseThreshold: Float = 0.08
+        let neighborThreshold: Float
+        if let depth = medianDepth {
+            neighborThreshold = min(max(depth * 0.08, 0.04), 0.20)
+        } else {
+            neighborThreshold = baseThreshold
+        }
+        print("[Clustering] Neighbor threshold: \(neighborThreshold * 100)cm")
         let cellSize: Float = neighborThreshold  // Grid cell = neighbor radius
 
         // Build spatial hash grid — O(n)
@@ -753,6 +794,47 @@ class MeasurementCalculator {
         }
 
         return clusterPoints
+    }
+
+    // MARK: - Iterative Box Refinement (Phase 3.2)
+
+    /// Re-estimate the bounding box by filtering to inlier points and re-fitting
+    /// Repeats for the configured number of iterations for tighter fit
+    private func iterativeRefine(box: BoundingBox3D, points: [SIMD3<Float>], verticalPlanes: [ARPlaneAnchor] = []) -> BoundingBox3D {
+        var currentBox = box
+        let margin = AppConstants.refinementMargin
+        let iterations = AppConstants.refinementIterations
+
+        for i in 0..<iterations {
+            // Filter points to those within current box + margin
+            let expanded = BoundingBox3D(
+                center: currentBox.center,
+                extents: currentBox.extents + SIMD3<Float>(repeating: margin),
+                rotation: currentBox.rotation
+            )
+
+            let inliers = points.filter { expanded.contains($0) }
+
+            guard inliers.count >= 10 else {
+                print("[Refinement] Iteration \(i): too few inliers (\(inliers.count)), stopping")
+                break
+            }
+
+            print("[Refinement] Iteration \(i): \(inliers.count)/\(points.count) inliers")
+
+            // Re-estimate bounding box from inliers
+            if let refined = boundingBoxEstimator.estimateBoundingBox(
+                points: inliers,
+                mode: .boxPriority,
+                verticalPlanes: verticalPlanes
+            ) {
+                currentBox = refined
+            } else {
+                break
+            }
+        }
+
+        return currentBox
     }
 
     /// Estimate the spatial spread (max extent) of a point cloud
