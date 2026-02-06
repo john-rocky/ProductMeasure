@@ -767,6 +767,9 @@ class ARMeasurementViewModel: ObservableObject {
     // Current measurement unit (passed from view)
     var currentUnit: MeasurementUnit = .centimeters
 
+    // Box ID counter (increments with each save)
+    private var nextBoxId: Int = 1
+
     // Completed (saved) box visualizations
     private var completedBoxVisualizations: [CompletedBoxVisualization] = []
     private var completedBoxAnchors: [AnchorEntity] = []
@@ -1170,8 +1173,10 @@ class ARMeasurementViewModel: ObservableObject {
             height: result.height,
             length: result.length,
             width: result.width,
-            unit: unit
+            unit: unit,
+            boxId: nextBoxId
         )
+        nextBoxId += 1
 
         // Add to scene with its own anchor
         let anchor = sessionManager.addEntityWithAnchor(completedViz.entity)
@@ -1226,6 +1231,7 @@ class ARMeasurementViewModel: ObservableObject {
         completedBoxVisualizations.removeAll()
         completedBoxAnchors.removeAll()
         completedBoxCount = 0
+        nextBoxId = 1
     }
 
     func startEditing() {
@@ -1438,7 +1444,8 @@ class ARMeasurementViewModel: ObservableObject {
                 height: result.height,
                 length: result.length,
                 width: result.width,
-                unit: unit
+                unit: unit,
+                boxId: nextBoxId
             )
         }
 

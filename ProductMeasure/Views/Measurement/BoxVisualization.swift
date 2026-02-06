@@ -22,6 +22,9 @@ class BoxVisualization {
     // Single billboard label floating above the box (shows all dimensions)
     private var dimensionBillboardEntity: Entity?
 
+    // Box identifier
+    private var boxId: Int = 0
+
     // Stored dimensions for label updates
     private var storedHeight: Float = 0
     private var storedLength: Float = 0
@@ -59,10 +62,13 @@ class BoxVisualization {
     private let handleRadius: Float = 0.004      // Radius of capsule (4mm)
     private let handleCollisionRadius: Float = 0.015  // Larger for easy touch
 
-    // Dimension label styling (Apple Measure style - white background, black text)
-    private let dimensionLabelFontSize: CGFloat = 0.010  // Smaller, stylish
-    private let dimensionLabelTextColor: UIColor = UIColor(white: 0.0, alpha: 0.9)  // Black text
-    private let dimensionLabelBackgroundColor: UIColor = UIColor(white: 1.0, alpha: 0.9)  // White background
+    // Dimension label styling
+    private let billboardIdFontSize: CGFloat = 0.010      // Box ID header
+    private let billboardBodyFontSize: CGFloat = 0.007    // Detail lines
+    private let dimensionLabelTextColor: UIColor = UIColor(white: 1.0, alpha: 0.95)  // White text
+    private let billboardSubTextColor: UIColor = UIColor(white: 1.0, alpha: 0.7)     // Dimmed white
+    private let dimensionLabelBackgroundColor: UIColor = UIColor(white: 0.0, alpha: 0.75) // Dark glass
+    private let billboardAccentColor: UIColor = UIColor(red: 0.3, green: 0.8, blue: 1.0, alpha: 1.0) // Cyan accent
 
     // Rotation handle (corner arc that looks like part of the box frame)
     private let rotationArcThickness: Float = 0.001  // Same thickness as edge lines
@@ -89,7 +95,8 @@ class BoxVisualization {
     }
 
     /// Set dimensions and create/update labels on the wireframe
-    func setDimensions(height: Float, length: Float, width: Float, unit: MeasurementUnit) {
+    func setDimensions(height: Float, length: Float, width: Float, unit: MeasurementUnit, boxId: Int = 0) {
+        self.boxId = boxId
         storedHeight = height
         storedLength = length
         storedWidth = width
@@ -669,70 +676,114 @@ class BoxVisualization {
         let containerEntity = Entity()
         containerEntity.position = position
 
-        // Format all dimension text
-        let heightText = "H: \(formatDimensionValue(storedHeight))"
-        let depthText = "D: \(formatDimensionValue(storedLength))"
-        let widthText = "W: \(formatDimensionValue(storedWidth))"
-        let volumeText = formatVolumeValue(storedHeight * storedLength * storedWidth)
+        let cubicMeters = storedHeight * storedLength * storedWidth
+        let accentBarWidth: Float = 0.0015
+        let padding: Float = 0.005
+        let innerPadding: Float = 0.003  // Space between accent bar and text
 
-        // Create multi-line text
-        let fullText = "\(heightText)  \(widthText)  \(depthText)\n\(volumeText)"
-
-        let textMesh = MeshResource.generateText(
-            fullText,
+        // -- Header: Box ID (larger, bold) --
+        let idText = String(format: "#%03d", boxId)
+        let idMesh = MeshResource.generateText(
+            idText,
             extrusionDepth: 0.001,
-            font: .systemFont(ofSize: dimensionLabelFontSize, weight: .medium),
+            font: .monospacedDigitSystemFont(ofSize: billboardIdFontSize, weight: .bold),
             containerFrame: .zero,
-            alignment: .center,
+            alignment: .left,
+            lineBreakMode: .byTruncatingTail
+        )
+        let idMaterial = UnlitMaterial(color: billboardAccentColor)
+        let idEntity = ModelEntity(mesh: idMesh, materials: [idMaterial])
+        let idWidth = idMesh.bounds.extents.x
+        let idHeight = idMesh.bounds.extents.y
+
+        // -- Body: detail lines (smaller) --
+        let lVal = formatDimensionValue(storedLength)
+        let wVal = formatDimensionValue(storedWidth)
+        let hVal = formatDimensionValue(storedHeight)
+        let dimLine = "L: \(lVal)  W: \(wVal)  H: \(hVal) \(storedUnit.rawValue)"
+
+        let volText = formatVolumeValue(cubicMeters)
+        let wgtText = storedUnit.formatVolumetricWeight(cubicMeters: cubicMeters)
+        let volLine = "\(volText)  Wgt: \(wgtText)"
+
+        let sizeClass = SizeClass.classify(volumeCubicMeters: cubicMeters)
+        let classLine = "Class: \(sizeClass.displayName)"
+
+        let bodyText = "\(dimLine)\n\(volLine)\n\(classLine)"
+        let bodyMesh = MeshResource.generateText(
+            bodyText,
+            extrusionDepth: 0.001,
+            font: .monospacedDigitSystemFont(ofSize: billboardBodyFontSize, weight: .medium),
+            containerFrame: .zero,
+            alignment: .left,
             lineBreakMode: .byWordWrapping
         )
+        let bodyMaterial = UnlitMaterial(color: dimensionLabelTextColor)
+        let bodyEntity = ModelEntity(mesh: bodyMesh, materials: [bodyMaterial])
+        let bodyWidth = bodyMesh.bounds.extents.x
+        let bodyHeight = bodyMesh.bounds.extents.y
 
-        let textMaterial = UnlitMaterial(color: dimensionLabelTextColor)
-        let textEntity = ModelEntity(mesh: textMesh, materials: [textMaterial])
+        // -- Layout calculation --
+        let gap: Float = 0.003  // Gap between header and body
+        let contentWidth = max(idWidth, bodyWidth)
+        let contentHeight = idHeight + gap + bodyHeight
+        let totalWidth = accentBarWidth + innerPadding + contentWidth + padding * 2
+        let totalHeight = contentHeight + padding * 2
+        let cornerRadius = min(totalHeight, totalWidth) * 0.12
 
-        // Get text bounds for background sizing
-        let textBounds = textMesh.bounds
-        let textWidth = textBounds.extents.x
-        let textHeight = textBounds.extents.y
-
-        // Create rounded rectangle background
-        let padding: Float = 0.006
-        let backgroundWidth = textWidth + padding * 2
-        let backgroundHeight = textHeight + padding * 2
-        let cornerRadius = min(backgroundHeight, backgroundWidth) * 0.15
-
+        // -- Background (dark glass) --
         let backgroundMesh = MeshResource.generateBox(
-            size: [backgroundWidth, backgroundHeight, 0.001],
+            size: [totalWidth, totalHeight, 0.001],
             cornerRadius: cornerRadius
         )
-        let backgroundMaterial = UnlitMaterial(color: dimensionLabelBackgroundColor)
+        var backgroundMaterial = UnlitMaterial(color: dimensionLabelBackgroundColor)
+        backgroundMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.75))
         let backgroundEntity = ModelEntity(mesh: backgroundMesh, materials: [backgroundMaterial])
 
-        // Center the text and background
-        backgroundEntity.position = SIMD3<Float>(textWidth / 2, textHeight / 2, -0.001)
-        textEntity.position = SIMD3<Float>(0, 0, 0)
+        // -- Accent bar (left edge stripe) --
+        let accentHeight = contentHeight + padding
+        let accentMesh = MeshResource.generateBox(
+            size: [accentBarWidth, accentHeight, 0.0015],
+            cornerRadius: accentBarWidth * 0.4
+        )
+        let accentMaterial = UnlitMaterial(color: billboardAccentColor)
+        let accentEntity = ModelEntity(mesh: accentMesh, materials: [accentMaterial])
+
+        // -- Position everything centered on container origin --
+        let leftEdge = -totalWidth / 2
+        let accentX = leftEdge + padding / 2 + accentBarWidth / 2
+        let textLeftX = leftEdge + padding + accentBarWidth + innerPadding
+
+        backgroundEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.001)
+        accentEntity.position = SIMD3<Float>(accentX, totalHeight / 2, 0.0)
+        idEntity.position = SIMD3<Float>(textLeftX, padding + bodyHeight + gap, 0)
+        bodyEntity.position = SIMD3<Float>(textLeftX, padding, 0)
 
         containerEntity.addChild(backgroundEntity)
-        containerEntity.addChild(textEntity)
+        containerEntity.addChild(accentEntity)
+        containerEntity.addChild(idEntity)
+        containerEntity.addChild(bodyEntity)
 
         return containerEntity
     }
 
+    /// Format dimension value without unit suffix (unit shown once at end of line)
     private func formatDimensionValue(_ meters: Float) -> String {
         let value = storedUnit.convert(meters: meters)
         if value >= 100 {
-            return String(format: "%.0f %@", value, storedUnit.rawValue)
+            return String(format: "%.0f", value)
         } else if value >= 10 {
-            return String(format: "%.1f %@", value, storedUnit.rawValue)
+            return String(format: "%.1f", value)
         } else {
-            return String(format: "%.2f %@", value, storedUnit.rawValue)
+            return String(format: "%.2f", value)
         }
     }
 
     private func formatVolumeValue(_ cubicMeters: Float) -> String {
         let value = storedUnit.convertVolume(cubicMeters: cubicMeters)
         if value >= 1000 {
-            return String(format: "Vol: %.0f %@", value, storedUnit.volumeUnit())
+            let formatted = NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+            return "Vol: \(formatted) \(storedUnit.volumeUnit())"
         } else if value >= 100 {
             return String(format: "Vol: %.1f %@", value, storedUnit.volumeUnit())
         } else {

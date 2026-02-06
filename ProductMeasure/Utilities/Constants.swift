@@ -67,6 +67,13 @@ enum MeasurementUnit: String, CaseIterable, Codable {
         case .inches: return cubicMeters * 61023.7
         }
     }
+
+    /// Volumetric weight: (L_cm x W_cm x H_cm) / 5000 = kg
+    /// Equivalent to cubicMeters * 1e6 / 5000 = cubicMeters * 200
+    func formatVolumetricWeight(cubicMeters: Float) -> String {
+        let kg = cubicMeters * 200.0
+        return String(format: "%.2f kg", kg)
+    }
 }
 
 enum RoundingPrecision: String, CaseIterable, Codable {
@@ -111,6 +118,30 @@ enum MeasurementMode: String, CaseIterable, Codable {
         switch self {
         case .boxPriority: return "Optimized for box-shaped objects on surfaces. Locks vertical axis."
         case .freeObject: return "For irregularly shaped or tilted objects. Full 3D rotation."
+        }
+    }
+}
+
+enum SizeClass: String, CaseIterable {
+    case xs = "XS"
+    case small = "SMALL"
+    case medium = "MEDIUM"
+    case large = "LARGE"
+    case xl = "XL"
+    case xxl = "XXL"
+
+    var displayName: String { rawValue }
+
+    /// Classify based on volume in cubic meters (thresholds in cubic inches)
+    static func classify(volumeCubicMeters: Float) -> SizeClass {
+        let cubicInches = volumeCubicMeters * 61023.7
+        switch cubicInches {
+        case ...100: return .xs
+        case 101...250: return .small
+        case 251...650: return .medium
+        case 651...1050: return .large
+        case 1051...1728: return .xl
+        default: return .xxl
         }
     }
 }
