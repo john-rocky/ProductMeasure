@@ -246,7 +246,7 @@ class PointCloudGenerator {
         let variance = distances.map { ($0 - meanDistance) * ($0 - meanDistance) }.reduce(0, +) / Float(distances.count)
         let stdDev = sqrt(variance)
 
-        let maxDistance = meanDistance + AppConstants.outlierStdDevThreshold * stdDev
+        let maxDistance = meanDistance + AppConstants.spatialOutlierStdDevThreshold * stdDev
 
         return zip(points, distances).compactMap { point, distance in
             distance <= maxDistance ? point : nil

@@ -169,7 +169,7 @@ class DepthProcessor {
     /// Remove outliers using statistical filtering
     func removeOutliers(
         _ depthData: [DepthData],
-        stdDevThreshold: Float = AppConstants.outlierStdDevThreshold
+        stdDevThreshold: Float = AppConstants.depthOutlierStdDevThreshold
     ) -> [DepthData] {
         guard depthData.count > 10 else { return depthData }
 

@@ -17,9 +17,14 @@ enum AppConstants {
     static let highDepthCoverage: Float = 0.8
 
     // MARK: - Outlier Removal
-    static let outlierStdDevThreshold: Float = 2.0
+    static let depthOutlierStdDevThreshold: Float = 2.5
+    static let spatialOutlierStdDevThreshold: Float = 3.0
     static let ransacIterations = 100
     static let ransacDistanceThreshold: Float = 0.02 // 2cm
+
+    // MARK: - Depth Filtering
+    static let depthFilterPercentTolerance: Float = 0.5
+    static let depthFilterMinTolerance: Float = 0.30
 
     // MARK: - UI
     static let boxLineWidth: Float = 0.002

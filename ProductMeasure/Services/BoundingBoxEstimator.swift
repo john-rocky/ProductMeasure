@@ -6,7 +6,7 @@
 import simd
 import Foundation
 
-/// Estimates oriented bounding boxes from point clouds using PCA
+/// Estimates oriented bounding boxes from point clouds using MABR (box mode) or PCA (free object mode)
 class BoundingBoxEstimator {
     // MARK: - Public Methods
 
@@ -32,21 +32,28 @@ class BoundingBoxEstimator {
     // MARK: - Box Priority Mode
 
     /// Estimate OBB with vertical axis locked to world Y-axis
-    /// Optimized for box-shaped objects on surfaces
+    /// Uses Minimum-Area Bounding Rectangle (MABR) for edge-aligned orientation
     private func estimateBoxPriorityOBB(points: [SIMD3<Float>]) -> BoundingBox3D? {
         let centroid = points.reduce(.zero, +) / Float(points.count)
 
         // Project points onto horizontal plane (XZ)
         let horizontalPoints = points.map { SIMD2<Float>($0.x, $0.z) }
 
-        // Compute 2D covariance matrix
-        let covariance2D = computeCovariance2D(horizontalPoints)
+        // Find horizontal orientation using MABR on convex hull
+        let direction: SIMD2<Float>
+        let hull = computeConvexHull2D(horizontalPoints)
 
-        // 2D PCA to find horizontal orientation
-        let (_, eigenvectors2D) = eigenDecomposition2D(covariance2D)
+        if hull.count >= 3 {
+            direction = minimumAreaBoundingRectangleDirection(hull: hull)
+        } else {
+            // Fallback to PCA for degenerate cases
+            let covariance2D = computeCovariance2D(horizontalPoints)
+            let (_, eigenvectors2D) = eigenDecomposition2D(covariance2D)
+            direction = eigenvectors2D.columns.0
+        }
 
         // Construct 3D rotation matrix with Y-axis as world up
-        let xAxis = SIMD3<Float>(eigenvectors2D.columns.0.x, 0, eigenvectors2D.columns.0.y).normalized
+        let xAxis = SIMD3<Float>(direction.x, 0, direction.y).normalized
         let yAxis = SIMD3<Float>(0, 1, 0)
         let zAxis = xAxis.cross(yAxis).normalized
 
@@ -57,6 +64,83 @@ class BoundingBoxEstimator {
         let (center, extents) = computeExtents(points: points, centroid: centroid, rotation: rotation)
 
         return BoundingBox3D(center: center, extents: extents, rotation: rotation)
+    }
+
+    // MARK: - Convex Hull & MABR
+
+    /// Compute 2D convex hull using Andrew's monotone chain algorithm - O(n log n)
+    private func computeConvexHull2D(_ points: [SIMD2<Float>]) -> [SIMD2<Float>] {
+        guard points.count >= 3 else { return points }
+
+        let sorted = points.sorted { $0.x < $1.x || ($0.x == $1.x && $0.y < $1.y) }
+
+        var lower: [SIMD2<Float>] = []
+        for p in sorted {
+            while lower.count >= 2 && cross2D(lower[lower.count - 2], lower[lower.count - 1], p) <= 0 {
+                lower.removeLast()
+            }
+            lower.append(p)
+        }
+
+        var upper: [SIMD2<Float>] = []
+        for p in sorted.reversed() {
+            while upper.count >= 2 && cross2D(upper[upper.count - 2], upper[upper.count - 1], p) <= 0 {
+                upper.removeLast()
+            }
+            upper.append(p)
+        }
+
+        // Remove last point of each half because it's repeated
+        lower.removeLast()
+        upper.removeLast()
+
+        return lower + upper
+    }
+
+    /// 2D cross product of vectors OA and OB (positive if counter-clockwise)
+    private func cross2D(_ o: SIMD2<Float>, _ a: SIMD2<Float>, _ b: SIMD2<Float>) -> Float {
+        (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+    }
+
+    /// Find the direction of the minimum-area bounding rectangle from convex hull
+    /// Rotating calipers: for each hull edge, compute aligned bounding rect area, return best direction
+    private func minimumAreaBoundingRectangleDirection(hull: [SIMD2<Float>]) -> SIMD2<Float> {
+        var bestDirection = SIMD2<Float>(1, 0)
+        var bestArea: Float = .infinity
+
+        let n = hull.count
+        for i in 0..<n {
+            let j = (i + 1) % n
+            var edgeDir = hull[j] - hull[i]
+            let edgeLen = simd_length(edgeDir)
+            guard edgeLen > 1e-10 else { continue }
+            edgeDir /= edgeLen
+
+            let perpDir = SIMD2<Float>(-edgeDir.y, edgeDir.x)
+
+            // Project all hull points onto edge and perpendicular directions
+            var minProj: Float = .infinity
+            var maxProj: Float = -.infinity
+            var minPerp: Float = .infinity
+            var maxPerp: Float = -.infinity
+
+            for p in hull {
+                let proj = simd_dot(p, edgeDir)
+                let perp = simd_dot(p, perpDir)
+                minProj = min(minProj, proj)
+                maxProj = max(maxProj, proj)
+                minPerp = min(minPerp, perp)
+                maxPerp = max(maxPerp, perp)
+            }
+
+            let area = (maxProj - minProj) * (maxPerp - minPerp)
+            if area < bestArea {
+                bestArea = area
+                bestDirection = edgeDir
+            }
+        }
+
+        return bestDirection.normalized
     }
 
     // MARK: - Free Object Mode

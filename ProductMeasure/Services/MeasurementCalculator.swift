@@ -594,10 +594,8 @@ class MeasurementCalculator {
         }
 
         // Filter pixels by depth - keep those within a tolerance of tap depth
-        // Use a percentage-based tolerance (e.g., ±30% of tap depth or ±0.15m, whichever is larger)
-        let percentTolerance = tapDepth * 0.3
-        let minTolerance: Float = 0.15
-        let depthTolerance = max(percentTolerance, minTolerance)
+        let percentTolerance = tapDepth * AppConstants.depthFilterPercentTolerance
+        let depthTolerance = max(percentTolerance, AppConstants.depthFilterMinTolerance)
 
         print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m")
 
