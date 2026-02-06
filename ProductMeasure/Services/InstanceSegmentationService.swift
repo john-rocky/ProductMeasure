@@ -280,7 +280,7 @@ extension InstanceSegmentationService {
         let buffer = baseAddress.assumingMemoryBound(to: UInt8.self)
 
         var pixels: [(x: Int, y: Int)] = []
-        pixels.reserveCapacity(5000)  // Pre-allocate to reduce reallocations
+        pixels.reserveCapacity(20000)  // Pre-allocate to reduce reallocations
 
         // The mask is in the same coordinate system as the original camera image
         // Just scale from mask resolution to image resolution
@@ -288,8 +288,8 @@ extension InstanceSegmentationService {
         let scaleY = imageSize.height / CGFloat(maskHeight)
 
         // Sample every Nth pixel - balance between accuracy and memory
-        let step = max(4, min(maskWidth, maskHeight) / 80)
-        let maxPixels = 5000  // Limit total pixels to prevent memory issues
+        let step = max(2, min(maskWidth, maskHeight) / 160)
+        let maxPixels = 20000  // Limit total pixels to prevent memory issues
 
         // Determine bytes per pixel based on format
         // BGRA = 4 bytes per pixel, OneComponent8 = 1 byte per pixel
@@ -380,7 +380,7 @@ extension InstanceSegmentationService {
         let buffer = baseAddress.assumingMemoryBound(to: UInt8.self)
 
         var pixels: [(x: Int, y: Int)] = []
-        pixels.reserveCapacity(5000)
+        pixels.reserveCapacity(20000)
 
         // Determine bytes per pixel based on format
         let bytesPerPixel: Int
@@ -396,8 +396,8 @@ extension InstanceSegmentationService {
                              abs(CGFloat(maskHeight) - imageSize.height) < 10
         print("[Segmentation] Mask is full-size: \(isFullSizeMask)")
 
-        let step = max(4, min(maskWidth, maskHeight) / 80)
-        let maxPixels = 5000
+        let step = max(2, min(maskWidth, maskHeight) / 160)
+        let maxPixels = 20000
 
         outerLoop: for my in Swift.stride(from: 0, to: maskHeight, by: step) {
             for mx in Swift.stride(from: 0, to: maskWidth, by: step) {

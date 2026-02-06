@@ -162,20 +162,21 @@ class MeasurementCalculator {
             let nearestDistance = pointCloud.points.map { simd_distance($0, hitPosition) }.min() ?? Float.infinity
             print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
 
-            // If the nearest point is more than 50cm away, the mask is completely wrong
-            if nearestDistance > 0.5 {
+            // If the nearest point is more than 2m away, the mask is completely wrong
+            if nearestDistance > 2.0 {
                 print("[Calculator] ERROR: Mask does not contain tapped location. Nearest point is \(nearestDistance)m away.")
                 return nil
             }
 
-            // Start with larger radius (50cm) then use clustering to find connected object
-            let initialRadius: Float = 0.5
+            // Use adaptive radius based on point cloud spread, minimum 1m
+            let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
+            let initialRadius: Float = max(1.0, pointSpread)
             var filteredPoints = filterPointsByProximity(
                 points: pointCloud.points,
                 center: hitPosition,
                 maxDistance: initialRadius
             )
-            print("[Calculator] After initial 50cm filter: \(filteredPoints.count) points")
+            print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
 
             // Use clustering to find the connected object - this separates the tapped object from others
             if filteredPoints.count >= 30 {
@@ -343,18 +344,19 @@ class MeasurementCalculator {
             let nearestDistance = pointCloud.points.map { simd_distance($0, hitPosition) }.min() ?? Float.infinity
             print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
 
-            if nearestDistance > 0.5 {
+            if nearestDistance > 2.0 {
                 print("[Calculator] ERROR: Point cloud too far from raycast hit")
                 return nil
             }
 
-            let initialRadius: Float = 0.5
+            let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
+            let initialRadius: Float = max(1.0, pointSpread)
             var filteredPoints = filterPointsByProximity(
                 points: pointCloud.points,
                 center: hitPosition,
                 maxDistance: initialRadius
             )
-            print("[Calculator] After initial 50cm filter: \(filteredPoints.count) points")
+            print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
 
             if filteredPoints.count >= 30 {
                 filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
@@ -729,7 +731,7 @@ class MeasurementCalculator {
             }
 
             // Stop if cluster is getting too large (performance)
-            if cluster.count > 2000 { break }
+            if cluster.count > 10000 { break }
         }
 
         let clusterPoints = cluster.map { points[$0] }
@@ -742,5 +744,18 @@ class MeasurementCalculator {
         }
 
         return clusterPoints
+    }
+
+    /// Estimate the spatial spread (max extent) of a point cloud
+    static func estimatePointSpread(points: [SIMD3<Float>]) -> Float {
+        guard let first = points.first else { return 1.0 }
+        var minP = first
+        var maxP = first
+        for p in points {
+            minP = min(minP, p)
+            maxP = max(maxP, p)
+        }
+        let extent = maxP - minP
+        return max(extent.x, extent.y, extent.z)
     }
 }
