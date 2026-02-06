@@ -13,8 +13,6 @@ struct ARMeasurementView: View {
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
-    @State private var boxSelectionRect: CGRect? = nil
-    @State private var boxSelectionComplete: Bool = false
 
     var body: some View {
         ZStack {
@@ -37,15 +35,6 @@ struct ARMeasurementView: View {
                     }
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
-                }
-
-                // Box selection overlay - visible in box mode (below UI controls)
-                if selectionMode == .box && viewModel.currentMeasurement == nil && !viewModel.isProcessing {
-                    BoxSelectionOverlay(
-                        selectionRect: $boxSelectionRect,
-                        isComplete: $boxSelectionComplete
-                    )
-                    .ignoresSafeArea()
                 }
 
                 // Overlay UI (on top)
@@ -78,10 +67,8 @@ struct ARMeasurementView: View {
                                 }
                             }
 
-                            // Selection mode toggle (visible when not measuring)
-                            if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
-                                SelectionModeToggle(selectionMode: $selectionMode)
-                            }
+                            // Selection mode toggle (always visible)
+                            SelectionModeToggle(selectionMode: $selectionMode)
 
                         }
 
@@ -99,20 +86,6 @@ struct ARMeasurementView: View {
                     .padding()
                 }
                 .animation(.easeInOut(duration: 0.3), value: viewModel.currentMeasurement != nil)
-                .onChange(of: boxSelectionComplete) { _, isComplete in
-                    if isComplete, let rect = boxSelectionRect {
-                        Task {
-                            await viewModel.handleBoxSelection(
-                                rect: rect,
-                                viewSize: viewModel.sessionManager.arView.bounds.size,
-                                mode: measurementMode
-                            )
-                        }
-                        // Reset box selection state
-                        boxSelectionRect = nil
-                        boxSelectionComplete = false
-                    }
-                }
                 .sheet(isPresented: $viewModel.showDebugMask) {
                     if let image = viewModel.debugMaskImage {
                         DebugImageView(image: image, title: "Segmentation Mask (Green) + Tap Point (Red)")
@@ -160,13 +133,19 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
         arView.addGestureRecognizer(tapGesture)
         context.coordinator.tapGesture = tapGesture
 
-        // Add pan gesture recognizer for handle dragging
+        // Add pan gesture recognizer for handle dragging and box selection
         let panGesture = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
         arView.addGestureRecognizer(panGesture)
         context.coordinator.panGesture = panGesture
 
         // Store reference to arView in coordinator
         context.coordinator.arView = arView
+
+        // Add UIKit box selection rect overlay (never captures touches)
+        let boxSelectionRectView = BoxSelectionRectView(frame: arView.bounds)
+        boxSelectionRectView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        arView.addSubview(boxSelectionRectView)
+        context.coordinator.boxSelectionRectView = boxSelectionRectView
 
         return arView
     }
@@ -175,17 +154,9 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
         context.coordinator.measurementMode = measurementMode
         context.coordinator.selectionMode = selectionMode
 
-        // Disable gestures in box mode (unless editing)
-        let isBoxMode = selectionMode == .box
-        let isEditing = viewModel.isEditing
-        let hasMeasurement = viewModel.currentMeasurement != nil
-
-        // In box mode without measurement, disable tap/pan to allow BoxSelectionOverlay to work
-        // But if editing, keep pan enabled for handle dragging
-        // Always enable tap if there are completed boxes (for billboard tap detection)
-        let hasCompletedBoxes = viewModel.completedBoxCount > 0
-        context.coordinator.tapGesture?.isEnabled = !isBoxMode || hasMeasurement || hasCompletedBoxes
-        context.coordinator.panGesture?.isEnabled = !isBoxMode || hasMeasurement || isEditing
+        // Both gestures always enabled; handler logic determines behavior
+        context.coordinator.tapGesture?.isEnabled = true
+        context.coordinator.panGesture?.isEnabled = true
     }
 
     func makeCoordinator() -> Coordinator {
@@ -202,6 +173,9 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
         weak var tapGesture: UITapGestureRecognizer?
         weak var panGesture: UIPanGestureRecognizer?
 
+        // UIKit box selection overlay
+        var boxSelectionRectView: BoxSelectionRectView?
+
         // Drag state
         private var activeDragType: DragType?
         private var lastPanLocation: CGPoint?
@@ -209,6 +183,7 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
         enum DragType {
             case faceHandle(HandleType)
             case rotationRing
+            case boxSelection(startPoint: CGPoint)
         }
 
         init(viewModel: ARMeasurementViewModel, measurementMode: MeasurementMode, selectionMode: SelectionMode) {
@@ -270,42 +245,92 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
         }
 
         @MainActor @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
-            guard viewModel.isEditing, let arView = arView else { return }
+            guard let arView = arView else { return }
 
             let location = gesture.location(in: arView)
 
             switch gesture.state {
             case .began:
-                // Hit test to find handle or ring
-                if let dragType = hitTest(at: location, in: arView) {
-                    activeDragType = dragType
-                    lastPanLocation = location
-                    print("[Pan] Started dragging: \(dragType)")
+                if viewModel.isEditing {
+                    // Editing mode: hit test for handle or rotation ring
+                    if let dragType = hitTest(at: location, in: arView) {
+                        activeDragType = dragType
+                        lastPanLocation = location
+                        print("[Pan] Started editing drag: \(dragType)")
+                    }
+                } else if selectionMode == .box && !viewModel.isProcessing {
+                    // Box selection mode: start drawing selection rectangle
+                    activeDragType = .boxSelection(startPoint: location)
+                    boxSelectionRectView?.clearSelection()
+                    print("[Pan] Started box selection at: \(location)")
                 }
 
             case .changed:
-                guard let dragType = activeDragType,
-                      let lastLocation = lastPanLocation else { return }
-
-                let delta = CGPoint(
-                    x: location.x - lastLocation.x,
-                    y: location.y - lastLocation.y
-                )
+                guard let dragType = activeDragType else { return }
 
                 switch dragType {
                 case .faceHandle(let handleType):
+                    guard let lastLocation = lastPanLocation else { return }
+                    let delta = CGPoint(
+                        x: location.x - lastLocation.x,
+                        y: location.y - lastLocation.y
+                    )
                     viewModel.handleFaceDrag(handleType: handleType, screenDelta: delta, mode: measurementMode)
-                case .rotationRing:
-                    viewModel.handleRotationDrag(screenDelta: delta, touchLocation: location)
-                }
+                    lastPanLocation = location
 
-                lastPanLocation = location
+                case .rotationRing:
+                    guard let lastLocation = lastPanLocation else { return }
+                    let delta = CGPoint(
+                        x: location.x - lastLocation.x,
+                        y: location.y - lastLocation.y
+                    )
+                    viewModel.handleRotationDrag(screenDelta: delta, touchLocation: location)
+                    lastPanLocation = location
+
+                case .boxSelection(let startPoint):
+                    let rect = CGRect(
+                        x: min(startPoint.x, location.x),
+                        y: min(startPoint.y, location.y),
+                        width: abs(location.x - startPoint.x),
+                        height: abs(location.y - startPoint.y)
+                    )
+                    let isValid = rect.width >= BoxSelectionRectView.minimumSize
+                        && rect.height >= BoxSelectionRectView.minimumSize
+                    boxSelectionRectView?.isRectValid = isValid
+                    boxSelectionRectView?.selectionRect = rect
+                }
 
             case .ended, .cancelled:
-                if activeDragType != nil {
-                    print("[Pan] Ended dragging")
+                guard let dragType = activeDragType else { return }
+
+                switch dragType {
+                case .faceHandle, .rotationRing:
+                    print("[Pan] Ended editing drag")
                     viewModel.finishDrag()
+
+                case .boxSelection(let startPoint):
+                    let rect = CGRect(
+                        x: min(startPoint.x, location.x),
+                        y: min(startPoint.y, location.y),
+                        width: abs(location.x - startPoint.x),
+                        height: abs(location.y - startPoint.y)
+                    )
+                    boxSelectionRectView?.clearSelection()
+
+                    if gesture.state == .ended
+                        && rect.width >= BoxSelectionRectView.minimumSize
+                        && rect.height >= BoxSelectionRectView.minimumSize {
+                        print("[Pan] Box selection completed: \(rect)")
+                        Task {
+                            await viewModel.handleBoxSelection(
+                                rect: rect,
+                                viewSize: arView.bounds.size,
+                                mode: measurementMode
+                            )
+                        }
+                    }
                 }
+
                 activeDragType = nil
                 lastPanLocation = nil
 
