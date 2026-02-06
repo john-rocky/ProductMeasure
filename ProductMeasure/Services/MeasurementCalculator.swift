@@ -681,61 +681,72 @@ class MeasurementCalculator {
 
         print("[Clustering] Starting with \(points.count) points")
 
-        // Simple grid-based clustering
-        // Divide space into cells and find the densest region around center
-        let cellSize: Float = 0.03  // 3cm cells
+        let neighborThreshold: Float = 0.08  // 8cm
+        let cellSize: Float = neighborThreshold  // Grid cell = neighbor radius
+
+        // Build spatial hash grid — O(n)
+        struct CellKey: Hashable {
+            let x, y, z: Int
+        }
+        func cellKey(for p: SIMD3<Float>) -> CellKey {
+            CellKey(x: Int(floor(p.x / cellSize)),
+                    y: Int(floor(p.y / cellSize)),
+                    z: Int(floor(p.z / cellSize)))
+        }
+
+        var grid: [CellKey: [Int]] = [:]
+        grid.reserveCapacity(points.count / 4)
+        for (i, p) in points.enumerated() {
+            let key = cellKey(for: p)
+            grid[key, default: []].append(i)
+        }
 
         // Find the point closest to center as seed
-        var seedPoint = points[0]
-        var minDist = simd_distance(seedPoint, center)
-        for point in points {
+        var seedIdx = 0
+        var minDist = simd_distance(points[0], center)
+        for (i, point) in points.enumerated() {
             let dist = simd_distance(point, center)
             if dist < minDist {
                 minDist = dist
-                seedPoint = point
+                seedIdx = i
             }
         }
         print("[Clustering] Seed point at distance \(minDist)m from center")
 
-        // Grow cluster from seed using flood-fill approach
-        var cluster: Set<Int> = []
-        var frontier: [Int] = []
-
-        // Find index of seed point
-        for (i, point) in points.enumerated() {
-            if simd_distance(point, seedPoint) < 0.001 {
-                cluster.insert(i)
-                frontier.append(i)
-                break
-            }
-        }
-
-        // Neighbor distance threshold - points within this distance are connected
-        // Use larger threshold because point cloud can be sparse
-        let neighborThreshold: Float = 0.08  // 8cm
+        // Flood-fill using spatial hash — each point checks only 27 neighbor cells
+        var visited = [Bool](repeating: false, count: points.count)
+        visited[seedIdx] = true
+        var frontier = [seedIdx]
+        var clusterCount = 1
 
         while !frontier.isEmpty {
-            let currentIdx = frontier.removeFirst()
+            let currentIdx = frontier.removeLast()  // DFS (stack) for cache locality
             let currentPoint = points[currentIdx]
+            let cc = cellKey(for: currentPoint)
 
-            for (i, point) in points.enumerated() {
-                if cluster.contains(i) { continue }
-
-                let dist = simd_distance(point, currentPoint)
-                if dist <= neighborThreshold {
-                    cluster.insert(i)
-                    frontier.append(i)
+            for dz in -1...1 {
+                for dy in -1...1 {
+                    for dx in -1...1 {
+                        let neighborKey = CellKey(x: cc.x + dx, y: cc.y + dy, z: cc.z + dz)
+                        guard let indices = grid[neighborKey] else { continue }
+                        for i in indices {
+                            if visited[i] { continue }
+                            if simd_distance(points[i], currentPoint) <= neighborThreshold {
+                                visited[i] = true
+                                frontier.append(i)
+                                clusterCount += 1
+                            }
+                        }
+                    }
                 }
             }
 
-            // Stop if cluster is getting too large (performance)
-            if cluster.count > 10000 { break }
+            if clusterCount > 10000 { break }
         }
 
-        let clusterPoints = cluster.map { points[$0] }
+        let clusterPoints = (0..<points.count).compactMap { visited[$0] ? points[$0] : nil }
         print("[Clustering] Extracted cluster with \(clusterPoints.count) points")
 
-        // If cluster is too small, return original
         if clusterPoints.count < 20 {
             print("[Clustering] Cluster too small, returning original points")
             return points
