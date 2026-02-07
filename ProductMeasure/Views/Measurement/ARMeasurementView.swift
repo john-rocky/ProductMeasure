@@ -1390,12 +1390,19 @@ class ARMeasurementViewModel: ObservableObject {
     // MARK: - Scene Accumulation Enhancement
 
     /// Enhance a measurement result by merging accumulated background points.
-    /// Returns the original result if not enough extra points are available.
+    /// Only keeps accumulated points that are near the original point cloud surface,
+    /// filtering out floor/wall/background points that would inflate the box.
     private func enhanceWithAccumulatedPoints(
         _ result: MeasurementCalculator.MeasurementResult,
         mode: MeasurementMode,
         frame: ARFrame
     ) -> MeasurementCalculator.MeasurementResult {
+        guard let originalPoints = result.pointCloud, !originalPoints.isEmpty else {
+            print("[Accumulator] No original point cloud, skipping enhancement")
+            return result
+        }
+
+        // Query accumulated points in the region around the bounding box
         let extraPoints = sceneAccumulator.queryPoints(
             near: result.boundingBox,
             expansion: AppConstants.accumulatorQueryExpansion
@@ -1406,13 +1413,17 @@ class ARMeasurementViewModel: ObservableObject {
             return result
         }
 
-        guard let originalPoints = result.pointCloud, !originalPoints.isEmpty else {
-            print("[Accumulator] No original point cloud, skipping enhancement")
+        // Filter: only keep accumulated points that are within the original bounding box.
+        // This ensures we only densify the existing surface rather than expanding the box.
+        let filteredExtra = extraPoints.filter { result.boundingBox.contains($0) }
+
+        guard filteredExtra.count >= AppConstants.accumulatorMinExtraPoints else {
+            print("[Accumulator] Not enough points inside box (\(filteredExtra.count)/\(extraPoints.count)), skipping")
             return result
         }
 
-        let mergedPoints = originalPoints + extraPoints
-        print("[Accumulator] Merging \(originalPoints.count) + \(extraPoints.count) = \(mergedPoints.count) points")
+        let mergedPoints = originalPoints + filteredExtra
+        print("[Accumulator] Merging \(originalPoints.count) + \(filteredExtra.count) = \(mergedPoints.count) points (filtered from \(extraPoints.count) candidates)")
 
         // Re-estimate bounding box from merged points
         let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
