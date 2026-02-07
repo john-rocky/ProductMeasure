@@ -697,8 +697,8 @@ class ARMeasurementViewModel: ObservableObject {
                 debugMaskImage = result.debugMaskImage
                 debugDepthImage = result.debugDepthImage
 
-                // Store the floor Y for later use
-                let floorY = raycastHitPosition?.y
+                // Use detected floor plane Y if available, fall back to raycast hit Y
+                let floorY = result.detectedFloorY ?? raycastHitPosition?.y
 
                 // Start the animation sequence
                 startBoxAnimation(
@@ -779,7 +779,8 @@ class ARMeasurementViewModel: ObservableObject {
                 debugMaskImage = result.debugMaskImage
                 debugDepthImage = result.debugDepthImage
 
-                let floorY = raycastHitPosition?.y
+                // Use detected floor plane Y if available, fall back to raycast hit Y
+                let floorY = result.detectedFloorY ?? raycastHitPosition?.y
 
                 startBoxAnimation(
                     at: boxCenter,

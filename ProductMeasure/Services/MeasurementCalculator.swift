@@ -33,6 +33,9 @@ class MeasurementCalculator {
         // Point cloud for Fit functionality
         var pointCloud: [SIMD3<Float>]?
 
+        // Detected floor Y from ARPlaneAnchor (horizontal plane)
+        var detectedFloorY: Float?
+
         // Debug info
         var debugMaskImage: UIImage?
         var debugDepthImage: UIImage?
@@ -207,6 +210,9 @@ class MeasurementCalculator {
             return plane
         }
 
+        // Detect floor from horizontal planes (largest plane below point cloud centroid)
+        let detectedFloorY = Self.detectFloorY(frame: frame, pointCloud: pointCloud.points)
+
         guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
             points: pointCloud.points,
             mode: mode,
@@ -242,6 +248,7 @@ class MeasurementCalculator {
 
         // Store point cloud for Fit functionality
         result.pointCloud = pointCloud.points
+        result.detectedFloorY = detectedFloorY
 
         // Attach debug info (images only, not point cloud to save memory)
         result.debugMaskImage = debugMaskImage
@@ -395,6 +402,9 @@ class MeasurementCalculator {
             return plane
         }
 
+        // Detect floor from horizontal planes
+        let detectedFloorY = Self.detectFloorY(frame: frame, pointCloud: pointCloud.points)
+
         guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
             points: pointCloud.points,
             mode: mode,
@@ -426,6 +436,7 @@ class MeasurementCalculator {
         )
 
         result.pointCloud = pointCloud.points
+        result.detectedFloorY = detectedFloorY
         result.debugMaskImage = debugMaskImage
 
         return result
@@ -611,45 +622,53 @@ class MeasurementCalculator {
             return maskedPixels
         }
 
-        // Filter pixels by depth - keep those within a tolerance of tap depth
-        // Use a percentage-based tolerance (±25% of tap depth or ±10cm, whichever is larger)
+        // Filter pixels by depth - keep those within tolerance of tap depth
         let percentTolerance = tapDepth * 0.25
         let minTolerance: Float = 0.10
-        let depthTolerance = max(percentTolerance, minTolerance)
+        let maxTolerance: Float = 0.50
+        var depthTolerance = min(max(percentTolerance, minTolerance), maxTolerance)
 
-        print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m")
+        print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m (tapDepth=\(tapDepth)m)")
 
-        var filteredPixels: [(x: Int, y: Int)] = []
-        filteredPixels.reserveCapacity(maskedPixels.count / 2)
+        let depthStride = depthBytesPerRow / MemoryLayout<Float32>.size
 
-        for pixel in maskedPixels {
-            let depthX = Int(CGFloat(pixel.x) * scaleX)
-            let depthY = Int(CGFloat(pixel.y) * scaleY)
+        // Filter with graduated fallback
+        for attempt in 0..<3 {
+            var filteredPixels: [(x: Int, y: Int)] = []
+            filteredPixels.reserveCapacity(maskedPixels.count / 2)
 
-            guard depthX >= 0 && depthX < depthWidth && depthY >= 0 && depthY < depthHeight else {
-                continue
-            }
+            for pixel in maskedPixels {
+                let depthX = Int(CGFloat(pixel.x) * scaleX)
+                let depthY = Int(CGFloat(pixel.y) * scaleY)
 
-            let depthIndex = depthY * (depthBytesPerRow / MemoryLayout<Float32>.size) + depthX
-            let pixelDepth = depthPtr[depthIndex]
+                guard depthX >= 0 && depthX < depthWidth && depthY >= 0 && depthY < depthHeight else {
+                    continue
+                }
 
-            if pixelDepth.isFinite && pixelDepth > 0 {
-                let depthDiff = abs(pixelDepth - tapDepth)
-                if depthDiff <= depthTolerance {
-                    filteredPixels.append(pixel)
+                let depthIndex = depthY * depthStride + depthX
+                let pixelDepth = depthPtr[depthIndex]
+
+                if pixelDepth.isFinite && pixelDepth > 0 {
+                    let depthDiff = abs(pixelDepth - tapDepth)
+                    if depthDiff <= depthTolerance {
+                        filteredPixels.append(pixel)
+                    }
                 }
             }
+
+            print("[DepthFilter] Attempt \(attempt): tolerance=±\(depthTolerance)m, filtered \(maskedPixels.count) → \(filteredPixels.count) pixels")
+
+            if filteredPixels.count >= 100 {
+                return filteredPixels
+            }
+
+            // Graduated fallback: widen tolerance by 50%
+            depthTolerance *= 1.5
         }
 
-        print("[DepthFilter] Filtered from \(maskedPixels.count) to \(filteredPixels.count) pixels")
-
-        // If filtering removed too many pixels, return original
-        if filteredPixels.count < 100 {
-            print("[DepthFilter] Too few pixels after filtering, returning original")
-            return maskedPixels
-        }
-
-        return filteredPixels
+        // Final fallback: return original pixels
+        print("[DepthFilter] All attempts insufficient, returning original pixels")
+        return maskedPixels
     }
 
     /// Calculate volume from dimensions
@@ -694,7 +713,9 @@ class MeasurementCalculator {
 
         print("[Clustering] Starting with \(points.count) points")
 
-        let neighborThreshold: Float = 0.04  // 4cm
+        // Adaptive threshold based on sampled median nearest-neighbor distance
+        let neighborThreshold: Float = Self.computeAdaptiveClusterThreshold(points: points)
+        print("[Clustering] Adaptive neighbor threshold: \(neighborThreshold * 100)cm")
         let cellSize = neighborThreshold
 
         // Build spatial hash grid: cell → [point indices]
@@ -761,6 +782,62 @@ class MeasurementCalculator {
         }
 
         return clusterPoints
+    }
+
+    /// Detect floor Y from ARPlaneAnchors: largest horizontal plane below point cloud centroid
+    static func detectFloorY(frame: ARFrame, pointCloud: [SIMD3<Float>]) -> Float? {
+        guard !pointCloud.isEmpty else { return nil }
+
+        let centroidY = pointCloud.reduce(Float(0)) { $0 + $1.y } / Float(pointCloud.count)
+
+        var bestFloorPlane: ARPlaneAnchor? = nil
+        var bestArea: Float = 0
+
+        for anchor in frame.anchors {
+            guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .horizontal else { continue }
+            let planeY = plane.transform.columns.3.y
+            // Must be below centroid and within 1m
+            if planeY < centroidY && (centroidY - planeY) < 1.0 {
+                let area = plane.extent.x * plane.extent.z
+                if area > bestArea {
+                    bestArea = area
+                    bestFloorPlane = plane
+                }
+            }
+        }
+
+        if let floor = bestFloorPlane {
+            let floorY = floor.transform.columns.3.y
+            print("[Calculator] Detected floor plane at Y=\(floorY) (area=\(bestArea)m²)")
+            return floorY
+        }
+
+        return nil
+    }
+
+    /// Compute adaptive clustering threshold from sampled nearest-neighbor distances
+    private static func computeAdaptiveClusterThreshold(points: [SIMD3<Float>]) -> Float {
+        let sampleSize = min(200, points.count)
+        let sampleStride = max(1, points.count / sampleSize)
+        var nearestDistances: [Float] = []
+        nearestDistances.reserveCapacity(sampleSize)
+
+        for i in stride(from: 0, to: points.count, by: sampleStride) {
+            var minDist: Float = .infinity
+            for j in stride(from: 0, to: points.count, by: sampleStride) {
+                if i == j { continue }
+                let d = simd_distance(points[i], points[j])
+                if d < minDist { minDist = d }
+            }
+            if minDist.isFinite {
+                nearestDistances.append(minDist)
+            }
+        }
+
+        guard !nearestDistances.isEmpty else { return 0.04 }
+        nearestDistances.sort()
+        let medianNN = nearestDistances[nearestDistances.count / 2]
+        return min(max(medianNN * 8.0, 0.035), 0.06)
     }
 
     /// Estimate the spatial spread (max extent) of a point cloud

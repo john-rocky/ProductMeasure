@@ -28,6 +28,7 @@ class DepthProcessor {
         let averageConfidence: Float
         let minDepth: Float
         let maxDepth: Float
+        let medianDepth: Float
 
         var coverage: Float {
             Float(validPixels) / Float(max(totalPixels, 1))
@@ -135,7 +136,8 @@ class DepthProcessor {
                 totalPixels: 0,
                 averageConfidence: 0,
                 minDepth: 0,
-                maxDepth: 0
+                maxDepth: 0,
+                medianDepth: 0
             )
         }
 
@@ -149,12 +151,16 @@ class DepthProcessor {
             maxDepth = max(maxDepth, data.depth)
         }
 
+        let sortedDepths = depthData.map { $0.depth }.sorted()
+        let medianDepth = sortedDepths[sortedDepths.count / 2]
+
         return DepthStats(
             validPixels: depthData.count,
             totalPixels: depthData.count,
             averageConfidence: totalConfidence / Float(depthData.count) / 2.0, // Normalize to 0-1
             minDepth: minDepth,
-            maxDepth: maxDepth
+            maxDepth: maxDepth,
+            medianDepth: medianDepth
         )
     }
 

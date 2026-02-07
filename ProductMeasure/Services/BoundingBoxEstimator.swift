@@ -202,60 +202,79 @@ class BoundingBoxEstimator {
 
     // MARK: - Iterative Angle Refinement
 
-    /// Refine box orientation by filtering far-off points and re-running MABR,
-    /// but always compute final extents from ALL original points to avoid shrinkage
+    /// Iteratively refine box ORIENTATION by filtering outlier points and re-running MABR.
+    /// Final extents are always computed from ALL original points to prevent shrinkage.
     private func refineBoxIteratively(
         initialBox: BoundingBox3D,
         points: [SIMD3<Float>],
         verticalPlaneAnchors: [ARPlaneAnchor]
     ) -> BoundingBox3D {
-        // Single refinement pass: filter outlier points, re-estimate angle only
-        let margin: Float = 0.015  // 1.5cm
+        let maxIterations = 3
+        let margin: Float = 0.015          // 1.5cm margin for filtering
         let minRetainRatio: Float = 0.5
+        let convergenceThreshold: Float = 0.002  // ~0.1 degree in radians
 
-        let inverseRotation = initialBox.rotation.inverse
-        let filteredPoints = points.filter { point in
-            let local = inverseRotation.act(point - initialBox.center)
-            let ex = initialBox.extents.x + margin
-            let ey = initialBox.extents.y + margin
-            let ez = initialBox.extents.z + margin
-            return abs(local.x) <= ex && abs(local.y) <= ey && abs(local.z) <= ez
+        var currentBox = initialBox
+        var bestAngle: Float?
+
+        for iteration in 0..<maxIterations {
+            let inverseRotation = currentBox.rotation.inverse
+            let filteredPoints = points.filter { point in
+                let local = inverseRotation.act(point - currentBox.center)
+                let ex = currentBox.extents.x + margin
+                let ey = currentBox.extents.y + margin
+                let ez = currentBox.extents.z + margin
+                return abs(local.x) <= ex && abs(local.y) <= ey && abs(local.z) <= ez
+            }
+
+            guard Float(filteredPoints.count) >= Float(points.count) * minRetainRatio,
+                  filteredPoints.count >= 20 else {
+                break
+            }
+
+            let centroid = filteredPoints.reduce(.zero, +) / Float(filteredPoints.count)
+            let horizontalPoints = filteredPoints.map { SIMD2<Float>($0.x, $0.z) }
+
+            guard horizontalPoints.count >= 20 else { break }
+            let hull = convexHull2D(horizontalPoints)
+            guard hull.count >= 3 else { break }
+
+            var angle = minimumAreaBoundingRect(hull: hull)
+            angle = snapToVerticalPlane(
+                angle: angle,
+                boxCenter: centroid,
+                verticalPlaneAnchors: verticalPlaneAnchors
+            )
+
+            // Check angle convergence
+            if let prevAngle = bestAngle {
+                var angleDelta = abs(angle - prevAngle)
+                // Normalize to [0, pi/2] since box is symmetric
+                while angleDelta > .pi / 2 { angleDelta -= .pi / 2 }
+                print("[BBoxEstimator] Refinement iteration \(iteration): angleDelta=\(angleDelta * 180 / .pi)°")
+                if angleDelta < convergenceThreshold {
+                    break
+                }
+            }
+            bestAngle = angle
+
+            let cosA = cos(angle)
+            let sinA = sin(angle)
+            let xAxis = SIMD3<Float>(cosA, 0, sinA).normalized
+            let yAxis = SIMD3<Float>(0, 1, 0)
+            let zAxis = SIMD3<Float>(-sinA, 0, cosA).normalized
+
+            let rotationMatrix = simd_float3x3(xAxis, yAxis, zAxis)
+            let rotation = simd_quatf(rotationMatrix: rotationMatrix)
+
+            // Compute extents from ALL original points to prevent shrinkage
+            let fullCentroid = points.reduce(.zero, +) / Float(points.count)
+            let (center, extents) = computeExtents(points: points, centroid: fullCentroid, rotation: rotation)
+
+            currentBox = BoundingBox3D(center: center, extents: extents, rotation: rotation)
         }
 
-        // If too many points pruned, keep original box
-        guard Float(filteredPoints.count) >= Float(points.count) * minRetainRatio,
-              filteredPoints.count >= 20 else {
-            return initialBox
-        }
-
-        let centroid = filteredPoints.reduce(.zero, +) / Float(filteredPoints.count)
-        let horizontalPoints = filteredPoints.map { SIMD2<Float>($0.x, $0.z) }
-
-        guard horizontalPoints.count >= 20 else { return initialBox }
-        let hull = convexHull2D(horizontalPoints)
-        guard hull.count >= 3 else { return initialBox }
-
-        var angle = minimumAreaBoundingRect(hull: hull)
-        angle = snapToVerticalPlane(
-            angle: angle,
-            boxCenter: centroid,
-            verticalPlaneAnchors: verticalPlaneAnchors
-        )
-
-        let cosA = cos(angle)
-        let sinA = sin(angle)
-        let xAxis = SIMD3<Float>(cosA, 0, sinA).normalized
-        let yAxis = SIMD3<Float>(0, 1, 0)
-        let zAxis = SIMD3<Float>(-sinA, 0, cosA).normalized
-
-        let rotationMatrix = simd_float3x3(xAxis, yAxis, zAxis)
-        let rotation = simd_quatf(rotationMatrix: rotationMatrix)
-
-        // Compute extents from ALL original points (not filtered) to avoid shrinkage
-        let fullCentroid = points.reduce(.zero, +) / Float(points.count)
-        let (center, extents) = computeExtents(points: points, centroid: fullCentroid, rotation: rotation)
-
-        return BoundingBox3D(center: center, extents: extents, rotation: rotation)
+        return currentBox
     }
 
     // MARK: - AR Plane-Assisted Orientation Snap
@@ -409,20 +428,17 @@ class BoundingBoxEstimator {
         let inverseRotation = rotation.inverse
         let localPoints = points.map { inverseRotation.act($0 - centroid) }
 
-        // Use percentile-based extents to trim extreme noise only
-        // Trim 1% from each side per axis — conservative to avoid shrinking real boundaries
-        let n = localPoints.count
-        let trimCount = max(1, Int(Float(n) * 0.01))
-
         let xVals = localPoints.map { $0.x }.sorted()
         let yVals = localPoints.map { $0.y }.sorted()
         let zVals = localPoints.map { $0.z }.sorted()
 
-        let lo = max(0, trimCount)
-        let hi = max(lo + 1, n - 1 - trimCount)
+        // MAD-adaptive hybrid trimming per axis
+        let xRange = trimmedRange(xVals)
+        let yRange = trimmedRange(yVals)
+        let zRange = trimmedRange(zVals)
 
-        let minLocal = SIMD3<Float>(xVals[lo], yVals[lo], zVals[lo])
-        let maxLocal = SIMD3<Float>(xVals[hi], yVals[hi], zVals[hi])
+        let minLocal = SIMD3<Float>(xRange.lo, yRange.lo, zRange.lo)
+        let maxLocal = SIMD3<Float>(xRange.hi, yRange.hi, zRange.hi)
 
         // Compute the true box center (not the centroid)
         let localCenter = (minLocal + maxLocal) / 2
@@ -432,6 +448,21 @@ class BoundingBoxEstimator {
         let extents = (maxLocal - minLocal) / 2
 
         return (center: adjustedCenter, extents: extents)
+    }
+
+    /// Conservative percentile-based trimmed range (trims only extreme boundary noise)
+    private func trimmedRange(_ sorted: [Float]) -> (lo: Float, hi: Float) {
+        let n = sorted.count
+        guard n >= 4 else {
+            return (lo: sorted.first ?? 0, hi: sorted.last ?? 0)
+        }
+
+        // Trim 1% from each side — matches original behavior
+        let trimCount = max(1, Int(Float(n) * 0.01))
+        let lo = sorted[trimCount]
+        let hi = sorted[max(trimCount + 1, n - 1 - trimCount)]
+
+        return (lo: lo, hi: hi)
     }
 }
 

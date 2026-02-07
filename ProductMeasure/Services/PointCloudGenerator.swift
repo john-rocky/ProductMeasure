@@ -110,8 +110,10 @@ class PointCloudGenerator {
         let filteredPoints = filter3DOutliers(points)
         print("[PointCloud] After 3D outlier filter: \(filteredPoints.count) points")
 
-        // Grid-based downsampling in 3D
-        let downsampledPoints = downsample3D(filteredPoints, gridSize: AppConstants.pointCloudGridSize)
+        // Grid-based downsampling in 3D (finer grid for near-range objects)
+        let medianDepth = stats.medianDepth
+        let gridSize = medianDepth < 0.5 ? AppConstants.pointCloudGridSizeNear : AppConstants.pointCloudGridSize
+        let downsampledPoints = downsample3D(filteredPoints, gridSize: gridSize)
         print("[PointCloud] Final point count: \(downsampledPoints.count)")
 
         if let first = downsampledPoints.first {
@@ -270,9 +272,14 @@ class PointCloudGenerator {
             grid[key, default: []].append(point)
         }
 
-        // Return the centroid of each cell
+        // Return per-axis median of each cell (preserves boundaries better than centroid)
         return grid.values.map { cellPoints in
-            cellPoints.reduce(.zero, +) / Float(cellPoints.count)
+            if cellPoints.count == 1 { return cellPoints[0] }
+            let xs = cellPoints.map { $0.x }.sorted()
+            let ys = cellPoints.map { $0.y }.sorted()
+            let zs = cellPoints.map { $0.z }.sorted()
+            let mid = cellPoints.count / 2
+            return SIMD3<Float>(xs[mid], ys[mid], zs[mid])
         }
     }
 }
