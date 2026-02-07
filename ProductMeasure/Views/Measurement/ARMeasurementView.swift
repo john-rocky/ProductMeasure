@@ -74,8 +74,10 @@ struct ARMeasurementView: View {
 
                         Spacer()
 
-                        // Instruction text when in targeting mode
-                        if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                        // Instruction text when in targeting mode or refining
+                        if viewModel.isRefining {
+                            InstructionCard(mode: .refine)
+                        } else if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
                             if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
                                 InstructionCard(mode: .tap)
                             } else if selectionMode == .box {
@@ -235,6 +237,12 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
 
             // 4. If editing, ignore taps (handle dragging is via pan)
             if viewModel.isEditing { return }
+
+            // 4.5. If refining, route to refinement handler
+            if viewModel.isRefining {
+                Task { await viewModel.handleRefinementTap(at: location, mode: measurementMode) }
+                return
+            }
 
             // 5. Only handle new measurement taps in tap mode
             guard selectionMode == .tap else { return }
@@ -442,8 +450,36 @@ struct ScanningIndicator: View {
 // MARK: - Instruction Card
 
 struct InstructionCard: View {
-    var mode: SelectionMode = .tap
+    enum Mode {
+        case tap, box, refine
+    }
+
+    var mode: Mode = .tap
     @State private var iconScale: CGFloat = 1.0
+
+    private var iconName: String {
+        switch mode {
+        case .tap: return "hand.tap.fill"
+        case .box: return "rectangle.dashed"
+        case .refine: return "arrow.triangle.2.circlepath"
+        }
+    }
+
+    private var title: String {
+        switch mode {
+        case .tap: return "Tap on an object to measure"
+        case .box: return "Draw a box to select"
+        case .refine: return "Refine from a different angle"
+        }
+    }
+
+    private var subtitle: String {
+        switch mode {
+        case .tap: return "Point your device at an object and tap"
+        case .box: return "Drag to draw a rectangle around the object"
+        case .refine: return "Move to a different angle and tap the same object"
+        }
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -453,19 +489,17 @@ struct InstructionCard: View {
                     .frame(width: 52, height: 52)
                     .scaleEffect(iconScale)
 
-                Image(systemName: mode == .tap ? "hand.tap.fill" : "rectangle.dashed")
+                Image(systemName: iconName)
                     .font(.title2)
                     .foregroundStyle(PMTheme.cyanGradient)
                     .scaleEffect(iconScale)
             }
 
-            Text(mode == .tap ? "Tap on an object to measure" : "Draw a box to select")
+            Text(title)
                 .font(PMTheme.mono(14, weight: .semibold))
                 .foregroundColor(PMTheme.textPrimary)
 
-            Text(mode == .tap
-                 ? "Point your device at an object and tap"
-                 : "Drag to draw a rectangle around the object")
+            Text(subtitle)
                 .font(PMTheme.mono(11))
                 .multilineTextAlignment(.center)
                 .foregroundColor(PMTheme.textDimmed)
@@ -527,6 +561,14 @@ class ARMeasurementViewModel: ObservableObject {
 
     // Selected completed box for action icons
     @Published var selectedCompletedBoxId: Int? = nil
+
+    // Refinement state
+    @Published var isRefining = false
+    private var refinementCount: Int = 0
+    private var accumulatedPointClouds: [[SIMD3<Float>]] = []
+    private var accumulatedQualities: [MeasurementQuality] = []
+    private var originalAxisMapping: BoundingBox3D.AxisMapping?
+    private var originalFloorY: Float?
 
     // Current measurement mode (synced from view)
     var currentMeasurementMode: MeasurementMode = .boxPriority
@@ -991,6 +1033,14 @@ class ARMeasurementViewModel: ObservableObject {
         animationContext = nil
         animationCoordinator.cancelAnimation()
 
+        // Reset refinement state
+        isRefining = false
+        refinementCount = 0
+        accumulatedPointClouds = []
+        accumulatedQualities = []
+        originalAxisMapping = nil
+        originalFloorY = nil
+
         print("[ViewModel] clearActiveBoxOnly completed. Completed boxes preserved: \(completedBoxAnchors.count)")
     }
 
@@ -1203,12 +1253,125 @@ class ARMeasurementViewModel: ObservableObject {
         case .fit:
             fitToPointCloud(mode: mode)
         case .cancel:
-            discardMeasurement()
+            if isRefining { cancelRefinement() } else { discardMeasurement() }
         case .reEdit:
             reEditCompletedBox()
         case .delete:
             deleteCompletedBox()
+        case .refine:
+            startRefinementMode()
         }
+    }
+
+    // MARK: - Refinement
+
+    private func startRefinementMode() {
+        guard let result = currentMeasurement else { return }
+
+        // Save original axis mapping and floor on first refinement
+        if originalAxisMapping == nil {
+            originalAxisMapping = result.axisMapping
+        }
+        if originalFloorY == nil {
+            originalFloorY = boxVisualization?.floorY
+        }
+
+        // Seed accumulated point clouds with current data
+        if accumulatedPointClouds.isEmpty, let pc = storedPointCloud {
+            accumulatedPointClouds = [pc]
+            accumulatedQualities = [result.quality]
+        }
+
+        isRefining = true
+        boxVisualization?.updateActionMode(.refining)
+        print("[Refine] Entered refinement mode (round \(refinementCount + 1))")
+    }
+
+    private func cancelRefinement() {
+        isRefining = false
+        let mode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
+            ? .normalNoRefine : .normal
+        boxVisualization?.updateActionMode(mode)
+        print("[Refine] Cancelled refinement mode")
+    }
+
+    func handleRefinementTap(at location: CGPoint, mode: MeasurementMode) async {
+        guard let result = currentMeasurement,
+              let frame = sessionManager.currentFrame else { return }
+        guard !isProcessing else { return }
+
+        isProcessing = true
+        let viewSize = sessionManager.arView.bounds.size
+        let raycastHitPosition = sessionManager.raycastWorldPosition(from: location)
+
+        do {
+            if let refinement = try await measurementCalculator.measureForRefinement(
+                frame: frame,
+                tapPoint: location,
+                viewSize: viewSize,
+                mode: mode,
+                existingBox: result.boundingBox,
+                raycastHitPosition: raycastHitPosition
+            ) {
+                // Success: merge point clouds and re-estimate
+                accumulatedPointClouds.append(refinement.points)
+                accumulatedQualities.append(refinement.quality)
+                refinementCount += 1
+
+                let mergedPoints = accumulatedPointClouds.flatMap { $0 }
+                let mergedQuality = MeasurementQuality.merged(accumulatedQualities)
+
+                // Re-estimate bounding box from merged points
+                let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+                    guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
+                    return plane
+                }
+
+                guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
+                    points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+                ) else {
+                    print("[Refine] Re-estimation failed")
+                    isProcessing = false
+                    return
+                }
+
+                // Apply floor extension
+                var adjustedBox = newBox
+                if let floorY = originalFloorY {
+                    adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                }
+
+                // Recalculate with original axis mapping
+                let mapping = originalAxisMapping ?? result.axisMapping
+                var newResult = measurementCalculator.recalculate(
+                    boundingBox: adjustedBox, quality: mergedQuality, axisMapping: mapping
+                )
+                newResult.pointCloud = mergedPoints
+                currentMeasurement = newResult
+                storedPointCloud = mergedPoints
+
+                // Update visualization
+                boxVisualization?.update(boundingBox: adjustedBox)
+                boxVisualization?.updateDimensions(
+                    height: newResult.height, length: newResult.length, width: newResult.width
+                )
+
+                // Exit refinement mode
+                isRefining = false
+                let actionMode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
+                    ? .normalNoRefine : .normal
+                boxVisualization?.updateActionMode(actionMode)
+
+                print("[Refine] Refinement \(refinementCount) complete. Dimensions: L=\(newResult.length*100)cm W=\(newResult.width*100)cm H=\(newResult.height*100)cm")
+            } else {
+                print("[Refine] Object not matched – stay in refinement mode")
+                // Could show a transient message here in the future
+            }
+        } catch {
+            print("[Refine] Error: \(error)")
+        }
+
+        isProcessing = false
     }
 
     /// Find the completed box ID that owns a given entity

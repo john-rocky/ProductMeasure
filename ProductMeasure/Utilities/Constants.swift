@@ -29,6 +29,11 @@ enum AppConstants {
     // MARK: - Measurement
     static let defaultUnit: MeasurementUnit = .centimeters
     static let defaultRounding: RoundingPrecision = .millimeter1
+
+    // MARK: - Refinement
+    static let maxRefinementRounds = 3
+    static let refinementProximityScale: Float = 2.0   // Scale factor for same-object validation
+    static let refinementOverlapThreshold: Float = 0.30 // Minimum overlap ratio for new point cloud
 }
 
 enum MeasurementUnit: String, CaseIterable, Codable {

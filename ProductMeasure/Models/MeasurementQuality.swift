@@ -94,6 +94,31 @@ struct MeasurementQuality: Codable {
         }
     }
 
+    /// Merge multiple quality metrics into one
+    static func merged(_ qualities: [MeasurementQuality]) -> MeasurementQuality {
+        guard !qualities.isEmpty else {
+            return MeasurementQuality(
+                depthCoverage: 0, depthConfidence: 0, pointCount: 0,
+                trackingStateDescription: "Unknown", trackingNormal: false
+            )
+        }
+        let maxCoverage = qualities.map(\.depthCoverage).max() ?? 0
+        let totalPoints = qualities.map(\.pointCount).reduce(0, +)
+        let weightedConfidence: Float = {
+            guard totalPoints > 0 else { return 0 }
+            let sum = qualities.reduce(Float(0)) { $0 + $1.depthConfidence * Float($1.pointCount) }
+            return sum / Float(totalPoints)
+        }()
+        let allNormal = qualities.allSatisfy(\.trackingNormal)
+        return MeasurementQuality(
+            depthCoverage: maxCoverage,
+            depthConfidence: weightedConfidence,
+            pointCount: totalPoints,
+            trackingStateDescription: allNormal ? "Normal" : "Mixed",
+            trackingNormal: allNormal
+        )
+    }
+
     /// Create from stored data (for SwiftData)
     init(
         depthCoverage: Float,

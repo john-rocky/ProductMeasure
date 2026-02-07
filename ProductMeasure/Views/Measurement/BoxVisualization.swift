@@ -26,10 +26,12 @@ class BoxVisualization {
     // Action icon row (below billboard)
     private var actionIconRow: Entity?
 
-    /// Current action mode (normal or editing)
+    /// Current action mode
     enum ActionMode {
         case normal
+        case normalNoRefine
         case editing
+        case refining
     }
     private var currentActionMode: ActionMode = .normal
 
@@ -162,8 +164,12 @@ class BoxVisualization {
         switch mode {
         case .normal:
             actions = ActionIconBuilder.activeNormalActions
+        case .normalNoRefine:
+            actions = ActionIconBuilder.activeNormalActionsNoRefine
         case .editing:
             actions = ActionIconBuilder.activeEditActions
+        case .refining:
+            actions = ActionIconBuilder.activeRefiningActions
         }
 
         let row = ActionIconBuilder.createActionRow(actions: actions)

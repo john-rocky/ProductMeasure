@@ -557,6 +557,113 @@ class MeasurementCalculator {
         )
     }
 
+    // MARK: - Refinement
+
+    /// Point cloud captured from a refinement angle
+    struct RefinementPointCloud {
+        let points: [SIMD3<Float>]
+        let quality: MeasurementQuality
+    }
+
+    /// Perform a refinement measurement: segment + point cloud only (no bounding box estimation).
+    /// Validates that the new point cloud overlaps the existing bounding box.
+    func measureForRefinement(
+        frame: ARFrame,
+        tapPoint: CGPoint,
+        viewSize: CGSize,
+        mode: MeasurementMode,
+        existingBox: BoundingBox3D,
+        raycastHitPosition: SIMD3<Float>? = nil
+    ) async throws -> RefinementPointCloud? {
+        print("[Refine] Starting refinement measurement")
+
+        let imageSize = CGSize(
+            width: CVPixelBufferGetWidth(frame.capturedImage),
+            height: CVPixelBufferGetHeight(frame.capturedImage)
+        )
+
+        let normalizedTap = convertScreenToImageCoordinates(
+            screenPoint: tapPoint, viewSize: viewSize, imageSize: imageSize
+        )
+
+        // 1. Segmentation
+        guard let segmentation = try await segmentationService.segmentInstance(
+            in: frame.capturedImage, at: normalizedTap
+        ) else {
+            print("[Refine] Segmentation failed")
+            return nil
+        }
+
+        // 2. Masked pixels
+        let maskedPixels = segmentationService.getMaskedPixels(
+            mask: segmentation.mask, imageSize: imageSize
+        )
+        guard !maskedPixels.isEmpty else { return nil }
+
+        // 3. Depth filtering
+        let filteredPixels = filterMaskedPixelsByDepth(
+            maskedPixels: maskedPixels, frame: frame,
+            tapPoint: normalizedTap, imageSize: imageSize
+        )
+        guard !filteredPixels.isEmpty else { return nil }
+
+        // 4. Point cloud generation
+        var pointCloud = pointCloudGenerator.generatePointCloud(
+            frame: frame, maskedPixels: filteredPixels, imageSize: imageSize
+        )
+        guard !pointCloud.isEmpty else { return nil }
+        print("[Refine] Generated \(pointCloud.points.count) points")
+
+        // 5. Proximity filter + clustering (same as measure())
+        if let hitPosition = raycastHitPosition {
+            var nearestDistance: Float = .infinity
+            for p in pointCloud.points {
+                nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
+            }
+            if nearestDistance > 2.0 { return nil }
+
+            let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
+            let initialRadius: Float = max(1.0, pointSpread)
+            var filteredPoints = filterPointsByProximity(
+                points: pointCloud.points, center: hitPosition, maxDistance: initialRadius
+            )
+
+            if filteredPoints.count >= 30 {
+                filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                pointCloud = PointCloudGenerator.PointCloud(
+                    points: filteredPoints, quality: pointCloud.quality
+                )
+            } else if filteredPoints.count >= 10 {
+                pointCloud = PointCloudGenerator.PointCloud(
+                    points: filteredPoints, quality: pointCloud.quality
+                )
+            } else {
+                print("[Refine] Too few points near tap (\(filteredPoints.count))")
+                return nil
+            }
+        }
+
+        // 6. Same-object validation: check overlap with expanded existing box
+        let expandedBox = Self.expandedBoundingBox(existingBox, scale: AppConstants.refinementProximityScale)
+        let insideCount = pointCloud.points.filter { expandedBox.contains($0) }.count
+        let overlapRatio = Float(insideCount) / Float(pointCloud.points.count)
+        print("[Refine] Overlap ratio: \(overlapRatio) (\(insideCount)/\(pointCloud.points.count))")
+
+        guard overlapRatio >= AppConstants.refinementOverlapThreshold else {
+            print("[Refine] Overlap too low – object not matched")
+            return nil
+        }
+
+        return RefinementPointCloud(points: pointCloud.points, quality: pointCloud.quality)
+    }
+
+    /// Expand a bounding box by scaling its extents
+    static func expandedBoundingBox(_ box: BoundingBox3D, scale: Float) -> BoundingBox3D {
+        var expanded = box
+        expanded.extents = box.extents * scale
+        return expanded
+    }
+
     /// Calculate dimensions from a bounding box
     static func calculateDimensions(from box: BoundingBox3D) -> (length: Float, width: Float, height: Float) {
         let sorted = box.sortedDimensions
