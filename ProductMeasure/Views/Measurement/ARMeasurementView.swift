@@ -40,8 +40,8 @@ struct ARMeasurementView: View {
                 // Scanning line overlay
                 if viewModel.animationPhase == .scanning {
                     ScanningLineView(
-                        boundingBox: viewModel.currentMeasurement?.boundingBox,
-                        arView: viewModel.sessionManager.arView
+                        arView: viewModel.sessionManager.arView,
+                        currentFrame: viewModel.sessionManager.currentFrame
                     )
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
@@ -760,7 +760,7 @@ class ARMeasurementViewModel: ObservableObject {
                 firstMeasurementResult = result
                 firstTapFloorY = raycastHitPosition?.y
 
-                // Store the result as currentMeasurement so ScanningLineView can project the box
+                // Store the result as currentMeasurement
                 currentMeasurement = result
 
                 // Enter scanning mode

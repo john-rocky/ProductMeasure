@@ -83,6 +83,15 @@ enum PMTheme {
     static let scanLineWidth: CGFloat = 2.0
     static let scanLineGlowRadius: CGFloat = 8.0
 
+    // MARK: Scanning Line - Depth Contour
+
+    static let scanLineDepthSampleCount: Int = 80
+    static let scanLineDepthDisplacementScale: CGFloat = 0.4
+    static let scanLineMaxDisplacement: CGFloat = 60.0
+    static let scanLineTemporalBlend: CGFloat = 0.3
+    static let scanLineSpatialSmoothWindow: Int = 5
+    static let scanLineMaxDepth: Float = 5.0
+
     // MARK: Animation Timing
 
     static let edgeTraceDuration: Double = 0.5
