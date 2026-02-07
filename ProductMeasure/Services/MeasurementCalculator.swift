@@ -159,7 +159,10 @@ class MeasurementCalculator {
         // This is CRITICAL - if no points are near the tap, the mask is wrong
         if let hitPosition = raycastHitPosition {
             // First check: is the raycast hit anywhere near the point cloud?
-            let nearestDistance = pointCloud.points.map { simd_distance($0, hitPosition) }.min() ?? Float.infinity
+            var nearestDistance: Float = .infinity
+            for p in pointCloud.points {
+                nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
+            }
             print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
 
             // If the nearest point is more than 2m away, the mask is completely wrong
@@ -341,7 +344,10 @@ class MeasurementCalculator {
 
         // 6. Filter by proximity if raycast hit available
         if let hitPosition = raycastHitPosition {
-            let nearestDistance = pointCloud.points.map { simd_distance($0, hitPosition) }.min() ?? Float.infinity
+            var nearestDistance: Float = .infinity
+            for p in pointCloud.points {
+                nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
+            }
             print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
 
             if nearestDistance > 2.0 {
@@ -651,89 +657,89 @@ class MeasurementCalculator {
 
         var filteredPoints: [SIMD3<Float>] = []
         filteredPoints.reserveCapacity(points.count)
-
-        var distanceStats: [Float] = []
+        var minDist: Float = .infinity, maxDist: Float = 0, totalDist: Float = 0
 
         for point in points {
-            let distance = simd_distance(point, center)
-            distanceStats.append(distance)
-
-            if distance <= maxDistance {
+            let d = simd_distance(point, center)
+            minDist = min(minDist, d); maxDist = max(maxDist, d); totalDist += d
+            if d <= maxDistance {
                 filteredPoints.append(point)
             }
         }
 
-        // Log distance statistics
-        if !distanceStats.isEmpty {
-            let minDist = distanceStats.min()!
-            let maxDist = distanceStats.max()!
-            let avgDist = distanceStats.reduce(0, +) / Float(distanceStats.count)
-            print("[ProximityFilter] Distance stats - min: \(minDist)m, max: \(maxDist)m, avg: \(avgDist)m")
+        if !points.isEmpty {
+            print("[ProximityFilter] Distance stats - min: \(minDist)m, max: \(maxDist)m, avg: \(totalDist / Float(points.count))m")
         }
-
         print("[ProximityFilter] Kept \(filteredPoints.count) of \(points.count) points")
 
         return filteredPoints
     }
 
-    /// Extract the main cluster of points around the center using density-based clustering
+    /// Extract the main cluster of points around the center using spatial-hash flood-fill
     /// This helps isolate the tapped object from other nearby objects
     private func extractMainCluster(points: [SIMD3<Float>], center: SIMD3<Float>) -> [SIMD3<Float>] {
         guard points.count > 20 else { return points }
 
         print("[Clustering] Starting with \(points.count) points")
 
-        // Simple grid-based clustering
-        // Divide space into cells and find the densest region around center
-        let cellSize: Float = 0.03  // 3cm cells
+        let neighborThreshold: Float = 0.05  // 5cm
+        let cellSize = neighborThreshold
 
-        // Find the point closest to center as seed
-        var seedPoint = points[0]
-        var minDist = simd_distance(seedPoint, center)
-        for point in points {
-            let dist = simd_distance(point, center)
-            if dist < minDist {
-                minDist = dist
-                seedPoint = point
-            }
+        // Build spatial hash grid: cell → [point indices]
+        struct Cell: Hashable { let x, y, z: Int }
+        var grid: [Cell: [Int]] = [:]
+        grid.reserveCapacity(points.count / 2)
+        for (i, p) in points.enumerated() {
+            let cell = Cell(x: Int(floor(p.x / cellSize)),
+                            y: Int(floor(p.y / cellSize)),
+                            z: Int(floor(p.z / cellSize)))
+            grid[cell, default: []].append(i)
+        }
+
+        // Find seed (closest to center)
+        var seedIdx = 0
+        var minDist = simd_distance(points[0], center)
+        for (i, p) in points.enumerated() {
+            let d = simd_distance(p, center)
+            if d < minDist { minDist = d; seedIdx = i }
         }
         print("[Clustering] Seed point at distance \(minDist)m from center")
 
-        // Grow cluster from seed using flood-fill approach
-        var cluster: Set<Int> = []
-        var frontier: [Int] = []
-
-        // Find index of seed point
-        for (i, point) in points.enumerated() {
-            if simd_distance(point, seedPoint) < 0.001 {
-                cluster.insert(i)
-                frontier.append(i)
-                break
-            }
-        }
-
-        // Neighbor distance threshold - points within this distance are connected
-        let neighborThreshold: Float = 0.05  // 5cm
+        // Flood-fill using grid neighbors only (DFS with stack)
+        var inCluster = [Bool](repeating: false, count: points.count)
+        var frontier: [Int] = [seedIdx]
+        inCluster[seedIdx] = true
+        var clusterCount = 1
 
         while !frontier.isEmpty {
-            let currentIdx = frontier.removeFirst()
-            let currentPoint = points[currentIdx]
+            let idx = frontier.removeLast()
+            let p = points[idx]
+            let cx = Int(floor(p.x / cellSize))
+            let cy = Int(floor(p.y / cellSize))
+            let cz = Int(floor(p.z / cellSize))
 
-            for (i, point) in points.enumerated() {
-                if cluster.contains(i) { continue }
-
-                let dist = simd_distance(point, currentPoint)
-                if dist <= neighborThreshold {
-                    cluster.insert(i)
-                    frontier.append(i)
+            // Check only 27 neighboring cells
+            for dx in -1...1 {
+                for dy in -1...1 {
+                    for dz in -1...1 {
+                        guard let neighbors = grid[Cell(x: cx+dx, y: cy+dy, z: cz+dz)] else { continue }
+                        for ni in neighbors {
+                            if inCluster[ni] { continue }
+                            if simd_distance(p, points[ni]) <= neighborThreshold {
+                                inCluster[ni] = true
+                                frontier.append(ni)
+                                clusterCount += 1
+                            }
+                        }
+                    }
                 }
             }
 
             // Stop if cluster is getting too large (performance)
-            if cluster.count > 10000 { break }
+            if clusterCount > 10000 { break }
         }
 
-        let clusterPoints = cluster.map { points[$0] }
+        let clusterPoints = (0..<points.count).compactMap { inCluster[$0] ? points[$0] : nil }
         print("[Clustering] Extracted cluster with \(clusterPoints.count) points")
 
         // If cluster is too small, return original

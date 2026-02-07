@@ -218,18 +218,17 @@ class PointCloudGenerator {
             points.append(SIMD3(worldPoint.x, worldPoint.y, worldPoint.z))
         }
 
-        // Calculate and print point cloud bounds
+        // Calculate and print point cloud bounds (single pass)
         if !points.isEmpty {
-            let minX = points.map { $0.x }.min()!
-            let maxX = points.map { $0.x }.max()!
-            let minY = points.map { $0.y }.min()!
-            let maxY = points.map { $0.y }.max()!
-            let minZ = points.map { $0.z }.min()!
-            let maxZ = points.map { $0.z }.max()!
+            var minP = points[0], maxP = points[0]
+            for p in points {
+                minP = SIMD3(min(minP.x, p.x), min(minP.y, p.y), min(minP.z, p.z))
+                maxP = SIMD3(max(maxP.x, p.x), max(maxP.y, p.y), max(maxP.z, p.z))
+            }
             print("[Unproject] Point cloud bounds:")
-            print("[Unproject]   X: \(minX) to \(maxX) (range: \((maxX - minX) * 100)cm)")
-            print("[Unproject]   Y: \(minY) to \(maxY) (range: \((maxY - minY) * 100)cm)")
-            print("[Unproject]   Z: \(minZ) to \(maxZ) (range: \((maxZ - minZ) * 100)cm)")
+            print("[Unproject]   X: \(minP.x) to \(maxP.x) (range: \((maxP.x - minP.x) * 100)cm)")
+            print("[Unproject]   Y: \(minP.y) to \(maxP.y) (range: \((maxP.y - minP.y) * 100)cm)")
+            print("[Unproject]   Z: \(minP.z) to \(maxP.z) (range: \((maxP.z - minP.z) * 100)cm)")
         }
 
         return points
@@ -256,18 +255,17 @@ class PointCloudGenerator {
     private func downsample3D(_ points: [SIMD3<Float>], gridSize: Float) -> [SIMD3<Float>] {
         guard !points.isEmpty else { return [] }
 
-        var grid: [String: [SIMD3<Float>]] = [:]
+        struct GridKey3D: Hashable {
+            let x, y, z: Int
+        }
+
+        var grid: [GridKey3D: [SIMD3<Float>]] = [:]
 
         for point in points {
-            let cellX = Int(floor(point.x / gridSize))
-            let cellY = Int(floor(point.y / gridSize))
-            let cellZ = Int(floor(point.z / gridSize))
-            let key = "\(cellX)_\(cellY)_\(cellZ)"
-
-            if grid[key] == nil {
-                grid[key] = []
-            }
-            grid[key]!.append(point)
+            let key = GridKey3D(x: Int(floor(point.x / gridSize)),
+                                y: Int(floor(point.y / gridSize)),
+                                z: Int(floor(point.z / gridSize)))
+            grid[key, default: []].append(point)
         }
 
         // Return the centroid of each cell

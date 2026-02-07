@@ -195,24 +195,24 @@ class DepthProcessor {
     ) -> [DepthData] {
         guard !depthData.isEmpty else { return [] }
 
-        // Find bounds
-        let minX = depthData.map { $0.pixelX }.min()!
-        let maxX = depthData.map { $0.pixelX }.max()!
-        let minY = depthData.map { $0.pixelY }.min()!
-        let maxY = depthData.map { $0.pixelY }.max()!
+        // Find bounds in single pass
+        var minX = Int.max, maxX = Int.min, minY = Int.max, maxY = Int.min
+        for data in depthData {
+            minX = min(minX, data.pixelX); maxX = max(maxX, data.pixelX)
+            minY = min(minY, data.pixelY); maxY = max(maxY, data.pixelY)
+        }
 
         // Create grid cells
-        var grid: [String: [DepthData]] = [:]
+        struct GridKey2D: Hashable {
+            let x, y: Int
+        }
+
+        var grid: [GridKey2D: [DepthData]] = [:]
 
         for data in depthData {
-            let cellX = (data.pixelX - minX) / gridSize
-            let cellY = (data.pixelY - minY) / gridSize
-            let key = "\(cellX)_\(cellY)"
-
-            if grid[key] == nil {
-                grid[key] = []
-            }
-            grid[key]!.append(data)
+            let key = GridKey2D(x: (data.pixelX - minX) / gridSize,
+                                y: (data.pixelY - minY) / gridSize)
+            grid[key, default: []].append(data)
         }
 
         // Take the highest confidence point from each cell
