@@ -77,6 +77,8 @@ struct ARMeasurementView: View {
                         // Instruction text when in targeting mode or refining
                         if viewModel.isRefining {
                             InstructionCard(mode: .refine)
+                        } else if viewModel.hasPendingFirstTap && !viewModel.isProcessing {
+                            InstructionCard(mode: .secondTap)
                         } else if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
                             if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
                                 InstructionCard(mode: .tap)
@@ -451,7 +453,7 @@ struct ScanningIndicator: View {
 
 struct InstructionCard: View {
     enum Mode {
-        case tap, box, refine
+        case tap, box, refine, secondTap
     }
 
     var mode: Mode = .tap
@@ -462,6 +464,7 @@ struct InstructionCard: View {
         case .tap: return "hand.tap.fill"
         case .box: return "rectangle.dashed"
         case .refine: return "arrow.triangle.2.circlepath"
+        case .secondTap: return "arrow.triangle.2.circlepath"
         }
     }
 
@@ -470,6 +473,7 @@ struct InstructionCard: View {
         case .tap: return "Tap on an object to measure"
         case .box: return "Draw a box to select"
         case .refine: return "Refine from a different angle"
+        case .secondTap: return "Tap again from a different angle"
         }
     }
 
@@ -478,6 +482,7 @@ struct InstructionCard: View {
         case .tap: return "Point your device at an object and tap"
         case .box: return "Drag to draw a rectangle around the object"
         case .refine: return "Move to a different angle and tap the same object"
+        case .secondTap: return "Move around and tap the same object to refine"
         }
     }
 
@@ -569,6 +574,11 @@ class ARMeasurementViewModel: ObservableObject {
     private var accumulatedQualities: [MeasurementQuality] = []
     private var originalAxisMapping: BoundingBox3D.AxisMapping?
     private var originalFloorY: Float?
+
+    // Two-tap flow: pending first-tap result (measured but not yet displayed)
+    @Published var hasPendingFirstTap = false
+    private var pendingFirstTapResult: MeasurementCalculator.MeasurementResult?
+    private var pendingFirstTapFloorY: Float?
 
     // Current measurement mode (synced from view)
     var currentMeasurementMode: MeasurementMode = .boxPriority
@@ -695,6 +705,12 @@ class ARMeasurementViewModel: ObservableObject {
             return
         }
 
+        // Two-tap flow: if we have a pending first-tap result, this is the second tap
+        if let firstResult = pendingFirstTapResult {
+            await handleSecondTap(at: location, mode: mode, firstResult: firstResult, frame: frame)
+            return
+        }
+
         // Auto-save current measurement as completed box before starting new one
         if let existingResult = currentMeasurement {
             print("[ViewModel] Auto-saving existing measurement before new tap")
@@ -708,12 +724,11 @@ class ARMeasurementViewModel: ObservableObject {
         debugMaskImage = nil
         debugDepthImage = nil
         animationContext = nil
-        // Keep showing target brackets during processing
 
         isProcessing = true
-        print("[ViewModel] Starting measurement...")
+        print("[ViewModel] Starting first-tap measurement (silent)...")
 
-        // Get 3D world position from raycast - this is reliable for filtering
+        // Get 3D world position from raycast
         let raycastHitPosition = sessionManager.raycastWorldPosition(from: location)
         if let pos = raycastHitPosition {
             print("[ViewModel] Raycast hit position: \(pos)")
@@ -732,33 +747,145 @@ class ARMeasurementViewModel: ObservableObject {
                 mode: mode,
                 raycastHitPosition: raycastHitPosition
             ) {
-                print("[ViewModel] Measurement successful!")
+                print("[ViewModel] First-tap measurement successful (silent)")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
 
-                // Store debug images (only if available)
-                debugMaskImage = result.debugMaskImage
-                debugDepthImage = result.debugDepthImage
+                // Store as pending first-tap result (no animation, no box display)
+                pendingFirstTapResult = result
+                pendingFirstTapFloorY = raycastHitPosition?.y
+                hasPendingFirstTap = true
 
-                // Store the floor Y for later use
-                let floorY = raycastHitPosition?.y
+                // Seed refinement accumulators for the merge on second tap
+                if let pc = result.pointCloud {
+                    accumulatedPointClouds = [pc]
+                } else {
+                    accumulatedPointClouds = []
+                }
+                accumulatedQualities = [result.quality]
+                originalAxisMapping = result.axisMapping
 
-                // Start the animation sequence
-                startBoxAnimation(
-                    at: location,
-                    boundingBox: result.boundingBox,
-                    frame: frame,
-                    viewSize: viewSize,
-                    result: result,
-                    floorY: floorY
-                )
+                isProcessing = false
             } else {
-                print("[ViewModel] Measurement returned nil")
+                print("[ViewModel] First-tap measurement returned nil")
                 isProcessing = false
             }
         } catch {
-            print("[ViewModel] Measurement failed with error: \(error)")
+            print("[ViewModel] First-tap measurement failed with error: \(error)")
             isProcessing = false
         }
+    }
+
+    /// Second tap: refine with the pending first-tap result, then show animated box
+    private func handleSecondTap(at location: CGPoint, mode: MeasurementMode, firstResult: MeasurementCalculator.MeasurementResult, frame: ARFrame) async {
+        isProcessing = true
+        print("[ViewModel] Starting second-tap refinement...")
+
+        let viewSize = sessionManager.arView.bounds.size
+        let raycastHitPosition = sessionManager.raycastWorldPosition(from: location)
+
+        do {
+            if let refinement = try await measurementCalculator.measureForRefinement(
+                frame: frame,
+                tapPoint: location,
+                viewSize: viewSize,
+                mode: mode,
+                existingBox: firstResult.boundingBox,
+                raycastHitPosition: raycastHitPosition
+            ) {
+                // Merge point clouds from both taps
+                accumulatedPointClouds.append(refinement.points)
+                accumulatedQualities.append(refinement.quality)
+                refinementCount = 1
+
+                let mergedPoints = accumulatedPointClouds.flatMap { $0 }
+                let mergedQuality = MeasurementQuality.merged(accumulatedQualities)
+
+                // Re-estimate bounding box from merged points
+                let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+                    guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
+                    return plane
+                }
+
+                guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
+                    points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+                ) else {
+                    print("[ViewModel] Second-tap re-estimation failed, falling back to first-tap result")
+                    // Fall back to showing the first-tap result directly
+                    showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
+                    return
+                }
+
+                // Apply floor extension
+                var adjustedBox = newBox
+                let floorY = pendingFirstTapFloorY ?? raycastHitPosition?.y
+                if let floorY = floorY {
+                    adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                }
+
+                // Recalculate with original axis mapping
+                let mapping = originalAxisMapping ?? firstResult.axisMapping
+                var mergedResult = measurementCalculator.recalculate(
+                    boundingBox: adjustedBox, quality: mergedQuality, axisMapping: mapping
+                )
+                mergedResult.pointCloud = mergedPoints
+                mergedResult.debugMaskImage = firstResult.debugMaskImage
+                mergedResult.debugDepthImage = firstResult.debugDepthImage
+
+                // Store debug images
+                debugMaskImage = firstResult.debugMaskImage
+                debugDepthImage = firstResult.debugDepthImage
+
+                // Clear pending state
+                pendingFirstTapResult = nil
+                pendingFirstTapFloorY = nil
+                hasPendingFirstTap = false
+                originalFloorY = floorY
+
+                print("[ViewModel] Second-tap refinement successful! Dimensions: L=\(mergedResult.length*100)cm W=\(mergedResult.width*100)cm H=\(mergedResult.height*100)cm")
+
+                // Now show the animation with the refined result
+                startBoxAnimation(
+                    at: location,
+                    boundingBox: adjustedBox,
+                    frame: frame,
+                    viewSize: viewSize,
+                    result: mergedResult,
+                    floorY: floorY
+                )
+            } else {
+                print("[ViewModel] Second-tap refinement: object not matched, falling back to first-tap result")
+                showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
+            }
+        } catch {
+            print("[ViewModel] Second-tap refinement error: \(error), falling back to first-tap result")
+            showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
+        }
+    }
+
+    /// Fallback: show first-tap result with animation when second tap refinement fails
+    private func showFirstTapResultWithAnimation(at location: CGPoint, firstResult: MeasurementCalculator.MeasurementResult, frame: ARFrame) {
+        let viewSize = sessionManager.arView.bounds.size
+        let floorY = pendingFirstTapFloorY
+
+        // Store debug images
+        debugMaskImage = firstResult.debugMaskImage
+        debugDepthImage = firstResult.debugDepthImage
+
+        // Clear pending state
+        pendingFirstTapResult = nil
+        pendingFirstTapFloorY = nil
+        hasPendingFirstTap = false
+        originalFloorY = floorY
+
+        // Show animation with first-tap result
+        startBoxAnimation(
+            at: location,
+            boundingBox: firstResult.boundingBox,
+            frame: frame,
+            viewSize: viewSize,
+            result: firstResult,
+            floorY: floorY
+        )
     }
 
     func handleBoxSelection(rect: CGRect, viewSize: CGSize, mode: MeasurementMode) async {
@@ -787,13 +914,14 @@ class ARMeasurementViewModel: ObservableObject {
             convertActiveBoxToCompleted(result: existingResult, unit: currentUnit)
         }
 
-        // Clean up previous measurement
+        // Clean up previous measurement and pending first-tap state
         removeAllVisualizations()
         animationCoordinator.cancelAnimation()
         currentMeasurement = nil
         debugMaskImage = nil
         debugDepthImage = nil
         animationContext = nil
+        clearPendingFirstTap()
 
         isProcessing = true
         print("[ViewModel] Starting box selection measurement...")
@@ -1041,6 +1169,9 @@ class ARMeasurementViewModel: ObservableObject {
         originalAxisMapping = nil
         originalFloorY = nil
 
+        // Reset pending first-tap state
+        clearPendingFirstTap()
+
         print("[ViewModel] clearActiveBoxOnly completed. Completed boxes preserved: \(completedBoxAnchors.count)")
     }
 
@@ -1053,6 +1184,7 @@ class ARMeasurementViewModel: ObservableObject {
         completedBoxAnchors.removeAll()
         completedBoxCount = 0
         nextBoxId = 1
+        clearPendingFirstTap()
     }
 
     func startEditing() {
@@ -1293,6 +1425,13 @@ class ARMeasurementViewModel: ObservableObject {
             ? .normalNoRefine : .normal
         boxVisualization?.updateActionMode(mode)
         print("[Refine] Cancelled refinement mode")
+    }
+
+    /// Clear pending first-tap state
+    private func clearPendingFirstTap() {
+        pendingFirstTapResult = nil
+        pendingFirstTapFloorY = nil
+        hasPendingFirstTap = false
     }
 
     func handleRefinementTap(at location: CGPoint, mode: MeasurementMode) async {
