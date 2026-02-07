@@ -15,14 +15,8 @@ enum BoundingBoxAnimationPhase: Equatable {
     /// Scanning — first tap captured, scan line animating, waiting for second tap
     case scanning
 
-    /// Scan line sweeps once, face panels glow behind it
-    case scanReveal
-
-    /// Face panels pulse 2 times
-    case facePulse
-
-    /// Center hole opens, light converges to edge wireframes
-    case convergeToEdges
+    /// Wireframe rises from bottom to top
+    case wireframeRise
 
     /// Animation complete - box is fully visible
     case complete
@@ -67,15 +61,9 @@ struct BoundingBoxAnimationContext {
 
 /// Animation timing constants
 struct BoxAnimationTiming {
-    /// Duration for scan line single-sweep revealing face panels
-    static let scanReveal: Double = PMTheme.scanRevealDuration
-
-    /// Duration for face panel pulse (2 pulses)
-    static let facePulse: Double = PMTheme.facePulseDuration
-
-    /// Duration for center hole opening and light converging to edges
-    static let convergeToEdges: Double = PMTheme.convergeToEdgesDuration
+    /// Duration for wireframe rise animation
+    static let wireframeRise: Double = PMTheme.wireframeRiseDuration
 
     /// Total animation duration
-    static let total: Double = scanReveal + facePulse + convergeToEdges
+    static let total: Double = wireframeRise
 }
