@@ -34,6 +34,14 @@ enum AppConstants {
     static let maxRefinementRounds = 3
     static let refinementProximityScale: Float = 2.0   // Scale factor for same-object validation
     static let refinementOverlapThreshold: Float = 0.30 // Minimum overlap ratio for new point cloud
+
+    // MARK: - Scene Accumulation
+    static let accumulatorVoxelSize: Float = 0.005       // 5mm voxel grid
+    static let accumulatorMaxAge: TimeInterval = 5.0     // 5-second rolling window
+    static let accumulatorSampleStride: Int = 8          // Sample every 8th pixel in depth map
+    static let accumulatorMinConfidence: Int = 1         // ARConfidenceLevel.medium
+    static let accumulatorQueryExpansion: Float = 1.5    // Expand query box by this factor
+    static let accumulatorMinExtraPoints: Int = 50       // Min extra points needed for merge
 }
 
 enum MeasurementUnit: String, CaseIterable, Codable {

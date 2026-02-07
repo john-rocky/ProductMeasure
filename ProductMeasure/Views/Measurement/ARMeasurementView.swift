@@ -581,6 +581,7 @@ class ARMeasurementViewModel: ObservableObject {
     let sessionManager = ARSessionManager()
     private let measurementCalculator = MeasurementCalculator()
     private let boxEditingService = BoxEditingService()
+    private let sceneAccumulator = ScenePointCloudAccumulator()
     private var boxVisualization: BoxVisualization?
     private var boxVisualizationAnchor: AnchorEntity?
     private var pointCloudEntity: Entity?
@@ -618,6 +619,7 @@ class ARMeasurementViewModel: ObservableObject {
 
     func startSession() {
         sessionManager.startSession()
+        sceneAccumulator.reset()
         // Configure animation coordinator with AR view
         if let arView = sessionManager.arView {
             animationCoordinator.configure(arView: arView)
@@ -626,6 +628,11 @@ class ARMeasurementViewModel: ObservableObject {
 
     /// Called on each AR frame update
     private func onFrameUpdate(frame: ARFrame) {
+        // Background scene accumulation (only when idle)
+        if !isProcessing {
+            sceneAccumulator.accumulate(frame: frame)
+        }
+
         let cameraPosition = SIMD3<Float>(
             frame.camera.transform.columns.3.x,
             frame.camera.transform.columns.3.y,
@@ -735,9 +742,12 @@ class ARMeasurementViewModel: ObservableObject {
                 print("[ViewModel] Measurement successful!")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
 
+                // Enhance with accumulated background points
+                let enhancedResult = enhanceWithAccumulatedPoints(result, mode: mode, frame: frame)
+
                 // Store debug images (only if available)
-                debugMaskImage = result.debugMaskImage
-                debugDepthImage = result.debugDepthImage
+                debugMaskImage = enhancedResult.debugMaskImage
+                debugDepthImage = enhancedResult.debugDepthImage
 
                 // Store the floor Y for later use
                 let floorY = raycastHitPosition?.y
@@ -745,10 +755,10 @@ class ARMeasurementViewModel: ObservableObject {
                 // Start the animation sequence
                 startBoxAnimation(
                     at: location,
-                    boundingBox: result.boundingBox,
+                    boundingBox: enhancedResult.boundingBox,
                     frame: frame,
                     viewSize: viewSize,
-                    result: result,
+                    result: enhancedResult,
                     floorY: floorY
                 )
             } else {
@@ -818,17 +828,20 @@ class ARMeasurementViewModel: ObservableObject {
                 print("[ViewModel] Box selection measurement successful!")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
 
-                debugMaskImage = result.debugMaskImage
-                debugDepthImage = result.debugDepthImage
+                // Enhance with accumulated background points
+                let enhancedResult = enhanceWithAccumulatedPoints(result, mode: mode, frame: frame)
+
+                debugMaskImage = enhancedResult.debugMaskImage
+                debugDepthImage = enhancedResult.debugDepthImage
 
                 let floorY = raycastHitPosition?.y
 
                 startBoxAnimation(
                     at: boxCenter,
-                    boundingBox: result.boundingBox,
+                    boundingBox: enhancedResult.boundingBox,
                     frame: frame,
                     viewSize: viewSize,
-                    result: result,
+                    result: enhancedResult,
                     floorY: floorY
                 )
             } else {
@@ -1372,6 +1385,58 @@ class ARMeasurementViewModel: ObservableObject {
         }
 
         isProcessing = false
+    }
+
+    // MARK: - Scene Accumulation Enhancement
+
+    /// Enhance a measurement result by merging accumulated background points.
+    /// Returns the original result if not enough extra points are available.
+    private func enhanceWithAccumulatedPoints(
+        _ result: MeasurementCalculator.MeasurementResult,
+        mode: MeasurementMode,
+        frame: ARFrame
+    ) -> MeasurementCalculator.MeasurementResult {
+        let extraPoints = sceneAccumulator.queryPoints(
+            near: result.boundingBox,
+            expansion: AppConstants.accumulatorQueryExpansion
+        )
+
+        guard extraPoints.count >= AppConstants.accumulatorMinExtraPoints else {
+            print("[Accumulator] Not enough extra points (\(extraPoints.count)), skipping enhancement")
+            return result
+        }
+
+        guard let originalPoints = result.pointCloud, !originalPoints.isEmpty else {
+            print("[Accumulator] No original point cloud, skipping enhancement")
+            return result
+        }
+
+        let mergedPoints = originalPoints + extraPoints
+        print("[Accumulator] Merging \(originalPoints.count) + \(extraPoints.count) = \(mergedPoints.count) points")
+
+        // Re-estimate bounding box from merged points
+        let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+            guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
+            return plane
+        }
+
+        guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
+            points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+        ) else {
+            print("[Accumulator] Re-estimation failed, using original result")
+            return result
+        }
+
+        // Recalculate dimensions with original axis mapping
+        var enhanced = measurementCalculator.recalculate(
+            boundingBox: newBox, quality: result.quality, axisMapping: result.axisMapping
+        )
+        enhanced.pointCloud = mergedPoints
+        enhanced.debugMaskImage = result.debugMaskImage
+        enhanced.debugDepthImage = result.debugDepthImage
+
+        print("[Accumulator] Enhanced: L=\(enhanced.length*100)cm W=\(enhanced.width*100)cm H=\(enhanced.height*100)cm")
+        return enhanced
     }
 
     /// Find the completed box ID that owns a given entity

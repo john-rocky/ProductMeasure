@@ -45,6 +45,7 @@
 		001000096 /* CompletedBoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000097 /* CompletedBoxVisualization.swift */; };
 		001000098 /* ActionIconBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000099 /* ActionIconBuilder.swift */; };
 		001000100 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000101 /* Theme.swift */; };
+		001000102 /* ScenePointCloudAccumulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000103 /* ScenePointCloudAccumulator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -88,6 +89,7 @@
 		001000097 /* CompletedBoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletedBoxVisualization.swift; sourceTree = "<group>"; };
 		001000099 /* ActionIconBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionIconBuilder.swift; sourceTree = "<group>"; };
 		001000101 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		001000103 /* ScenePointCloudAccumulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePointCloudAccumulator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -167,6 +169,7 @@
 				001000079 /* DebugVisualization.swift */,
 				001000083 /* BoxEditingService.swift */,
 				001000091 /* BoxAnimationCoordinator.swift */,
+				001000103 /* ScenePointCloudAccumulator.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -341,6 +344,7 @@
 				001000096 /* CompletedBoxVisualization.swift in Sources */,
 				001000098 /* ActionIconBuilder.swift in Sources */,
 				001000100 /* Theme.swift in Sources */,
+				001000102 /* ScenePointCloudAccumulator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
