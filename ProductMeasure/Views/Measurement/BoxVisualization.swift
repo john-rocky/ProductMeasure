@@ -724,28 +724,44 @@ class BoxVisualization {
         let idWidth = idMesh.bounds.extents.x
         let idHeight = idMesh.bounds.extents.y
 
-        // -- Body --
-        let lVal = formatDimensionValue(storedLength)
+        // -- Body lines (vertical layout) --
         let wVal = formatDimensionValue(storedWidth)
         let hVal = formatDimensionValue(storedHeight)
-        let bodyText = "L: \(lVal)  W: \(wVal)  H: \(hVal) \(storedUnit.rawValue)"
-        let bodyMesh = MeshResource.generateText(
-            bodyText,
-            extrusionDepth: 0.001,
-            font: .monospacedDigitSystemFont(ofSize: billboardBodyFontSize, weight: .medium),
-            containerFrame: .zero,
-            alignment: .left,
-            lineBreakMode: .byWordWrapping
-        )
+        let lVal = formatDimensionValue(storedLength)
+        let unit = storedUnit.rawValue
+
+        let bodyLines = [
+            "W  \(wVal) \(unit)",
+            "H  \(hVal) \(unit)",
+            "L  \(lVal) \(unit)"
+        ]
+
         let bodyMaterial = UnlitMaterial(color: dimensionLabelTextColor)
-        let bodyEntity = ModelEntity(mesh: bodyMesh, materials: [bodyMaterial])
-        let bodyWidth = bodyMesh.bounds.extents.x
-        let bodyHeight = bodyMesh.bounds.extents.y
+        var bodyEntities: [ModelEntity] = []
+        var maxBodyWidth: Float = 0
+        var bodyLineHeight: Float = 0
+
+        for line in bodyLines {
+            let mesh = MeshResource.generateText(
+                line,
+                extrusionDepth: 0.001,
+                font: .monospacedDigitSystemFont(ofSize: billboardBodyFontSize, weight: .medium),
+                containerFrame: .zero,
+                alignment: .left,
+                lineBreakMode: .byTruncatingTail
+            )
+            let entity = ModelEntity(mesh: mesh, materials: [bodyMaterial])
+            bodyEntities.append(entity)
+            maxBodyWidth = max(maxBodyWidth, mesh.bounds.extents.x)
+            bodyLineHeight = mesh.bounds.extents.y
+        }
 
         // -- Layout --
+        let lineGap: Float = 0.003
         let gap: Float = 0.004
-        let contentWidth = max(idWidth, bodyWidth)
-        let contentHeight = idHeight + gap + bodyHeight
+        let bodyTotalHeight = bodyLineHeight * Float(bodyLines.count) + lineGap * Float(bodyLines.count - 1)
+        let contentWidth = max(idWidth, maxBodyWidth)
+        let contentHeight = idHeight + gap + bodyTotalHeight
         let totalWidth = accentBarWidth + innerPadding + contentWidth + padding * 2
         let totalHeight = contentHeight + padding * 2
         let cornerRadius = min(totalHeight, totalWidth) * 0.12
@@ -784,14 +800,21 @@ class BoxVisualization {
         backgroundEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.001)
         accentEntity.position = SIMD3<Float>(accentX, totalHeight / 2, 0.0)
         topBorderEntity.position = SIMD3<Float>(0, totalHeight - 0.0003, 0.0005)
-        idEntity.position = SIMD3<Float>(textLeftX, padding + bodyHeight + gap, 0)
-        bodyEntity.position = SIMD3<Float>(textLeftX, padding, 0)
+        idEntity.position = SIMD3<Float>(textLeftX, padding + bodyTotalHeight + gap, 0)
+
+        // Position body lines from top to bottom
+        for (i, entity) in bodyEntities.enumerated() {
+            let lineY = padding + bodyTotalHeight - bodyLineHeight - Float(i) * (bodyLineHeight + lineGap)
+            entity.position = SIMD3<Float>(textLeftX, lineY, 0)
+        }
 
         containerEntity.addChild(backgroundEntity)
         containerEntity.addChild(accentEntity)
         containerEntity.addChild(topBorderEntity)
         containerEntity.addChild(idEntity)
-        containerEntity.addChild(bodyEntity)
+        for entity in bodyEntities {
+            containerEntity.addChild(entity)
+        }
 
         return containerEntity
     }

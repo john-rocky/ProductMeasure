@@ -85,6 +85,15 @@ enum PMTheme {
     static let completionPulseDuration: Double = 0.3
     static let totalAnimationDuration: Double = 1.6
 
+    // MARK: Dimension Callout
+
+    static let calloutLineStagger: Double = 0.15
+    static let calloutHoldDuration: Double = 0.20
+    static let calloutTransitionDuration: Double = 0.50
+    static let calloutCornerRadius: CGFloat = 12
+    static let calloutIdFontSize: CGFloat = 16
+    static let calloutBodyFontSize: CGFloat = 14
+
     // MARK: Gradients
 
     static var cyanGradient: LinearGradient {

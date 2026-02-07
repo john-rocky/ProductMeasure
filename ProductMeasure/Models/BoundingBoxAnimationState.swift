@@ -24,6 +24,12 @@ enum BoundingBoxAnimationPhase: Equatable {
     /// Completion pulse flash
     case completionPulse
 
+    /// 2D dimension callout card sliding in from top-right
+    case dimensionCallout
+
+    /// 2D callout transitioning to 3D billboard
+    case calloutTransition
+
     /// Animation complete - box is fully visible
     case complete
 }
@@ -79,6 +85,12 @@ struct BoxAnimationTiming {
     /// Duration for completion pulse flash
     static let completionPulse: Double = PMTheme.completionPulseDuration
 
+    /// Duration for dimension callout slide-in
+    static let dimensionCallout: Double = PMTheme.calloutLineStagger * 4 + PMTheme.calloutHoldDuration
+
+    /// Duration for callout-to-billboard transition
+    static let calloutTransition: Double = PMTheme.calloutTransitionDuration
+
     /// Total animation duration
-    static let total: Double = edgeTrace + flyToBottom + growVertical + completionPulse
+    static let total: Double = edgeTrace + flyToBottom + growVertical + completionPulse + dimensionCallout + calloutTransition
 }

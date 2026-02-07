@@ -45,6 +45,7 @@
 		001000096 /* CompletedBoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000097 /* CompletedBoxVisualization.swift */; };
 		001000098 /* ActionIconBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000099 /* ActionIconBuilder.swift */; };
 		001000100 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000101 /* Theme.swift */; };
+		001000102 /* DimensionCalloutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000103 /* DimensionCalloutView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -88,6 +89,7 @@
 		001000097 /* CompletedBoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompletedBoxVisualization.swift; sourceTree = "<group>"; };
 		001000099 /* ActionIconBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionIconBuilder.swift; sourceTree = "<group>"; };
 		001000101 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		001000103 /* DimensionCalloutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DimensionCalloutView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -205,6 +207,7 @@
 				001000089 /* AnimatedBoxVisualization.swift */,
 				001000093 /* BoxSelectionRectView.swift */,
 				001000095 /* SelectionModeToggle.swift */,
+				001000103 /* DimensionCalloutView.swift */,
 			);
 			path = Measurement;
 			sourceTree = "<group>";
@@ -341,6 +344,7 @@
 				001000096 /* CompletedBoxVisualization.swift in Sources */,
 				001000098 /* ActionIconBuilder.swift in Sources */,
 				001000100 /* Theme.swift in Sources */,
+				001000102 /* DimensionCalloutView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

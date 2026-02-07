@@ -100,6 +100,24 @@ struct ARMeasurementView: View {
                         DebugImageView(image: image, title: "Depth Map (Bright=Close) + Masked Pixels (Green)")
                     }
                 }
+
+                // Dimension callout overlay
+                if viewModel.showDimensionCallout {
+                    GeometryReader { geometry in
+                        DimensionCalloutView(
+                            boxId: viewModel.calloutBoxId,
+                            width: viewModel.calloutWidth,
+                            height: viewModel.calloutHeight,
+                            length: viewModel.calloutLength,
+                            lineRevealed: viewModel.calloutLineRevealed,
+                            transitionProgress: viewModel.calloutTransitionProgress,
+                            targetPosition: viewModel.calloutTargetScreenPosition,
+                            screenSize: geometry.size
+                        )
+                    }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                }
             } else {
                 // LiDAR not available view
                 LiDARNotAvailableView()
@@ -575,6 +593,16 @@ class ARMeasurementViewModel: ObservableObject {
     private var originalAxisMapping: BoundingBox3D.AxisMapping?
     private var originalFloorY: Float?
 
+    // Dimension callout state
+    @Published var showDimensionCallout = false
+    @Published var calloutLineRevealed: [Bool] = [false, false, false, false]
+    @Published var calloutTransitionProgress: CGFloat = 0.0
+    @Published var calloutTargetScreenPosition: CGPoint = .zero
+    @Published var calloutBoxId: Int = 0
+    @Published var calloutWidth: String = ""
+    @Published var calloutHeight: String = ""
+    @Published var calloutLength: String = ""
+
     // Two-tap flow: pending first-tap result (measured but not yet displayed)
     @Published var hasPendingFirstTap = false
     private var pendingFirstTapResult: MeasurementCalculator.MeasurementResult?
@@ -648,8 +676,12 @@ class ARMeasurementViewModel: ObservableObject {
         )
 
         // Active box billboard is always visible (excluded from prominence logic)
+        // But hide during callout transition when 2D card is showing
         if let boxViz = boxVisualization {
-            boxViz.setDimensionBillboardVisible(true, forceShow: true)
+            let inCalloutPhase = animationPhase == .dimensionCallout || animationPhase == .calloutTransition
+            if !inCalloutPhase {
+                boxViz.setDimensionBillboardVisible(true, forceShow: true)
+            }
             boxViz.updateLabelOrientations(cameraPosition: cameraPosition)
         }
 
@@ -1021,15 +1053,10 @@ class ARMeasurementViewModel: ObservableObject {
                     animatedBox.animateCompletionPulse(duration: BoxAnimationTiming.completionPulse) { [weak self] in
                         guard let self = self else { return }
 
-                        // Phase 5: Complete - swap to regular BoxVisualization
-                        self.animationPhase = .complete
+                        // Phase 5: Dimension callout
+                        self.animationPhase = .dimensionCallout
 
-                        if let anchor = self.animatedBoxAnchor {
-                            self.sessionManager.removeAnchor(anchor)
-                        }
-                        self.animatedBoxAnchor = nil
-                        self.animatedBoxVisualization = nil
-
+                        // Prepare adjusted box and result for callout display
                         var adjustedBox = boundingBox
                         if let floorY = floorY {
                             adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
@@ -1043,10 +1070,73 @@ class ARMeasurementViewModel: ObservableObject {
                         adjustedResult.pointCloud = result.pointCloud
                         adjustedResult.debugMaskImage = result.debugMaskImage
                         adjustedResult.debugDepthImage = result.debugDepthImage
-                        self.currentMeasurement = adjustedResult
-                        self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY, unit: self.currentUnit)
 
-                        self.isProcessing = false
+                        // Populate callout data
+                        self.calloutBoxId = self.nextBoxId
+                        self.calloutWidth = self.formatCalloutValue(adjustedResult.width, unit: self.currentUnit)
+                        self.calloutHeight = self.formatCalloutValue(adjustedResult.height, unit: self.currentUnit)
+                        self.calloutLength = self.formatCalloutValue(adjustedResult.length, unit: self.currentUnit)
+                        self.calloutLineRevealed = [false, false, false, false]
+                        self.calloutTransitionProgress = 0.0
+                        self.showDimensionCallout = true
+
+                        // Stagger line reveals
+                        Task { [weak self] in
+                            guard let self = self else { return }
+                            let stagger = PMTheme.calloutLineStagger
+
+                            for i in 0..<4 {
+                                try? await Task.sleep(nanoseconds: UInt64(stagger * 1_000_000_000))
+                                guard self.showDimensionCallout else { return }
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    self.calloutLineRevealed[i] = true
+                                }
+                            }
+
+                            // Hold briefly
+                            try? await Task.sleep(nanoseconds: UInt64(PMTheme.calloutHoldDuration * 1_000_000_000))
+                            guard self.showDimensionCallout else { return }
+
+                            // Phase 6: Transition — swap animated box to real BoxVisualization
+                            self.animationPhase = .calloutTransition
+
+                            // Remove animated box, create real visualization
+                            if let anchor = self.animatedBoxAnchor {
+                                self.sessionManager.removeAnchor(anchor)
+                            }
+                            self.animatedBoxAnchor = nil
+                            self.animatedBoxVisualization = nil
+
+                            self.currentMeasurement = adjustedResult
+                            self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY, unit: self.currentUnit)
+
+                            // Hide 3D billboard initially
+                            self.boxVisualization?.setDimensionBillboardVisible(false)
+
+                            // Compute target screen position from billboard 3D position
+                            let billboardWorldPos = adjustedBox.center + SIMD3<Float>(0, adjustedBox.extents.y + 0.03, 0)
+                            if let screenPos = self.sessionManager.projectToScreen(worldPosition: billboardWorldPos) {
+                                self.calloutTargetScreenPosition = screenPos
+                            } else {
+                                // Fallback: screen center
+                                let viewSize = self.sessionManager.arView.bounds.size
+                                self.calloutTargetScreenPosition = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+                            }
+
+                            // Animate 2D card toward billboard position
+                            withAnimation(.easeInOut(duration: PMTheme.calloutTransitionDuration)) {
+                                self.calloutTransitionProgress = 1.0
+                            }
+
+                            // Wait for transition to complete
+                            try? await Task.sleep(nanoseconds: UInt64(PMTheme.calloutTransitionDuration * 1_000_000_000))
+
+                            // Phase 7: Complete
+                            self.showDimensionCallout = false
+                            self.boxVisualization?.setDimensionBillboardVisible(true, forceShow: true)
+                            self.animationPhase = .complete
+                            self.isProcessing = false
+                        }
                     }
                 }
             }
@@ -1171,6 +1261,9 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Reset pending first-tap state
         clearPendingFirstTap()
+
+        // Reset callout state
+        resetCalloutState()
 
         print("[ViewModel] clearActiveBoxOnly completed. Completed boxes preserved: \(completedBoxAnchors.count)")
     }
@@ -1678,6 +1771,26 @@ class ARMeasurementViewModel: ObservableObject {
 
         pointCloudEntity = nil
         print("[ViewModel] Completed boxes preserved: \(completedBoxAnchors.count)")
+    }
+
+    private func formatCalloutValue(_ meters: Float, unit: MeasurementUnit) -> String {
+        let value = unit.convert(meters: meters)
+        let numStr: String
+        if value >= 100 {
+            numStr = String(format: "%.0f", value)
+        } else if value >= 10 {
+            numStr = String(format: "%.1f", value)
+        } else {
+            numStr = String(format: "%.2f", value)
+        }
+        return "\(numStr) \(unit.rawValue)"
+    }
+
+    /// Reset all callout-related state
+    private func resetCalloutState() {
+        showDimensionCallout = false
+        calloutLineRevealed = [false, false, false, false]
+        calloutTransitionProgress = 0.0
     }
 
     private func captureAnnotatedImage() -> Data? {
