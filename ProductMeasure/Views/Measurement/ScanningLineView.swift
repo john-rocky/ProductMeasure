@@ -13,6 +13,8 @@ import RealityKit
 struct ScanningLineView: View {
     weak var arView: ARView?
     var currentFrame: ARFrame?
+    /// When non-nil, overrides the looping time-based progress with a single-sweep value (0→1)
+    var overrideProgress: CGFloat? = nil
 
     @State private var startDate = Date()
     @State private var previousDisplacements: [(CGFloat, CGFloat)] = []
@@ -20,7 +22,8 @@ struct ScanningLineView: View {
     var body: some View {
         TimelineView(.animation) { timeline in
             let elapsed = timeline.date.timeIntervalSince(startDate)
-            let progress = CGFloat(elapsed.truncatingRemainder(dividingBy: PMTheme.scanLineDuration) / PMTheme.scanLineDuration)
+            let loopProgress = CGFloat(elapsed.truncatingRemainder(dividingBy: PMTheme.scanLineDuration) / PMTheme.scanLineDuration)
+            let progress = overrideProgress ?? loopProgress
 
             Canvas { context, size in
                 let lineX = progress * size.width

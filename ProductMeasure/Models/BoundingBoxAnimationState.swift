@@ -15,17 +15,14 @@ enum BoundingBoxAnimationPhase: Equatable {
     /// Scanning — first tap captured, scan line animating, waiting for second tap
     case scanning
 
-    /// Edge trace: bottom edges draw sequentially with corner markers
-    case edgeTrace
+    /// Scan line sweeps once, face panels glow behind it
+    case scanReveal
 
-    /// 3D rect flying from camera position to object bottom plane
-    case flyingToBottom
+    /// Face panels pulse 2 times
+    case facePulse
 
-    /// Growing vertically from the bottom plane
-    case growingVertical
-
-    /// Completion pulse flash
-    case completionPulse
+    /// Center hole opens, light converges to edge wireframes
+    case convergeToEdges
 
     /// Animation complete - box is fully visible
     case complete
@@ -70,18 +67,15 @@ struct BoundingBoxAnimationContext {
 
 /// Animation timing constants
 struct BoxAnimationTiming {
-    /// Duration for edge trace (bottom edges drawing sequentially)
-    static let edgeTrace: Double = PMTheme.edgeTraceDuration
+    /// Duration for scan line single-sweep revealing face panels
+    static let scanReveal: Double = PMTheme.scanRevealDuration
 
-    /// Duration for 3D rect to fly from camera to bottom plane
-    static let flyToBottom: Double = PMTheme.flyToBottomDuration
+    /// Duration for face panel pulse (2 pulses)
+    static let facePulse: Double = PMTheme.facePulseDuration
 
-    /// Duration for vertical edges to grow
-    static let growVertical: Double = PMTheme.growVerticalDuration
-
-    /// Duration for completion pulse flash
-    static let completionPulse: Double = PMTheme.completionPulseDuration
+    /// Duration for center hole opening and light converging to edges
+    static let convergeToEdges: Double = PMTheme.convergeToEdgesDuration
 
     /// Total animation duration
-    static let total: Double = edgeTrace + flyToBottom + growVertical + completionPulse
+    static let total: Double = scanReveal + facePulse + convergeToEdges
 }

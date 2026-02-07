@@ -94,11 +94,15 @@ enum PMTheme {
 
     // MARK: Animation Timing
 
-    static let edgeTraceDuration: Double = 0.5
-    static let flyToBottomDuration: Double = 0.4
-    static let growVerticalDuration: Double = 0.4
-    static let completionPulseDuration: Double = 0.3
-    static let totalAnimationDuration: Double = 1.6
+    static let scanRevealDuration: Double = 1.2
+    static let facePulseDuration: Double = 0.6
+    static let convergeToEdgesDuration: Double = 0.8
+    static let totalAnimationDuration: Double = 2.6
+
+    // MARK: Face Panel Appearance
+
+    static let facePanelAlpha: Float = 0.35
+    static let faceCenterAlpha: Float = 0.15
 
     // MARK: Gradients
 

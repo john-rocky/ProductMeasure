@@ -25,8 +25,12 @@ struct ARMeasurementView: View {
                 )
                     .ignoresSafeArea()
 
-                // Corner brackets overlay - visible only in tap mode (not during scanning)
-                if selectionMode == .tap && viewModel.animationPhase != .scanning {
+                // Corner brackets overlay - visible only in tap mode (not during scanning or animation)
+                if selectionMode == .tap
+                    && viewModel.animationPhase != .scanning
+                    && viewModel.animationPhase != .scanReveal
+                    && viewModel.animationPhase != .facePulse
+                    && viewModel.animationPhase != .convergeToEdges {
                     GeometryReader { geometry in
                         CornerBracketsView(
                             phase: viewModel.animationPhase,
@@ -37,11 +41,12 @@ struct ARMeasurementView: View {
                     .allowsHitTesting(false)
                 }
 
-                // Scanning line overlay
-                if viewModel.animationPhase == .scanning {
+                // Scanning line overlay - visible during scanning loop and scan-reveal sweep
+                if viewModel.animationPhase == .scanning || viewModel.animationPhase == .scanReveal {
                     ScanningLineView(
                         arView: viewModel.sessionManager.arView,
-                        currentFrame: viewModel.sessionManager.currentFrame
+                        currentFrame: viewModel.sessionManager.currentFrame,
+                        overrideProgress: viewModel.animationPhase == .scanReveal ? viewModel.scanRevealProgress : nil
                     )
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
@@ -597,6 +602,7 @@ class ARMeasurementViewModel: ObservableObject {
     // Animation state - start with target brackets visible
     @Published var animationPhase: BoundingBoxAnimationPhase = .showingTargetBrackets
     @Published var animationContext: BoundingBoxAnimationContext?
+    @Published var scanRevealProgress: CGFloat = 0
     let animationCoordinator = BoxAnimationCoordinator()
 
     let sessionManager = ARSessionManager()
@@ -942,7 +948,7 @@ class ARMeasurementViewModel: ObservableObject {
         }
     }
 
-    /// Start the bounding box appearance animation
+    /// Start the bounding box appearance animation (scan-reveal → face pulse → converge to edges)
     private func startBoxAnimation(
         at tapPoint: CGPoint,
         boundingBox: BoundingBox3D,
@@ -951,79 +957,69 @@ class ARMeasurementViewModel: ObservableObject {
         result: MeasurementCalculator.MeasurementResult,
         floorY: Float?
     ) {
-        // Get camera transform for starting position
-        let cameraTransform = frame.camera.transform
-
-        // Phase 1: Edge trace - draw bottom edges sequentially
-        animationPhase = .edgeTrace
-
-        // Create animated box visualization
+        // Create animated box visualization at target position
         animatedBoxVisualization = AnimatedBoxVisualization(boundingBox: boundingBox)
         guard let animatedBox = animatedBoxVisualization else {
             isProcessing = false
             return
         }
 
-        // Setup the 3D rect at camera position
-        animatedBox.setupAtCameraPosition(
-            cameraTransform: cameraTransform,
-            distanceFromCamera: 0.5,
-            rectSize: 0.25
-        )
+        // Setup face panels and edges at actual 3D position
+        animatedBox.setupAtTargetPosition(frame: frame, screenSize: viewSize)
         animatedBoxAnchor = sessionManager.addEntityWithAnchor(animatedBox.entity)
 
-        // Phase 1: Edge trace animation
-        animatedBox.animateEdgeTrace(duration: BoxAnimationTiming.edgeTrace) { [weak self] in
+        // Phase 1: Scan reveal — scan line sweeps once, face panels glow behind it
+        animationPhase = .scanReveal
+        scanRevealProgress = 0
+
+        animatedBox.animateScanReveal(duration: BoxAnimationTiming.scanReveal, progressCallback: { [weak self] progress in
+            guard let self = self else { return }
+            self.scanRevealProgress = CGFloat(progress)
+        }, completion: { [weak self] in
             guard let self = self else { return }
 
-            // Phase 2: Fly to bottom position
-            self.animationPhase = .flyingToBottom
+            // Phase 2: Face pulse — panels pulse 2 times
+            self.animationPhase = .facePulse
 
-            animatedBox.animateFlyToBottom(duration: BoxAnimationTiming.flyToBottom) { [weak self] in
+            animatedBox.animateFacePulse(duration: BoxAnimationTiming.facePulse) { [weak self] in
                 guard let self = self else { return }
 
-                // Phase 3: Grow vertical edges
-                self.animationPhase = .growingVertical
+                // Phase 3: Converge to edges — center hole opens, light gathers to wireframe
+                self.animationPhase = .convergeToEdges
 
-                animatedBox.animateGrowVertical(duration: BoxAnimationTiming.growVertical) { [weak self] in
+                animatedBox.animateConvergeToEdges(duration: BoxAnimationTiming.convergeToEdges) { [weak self] in
                     guard let self = self else { return }
 
-                    // Phase 4: Completion pulse
-                    self.animationPhase = .completionPulse
+                    // Complete — swap to regular BoxVisualization
+                    self.animationPhase = .complete
+                    self.scanRevealProgress = 0
 
-                    animatedBox.animateCompletionPulse(duration: BoxAnimationTiming.completionPulse) { [weak self] in
-                        guard let self = self else { return }
-
-                        // Phase 5: Complete - swap to regular BoxVisualization
-                        self.animationPhase = .complete
-
-                        if let anchor = self.animatedBoxAnchor {
-                            self.sessionManager.removeAnchor(anchor)
-                        }
-                        self.animatedBoxAnchor = nil
-                        self.animatedBoxVisualization = nil
-
-                        var adjustedBox = boundingBox
-                        if let floorY = floorY {
-                            adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
-                        }
-
-                        var adjustedResult = self.measurementCalculator.recalculate(
-                            boundingBox: adjustedBox,
-                            quality: result.quality,
-                            axisMapping: result.axisMapping
-                        )
-                        adjustedResult.pointCloud = result.pointCloud
-                        adjustedResult.debugMaskImage = result.debugMaskImage
-                        adjustedResult.debugDepthImage = result.debugDepthImage
-                        self.currentMeasurement = adjustedResult
-                        self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY, unit: self.currentUnit)
-
-                        self.isProcessing = false
+                    if let anchor = self.animatedBoxAnchor {
+                        self.sessionManager.removeAnchor(anchor)
                     }
+                    self.animatedBoxAnchor = nil
+                    self.animatedBoxVisualization = nil
+
+                    var adjustedBox = boundingBox
+                    if let floorY = floorY {
+                        adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                    }
+
+                    var adjustedResult = self.measurementCalculator.recalculate(
+                        boundingBox: adjustedBox,
+                        quality: result.quality,
+                        axisMapping: result.axisMapping
+                    )
+                    adjustedResult.pointCloud = result.pointCloud
+                    adjustedResult.debugMaskImage = result.debugMaskImage
+                    adjustedResult.debugDepthImage = result.debugDepthImage
+                    self.currentMeasurement = adjustedResult
+                    self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY, unit: self.currentUnit)
+
+                    self.isProcessing = false
                 }
             }
-        }
+        })
     }
 
     func saveMeasurement(mode: MeasurementMode, unit: MeasurementUnit = .centimeters) {
