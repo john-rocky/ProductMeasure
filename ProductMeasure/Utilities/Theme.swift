@@ -14,13 +14,13 @@ enum PMTheme {
 
     // MARK: Primary & Accents
 
-    static let cyan       = Color(hex: 0x00D9FF)
+    static let cyan       = Color(hex: 0x39FF14)
     static let green      = Color(hex: 0x00E680)
     static let amber      = Color(hex: 0xFFBF00)
     static let red        = Color(hex: 0xFF404D)
     static let blue       = Color(hex: 0x3380FF)
 
-    static let uiCyan     = UIColor(hex: 0x00D9FF)
+    static let uiCyan     = UIColor(hex: 0x39FF14)
     static let uiGreen    = UIColor(hex: 0x00E680)
     static let uiAmber    = UIColor(hex: 0xFFBF00)
     static let uiRed      = UIColor(hex: 0xFF404D)
@@ -55,27 +55,27 @@ enum PMTheme {
     // MARK: 3D Edge Colors
 
     /// Active box inner edge: bright cyan, full alpha
-    static let uiEdgeInner  = UIColor(hex: 0x00D9FF).withAlphaComponent(1.0)
+    static let uiEdgeInner  = UIColor(hex: 0x39FF14).withAlphaComponent(1.0)
     /// Active box outer glow edge: cyan, low alpha
-    static let uiEdgeOuter  = UIColor(hex: 0x00D9FF).withAlphaComponent(0.15)
+    static let uiEdgeOuter  = UIColor(hex: 0x39FF14).withAlphaComponent(0.15)
     /// Corner marker: cyan sphere
-    static let uiCornerMarker = UIColor(hex: 0x00D9FF).withAlphaComponent(0.9)
+    static let uiCornerMarker = UIColor(hex: 0x39FF14).withAlphaComponent(0.9)
 
     /// Completed box inner edge: slightly dimmer
-    static let uiEdgeInnerDim  = UIColor(hex: 0x00D9FF).withAlphaComponent(0.7)
-    static let uiEdgeOuterDim  = UIColor(hex: 0x00D9FF).withAlphaComponent(0.10)
-    static let uiCornerMarkerDim = UIColor(hex: 0x00D9FF).withAlphaComponent(0.6)
+    static let uiEdgeInnerDim  = UIColor(hex: 0x39FF14).withAlphaComponent(0.7)
+    static let uiEdgeOuterDim  = UIColor(hex: 0x39FF14).withAlphaComponent(0.10)
+    static let uiCornerMarkerDim = UIColor(hex: 0x39FF14).withAlphaComponent(0.6)
 
     // MARK: Billboard
 
     static let uiBillboardBg     = UIColor(red: 13/255, green: 18/255, blue: 31/255, alpha: 0.85)
-    static let uiBillboardAccent = UIColor(hex: 0x00D9FF)
+    static let uiBillboardAccent = UIColor(hex: 0x39FF14)
     static let uiBillboardText   = UIColor(white: 1.0, alpha: 0.95)
-    static let uiBillboardTopBorder = UIColor(hex: 0x00D9FF).withAlphaComponent(0.40)
+    static let uiBillboardTopBorder = UIColor(hex: 0x39FF14).withAlphaComponent(0.40)
 
     // MARK: Completion Pulse
 
-    static let uiPulseColor = UIColor(hex: 0x66F2FF)
+    static let uiPulseColor = UIColor(hex: 0x80FF57)
 
     // MARK: Animation Timing
 
