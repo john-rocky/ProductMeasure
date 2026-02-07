@@ -166,24 +166,22 @@ class DepthProcessor {
         depthData.filter { $0.confidence.rawValue >= minConfidence.rawValue }
     }
 
-    /// Remove outliers using statistical filtering
-    func removeOutliers(
-        _ depthData: [DepthData],
-        stdDevThreshold: Float = AppConstants.outlierStdDevThreshold
-    ) -> [DepthData] {
+    /// Remove outliers using MAD-based statistical filtering (robust to outliers)
+    func removeOutliers(_ depthData: [DepthData]) -> [DepthData] {
         guard depthData.count > 10 else { return depthData }
 
-        // Calculate mean depth
         let depths = depthData.map { $0.depth }
-        let mean = depths.reduce(0, +) / Float(depths.count)
+        let sortedDepths = depths.sorted()
+        let medianDepth = sortedDepths[sortedDepths.count / 2]
 
-        // Calculate standard deviation
-        let variance = depths.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Float(depths.count)
-        let stdDev = sqrt(variance)
+        // MAD (Median Absolute Deviation) — robust estimator
+        let absDeviations = depths.map { abs($0 - medianDepth) }.sorted()
+        let mad = absDeviations[absDeviations.count / 2]
 
-        // Filter outliers
-        let minDepth = mean - stdDevThreshold * stdDev
-        let maxDepth = mean + stdDevThreshold * stdDev
+        // 1.4826 scales MAD to be consistent with stdDev for normal distributions
+        let threshold = 3.0 * 1.4826 * mad
+        let minDepth = medianDepth - threshold
+        let maxDepth = medianDepth + threshold
 
         return depthData.filter { $0.depth >= minDepth && $0.depth <= maxDepth }
     }

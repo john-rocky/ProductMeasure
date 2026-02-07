@@ -5,8 +5,9 @@
 
 import simd
 import Foundation
+import ARKit
 
-/// Estimates oriented bounding boxes from point clouds using PCA
+/// Estimates oriented bounding boxes from point clouds using MABR (Minimum Area Bounding Rectangle)
 class BoundingBoxEstimator {
     // MARK: - Public Methods
 
@@ -14,16 +15,18 @@ class BoundingBoxEstimator {
     /// - Parameters:
     ///   - points: 3D points in world coordinates
     ///   - mode: Measurement mode (box priority or free object)
+    ///   - verticalPlaneAnchors: Optional vertical plane anchors for orientation snapping
     /// - Returns: Oriented bounding box
     func estimateBoundingBox(
         points: [SIMD3<Float>],
-        mode: MeasurementMode
+        mode: MeasurementMode,
+        verticalPlaneAnchors: [ARPlaneAnchor] = []
     ) -> BoundingBox3D? {
         guard points.count >= 4 else { return nil }
 
         switch mode {
         case .boxPriority:
-            return estimateBoxPriorityOBB(points: points)
+            return estimateBoxPriorityOBB(points: points, verticalPlaneAnchors: verticalPlaneAnchors)
         case .freeObject:
             return estimateFreeObjectOBB(points: points)
         }
@@ -32,31 +35,61 @@ class BoundingBoxEstimator {
     // MARK: - Box Priority Mode
 
     /// Estimate OBB with vertical axis locked to world Y-axis
-    /// Optimized for box-shaped objects on surfaces
-    private func estimateBoxPriorityOBB(points: [SIMD3<Float>]) -> BoundingBox3D? {
+    /// Uses MABR (Minimum Area Bounding Rectangle) for horizontal orientation
+    private func estimateBoxPriorityOBB(
+        points: [SIMD3<Float>],
+        verticalPlaneAnchors: [ARPlaneAnchor]
+    ) -> BoundingBox3D? {
         let centroid = points.reduce(.zero, +) / Float(points.count)
 
         // Project points onto horizontal plane (XZ)
         let horizontalPoints = points.map { SIMD2<Float>($0.x, $0.z) }
 
-        // Compute 2D covariance matrix
-        let covariance2D = computeCovariance2D(horizontalPoints)
+        // Use MABR for orientation (fall back to PCA if too few points for convex hull)
+        let xAxis: SIMD3<Float>
+        let zAxis: SIMD3<Float>
 
-        // 2D PCA to find horizontal orientation
-        let (_, eigenvectors2D) = eigenDecomposition2D(covariance2D)
+        if horizontalPoints.count >= 20 {
+            let hull = convexHull2D(horizontalPoints)
+            if hull.count >= 3 {
+                var mabrAngle = minimumAreaBoundingRect(hull: hull)
 
-        // Construct 3D rotation matrix with Y-axis as world up
-        let xAxis = SIMD3<Float>(eigenvectors2D.columns.0.x, 0, eigenvectors2D.columns.0.y).normalized
+                // Snap to vertical plane if one is nearby and aligned
+                mabrAngle = snapToVerticalPlane(
+                    angle: mabrAngle,
+                    boxCenter: centroid,
+                    verticalPlaneAnchors: verticalPlaneAnchors
+                )
+
+                let cosA = cos(mabrAngle)
+                let sinA = sin(mabrAngle)
+                xAxis = SIMD3<Float>(cosA, 0, sinA).normalized
+                zAxis = SIMD3<Float>(-sinA, 0, cosA).normalized
+            } else {
+                // Degenerate hull, fall back to PCA
+                let (ax, az) = pcaHorizontalAxes(horizontalPoints)
+                xAxis = ax
+                zAxis = az
+            }
+        } else {
+            // Too few points for reliable hull, fall back to PCA
+            let (ax, az) = pcaHorizontalAxes(horizontalPoints)
+            xAxis = ax
+            zAxis = az
+        }
+
         let yAxis = SIMD3<Float>(0, 1, 0)
-        let zAxis = xAxis.cross(yAxis).normalized
 
         let rotationMatrix = simd_float3x3(xAxis, yAxis, zAxis)
         let rotation = simd_quatf(rotationMatrix: rotationMatrix)
 
-        // Project points onto local axes and find extents
+        // Compute extents
         let (center, extents) = computeExtents(points: points, centroid: centroid, rotation: rotation)
 
-        return BoundingBox3D(center: center, extents: extents, rotation: rotation)
+        let initialBox = BoundingBox3D(center: center, extents: extents, rotation: rotation)
+
+        // Iterative refinement
+        return refineBoxIteratively(initialBox: initialBox, points: points, verticalPlaneAnchors: verticalPlaneAnchors)
     }
 
     // MARK: - Free Object Mode
@@ -89,6 +122,214 @@ class BoundingBoxEstimator {
         let (center, extents) = computeExtents(points: points, centroid: centroid, rotation: rotation)
 
         return BoundingBox3D(center: center, extents: extents, rotation: rotation)
+    }
+
+    // MARK: - Convex Hull (Andrew's Monotone Chain)
+
+    /// Compute the 2D convex hull of XZ-projected points
+    /// Uses Andrew's monotone chain algorithm, O(n log n)
+    private func convexHull2D(_ points: [SIMD2<Float>]) -> [SIMD2<Float>] {
+        guard points.count >= 3 else { return points }
+
+        let sorted = points.sorted { $0.x < $1.x || ($0.x == $1.x && $0.y < $1.y) }
+
+        var lower: [SIMD2<Float>] = []
+        for p in sorted {
+            while lower.count >= 2 && cross2D(lower[lower.count - 2], lower[lower.count - 1], p) <= 0 {
+                lower.removeLast()
+            }
+            lower.append(p)
+        }
+
+        var upper: [SIMD2<Float>] = []
+        for p in sorted.reversed() {
+            while upper.count >= 2 && cross2D(upper[upper.count - 2], upper[upper.count - 1], p) <= 0 {
+                upper.removeLast()
+            }
+            upper.append(p)
+        }
+
+        // Remove last point of each half because it's repeated
+        lower.removeLast()
+        upper.removeLast()
+
+        return lower + upper
+    }
+
+    /// 2D cross product for convex hull: (b-a) x (c-a)
+    private func cross2D(_ a: SIMD2<Float>, _ b: SIMD2<Float>, _ c: SIMD2<Float>) -> Float {
+        (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+    }
+
+    // MARK: - Minimum Area Bounding Rectangle (Rotating Calipers)
+
+    /// Find the rotation angle (radians) of the minimum-area bounding rectangle
+    /// for a convex hull on the XZ plane
+    private func minimumAreaBoundingRect(hull: [SIMD2<Float>]) -> Float {
+        guard hull.count >= 3 else { return 0 }
+
+        var bestAngle: Float = 0
+        var bestArea: Float = .infinity
+
+        let n = hull.count
+        for i in 0..<n {
+            let j = (i + 1) % n
+            let edge = hull[j] - hull[i]
+            let angle = atan2(edge.y, edge.x)
+
+            let cosA = cos(-angle)
+            let sinA = sin(-angle)
+
+            var minX: Float = .infinity, maxX: Float = -.infinity
+            var minY: Float = .infinity, maxY: Float = -.infinity
+
+            for p in hull {
+                let rx = p.x * cosA - p.y * sinA
+                let ry = p.x * sinA + p.y * cosA
+                minX = min(minX, rx); maxX = max(maxX, rx)
+                minY = min(minY, ry); maxY = max(maxY, ry)
+            }
+
+            let area = (maxX - minX) * (maxY - minY)
+            if area < bestArea {
+                bestArea = area
+                bestAngle = angle
+            }
+        }
+
+        return bestAngle
+    }
+
+    // MARK: - Iterative Angle Refinement
+
+    /// Refine box orientation by filtering far-off points and re-running MABR,
+    /// but always compute final extents from ALL original points to avoid shrinkage
+    private func refineBoxIteratively(
+        initialBox: BoundingBox3D,
+        points: [SIMD3<Float>],
+        verticalPlaneAnchors: [ARPlaneAnchor]
+    ) -> BoundingBox3D {
+        // Single refinement pass: filter outlier points, re-estimate angle only
+        let margin: Float = 0.015  // 1.5cm
+        let minRetainRatio: Float = 0.5
+
+        let inverseRotation = initialBox.rotation.inverse
+        let filteredPoints = points.filter { point in
+            let local = inverseRotation.act(point - initialBox.center)
+            let ex = initialBox.extents.x + margin
+            let ey = initialBox.extents.y + margin
+            let ez = initialBox.extents.z + margin
+            return abs(local.x) <= ex && abs(local.y) <= ey && abs(local.z) <= ez
+        }
+
+        // If too many points pruned, keep original box
+        guard Float(filteredPoints.count) >= Float(points.count) * minRetainRatio,
+              filteredPoints.count >= 20 else {
+            return initialBox
+        }
+
+        let centroid = filteredPoints.reduce(.zero, +) / Float(filteredPoints.count)
+        let horizontalPoints = filteredPoints.map { SIMD2<Float>($0.x, $0.z) }
+
+        guard horizontalPoints.count >= 20 else { return initialBox }
+        let hull = convexHull2D(horizontalPoints)
+        guard hull.count >= 3 else { return initialBox }
+
+        var angle = minimumAreaBoundingRect(hull: hull)
+        angle = snapToVerticalPlane(
+            angle: angle,
+            boxCenter: centroid,
+            verticalPlaneAnchors: verticalPlaneAnchors
+        )
+
+        let cosA = cos(angle)
+        let sinA = sin(angle)
+        let xAxis = SIMD3<Float>(cosA, 0, sinA).normalized
+        let yAxis = SIMD3<Float>(0, 1, 0)
+        let zAxis = SIMD3<Float>(-sinA, 0, cosA).normalized
+
+        let rotationMatrix = simd_float3x3(xAxis, yAxis, zAxis)
+        let rotation = simd_quatf(rotationMatrix: rotationMatrix)
+
+        // Compute extents from ALL original points (not filtered) to avoid shrinkage
+        let fullCentroid = points.reduce(.zero, +) / Float(points.count)
+        let (center, extents) = computeExtents(points: points, centroid: fullCentroid, rotation: rotation)
+
+        return BoundingBox3D(center: center, extents: extents, rotation: rotation)
+    }
+
+    // MARK: - AR Plane-Assisted Orientation Snap
+
+    /// Snap MABR angle to a nearby vertical plane's orientation if closely aligned
+    private func snapToVerticalPlane(
+        angle: Float,
+        boxCenter: SIMD3<Float>,
+        verticalPlaneAnchors: [ARPlaneAnchor]
+    ) -> Float {
+        guard !verticalPlaneAnchors.isEmpty else { return angle }
+
+        let maxDistance: Float = 2.0     // Only consider planes within 2m
+        let snapThreshold: Float = 10.0 * .pi / 180.0  // 10 degrees
+
+        var bestPlaneAngle: Float?
+        var bestPlaneArea: Float = 0
+
+        for anchor in verticalPlaneAnchors {
+            // Distance from box center to plane center
+            let planePos = SIMD3<Float>(
+                anchor.transform.columns.3.x,
+                anchor.transform.columns.3.y,
+                anchor.transform.columns.3.z
+            )
+            let dist = simd_distance(
+                SIMD2<Float>(boxCenter.x, boxCenter.z),
+                SIMD2<Float>(planePos.x, planePos.z)
+            )
+            guard dist <= maxDistance else { continue }
+
+            // Project plane normal onto XZ to get its 2D angle
+            let normal = SIMD3<Float>(
+                anchor.transform.columns.2.x,
+                anchor.transform.columns.2.y,
+                anchor.transform.columns.2.z
+            )
+            let planeAngle = atan2(normal.z, normal.x)
+
+            // Check if plane angle is within snapThreshold of MABR angle (or +90°)
+            let planeArea = anchor.extent.x * anchor.extent.z
+
+            for offset in [Float(0), .pi / 2, -.pi / 2, .pi] {
+                var diff = (angle + offset) - planeAngle
+                // Normalize to [-pi, pi]
+                while diff > .pi { diff -= 2 * .pi }
+                while diff < -.pi { diff += 2 * .pi }
+
+                if abs(diff) < snapThreshold && planeArea > bestPlaneArea {
+                    bestPlaneAngle = planeAngle - offset
+                    bestPlaneArea = planeArea
+                }
+            }
+        }
+
+        if let snapped = bestPlaneAngle {
+            print("[BBoxEstimator] Snapped angle to vertical plane: \(angle * 180 / .pi)° -> \(snapped * 180 / .pi)°")
+            return snapped
+        }
+
+        return angle
+    }
+
+    // MARK: - PCA Fallback
+
+    /// PCA-based horizontal axis estimation (fallback for small point counts)
+    private func pcaHorizontalAxes(_ horizontalPoints: [SIMD2<Float>]) -> (xAxis: SIMD3<Float>, zAxis: SIMD3<Float>) {
+        let covariance2D = computeCovariance2D(horizontalPoints)
+        let (_, eigenvectors2D) = eigenDecomposition2D(covariance2D)
+
+        let xAxis = SIMD3<Float>(eigenvectors2D.columns.0.x, 0, eigenvectors2D.columns.0.y).normalized
+        let zAxis = xAxis.cross(SIMD3<Float>(0, 1, 0)).normalized
+
+        return (xAxis, zAxis)
     }
 
     // MARK: - Helper Methods
@@ -168,10 +409,10 @@ class BoundingBoxEstimator {
         let inverseRotation = rotation.inverse
         let localPoints = points.map { inverseRotation.act($0 - centroid) }
 
-        // Use percentile-based extents to trim noise from mask bleeding / LiDAR edge artifacts
-        // Trim 2% from each side per axis — robust against outlier points at boundaries
+        // Use percentile-based extents to trim extreme noise only
+        // Trim 1% from each side per axis — conservative to avoid shrinking real boundaries
         let n = localPoints.count
-        let trimCount = max(1, Int(Float(n) * 0.02))
+        let trimCount = max(1, Int(Float(n) * 0.01))
 
         let xVals = localPoints.map { $0.x }.sorted()
         let yVals = localPoints.map { $0.y }.sorted()

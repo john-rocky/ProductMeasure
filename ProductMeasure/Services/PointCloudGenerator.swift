@@ -241,11 +241,13 @@ class PointCloudGenerator {
 
         // Calculate distances from centroid
         let distances = points.map { simd_distance($0, centroid) }
-        let meanDistance = distances.reduce(0, +) / Float(distances.count)
-        let variance = distances.map { ($0 - meanDistance) * ($0 - meanDistance) }.reduce(0, +) / Float(distances.count)
-        let stdDev = sqrt(variance)
 
-        let maxDistance = meanDistance + AppConstants.outlierStdDevThreshold * stdDev
+        // MAD-based outlier removal (robust against outliers inflating threshold)
+        let sortedDistances = distances.sorted()
+        let medianDist = sortedDistances[sortedDistances.count / 2]
+        let absDeviations = distances.map { abs($0 - medianDist) }.sorted()
+        let mad = absDeviations[absDeviations.count / 2]
+        let maxDistance = medianDist + 3.0 * 1.4826 * mad
 
         return zip(points, distances).compactMap { point, distance in
             distance <= maxDistance ? point : nil

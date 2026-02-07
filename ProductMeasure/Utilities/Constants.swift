@@ -8,7 +8,7 @@ import Foundation
 enum AppConstants {
     // MARK: - Point Cloud Processing
     static let maxPointCloudSize = 20000
-    static let pointCloudGridSize: Float = 0.005 // 5mm grid for downsampling
+    static let pointCloudGridSize: Float = 0.003 // 3mm grid for downsampling
 
     // MARK: - Depth Processing
     static let minDepthConfidence: Float = 0.4

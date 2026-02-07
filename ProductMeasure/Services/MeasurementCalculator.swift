@@ -201,10 +201,16 @@ class MeasurementCalculator {
             }
         }
 
-        // 6. Estimate bounding box
+        // 6. Estimate bounding box (with vertical plane snap for box mode)
+        let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+            guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
+            return plane
+        }
+
         guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
             points: pointCloud.points,
-            mode: mode
+            mode: mode,
+            verticalPlaneAnchors: verticalPlanes
         ) else {
             print("[Calculator] Failed to estimate bounding box")
             return nil
@@ -383,10 +389,16 @@ class MeasurementCalculator {
             }
         }
 
-        // 7. Estimate bounding box
+        // 7. Estimate bounding box (with vertical plane snap for box mode)
+        let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+            guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
+            return plane
+        }
+
         guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
             points: pointCloud.points,
-            mode: mode
+            mode: mode,
+            verticalPlaneAnchors: verticalPlanes
         ) else {
             print("[Calculator] Failed to estimate bounding box")
             return nil
@@ -600,9 +612,9 @@ class MeasurementCalculator {
         }
 
         // Filter pixels by depth - keep those within a tolerance of tap depth
-        // Use a percentage-based tolerance (e.g., ±30% of tap depth or ±0.15m, whichever is larger)
-        let percentTolerance = tapDepth * 0.3
-        let minTolerance: Float = 0.15
+        // Use a percentage-based tolerance (±25% of tap depth or ±10cm, whichever is larger)
+        let percentTolerance = tapDepth * 0.25
+        let minTolerance: Float = 0.10
         let depthTolerance = max(percentTolerance, minTolerance)
 
         print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m")
@@ -682,7 +694,7 @@ class MeasurementCalculator {
 
         print("[Clustering] Starting with \(points.count) points")
 
-        let neighborThreshold: Float = 0.05  // 5cm
+        let neighborThreshold: Float = 0.04  // 4cm
         let cellSize = neighborThreshold
 
         // Build spatial hash grid: cell → [point indices]
