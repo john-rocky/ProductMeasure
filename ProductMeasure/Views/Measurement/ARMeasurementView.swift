@@ -800,17 +800,11 @@ class ARMeasurementViewModel: ObservableObject {
                 let mergedPoints = accumulatedPointClouds.flatMap { $0 }
                 let mergedQuality = MeasurementQuality.merged(accumulatedQualities)
 
-                // Re-estimate bounding box from merged points
-                let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
-                    guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
-                    return plane
-                }
-
-                guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
-                    points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+                // Refit extents using first-tap orientation with light trimming
+                guard let newBox = BoundingBoxEstimator().refitExtents(
+                    points: mergedPoints, existingBox: firstResult.boundingBox
                 ) else {
-                    print("[ViewModel] Second-tap re-estimation failed, falling back to first-tap result")
-                    // Fall back to showing the first-tap result directly
+                    print("[ViewModel] Second-tap refit failed, falling back to first-tap result")
                     showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
                     return
                 }
@@ -1460,16 +1454,11 @@ class ARMeasurementViewModel: ObservableObject {
                 let mergedPoints = accumulatedPointClouds.flatMap { $0 }
                 let mergedQuality = MeasurementQuality.merged(accumulatedQualities)
 
-                // Re-estimate bounding box from merged points
-                let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
-                    guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
-                    return plane
-                }
-
-                guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
-                    points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+                // Refit extents using current box orientation with light trimming
+                guard let newBox = BoundingBoxEstimator().refitExtents(
+                    points: mergedPoints, existingBox: result.boundingBox
                 ) else {
-                    print("[Refine] Re-estimation failed")
+                    print("[Refine] Refit failed")
                     isProcessing = false
                     return
                 }

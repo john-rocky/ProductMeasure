@@ -32,6 +32,38 @@ class BoundingBoxEstimator {
         }
     }
 
+    /// Refit bounding box from merged multi-angle points using the existing box's orientation.
+    /// Uses light percentile trim (0.2%) instead of the standard 1% to avoid truncating
+    /// the depth axis — merged L-shaped clouds have most points on the front face, so
+    /// aggressive trimming disproportionately removes the fewer side-face depth points.
+    func refitExtents(points: [SIMD3<Float>], existingBox: BoundingBox3D) -> BoundingBox3D? {
+        guard points.count >= 4 else { return nil }
+
+        let inverseRotation = existingBox.rotation.inverse
+        let localPoints = points.map { inverseRotation.act($0 - existingBox.center) }
+
+        let n = localPoints.count
+        // 0.2% trim: enough to reject extreme outliers without cutting into
+        // the less-populated depth axis of the bimodal merged cloud
+        let trimCount = max(1, Int(Float(n) * 0.002))
+
+        let xVals = localPoints.map { $0.x }.sorted()
+        let yVals = localPoints.map { $0.y }.sorted()
+        let zVals = localPoints.map { $0.z }.sorted()
+
+        let lo = trimCount
+        let hi = max(lo + 1, n - 1 - trimCount)
+
+        let minLocal = SIMD3<Float>(xVals[lo], yVals[lo], zVals[lo])
+        let maxLocal = SIMD3<Float>(xVals[hi], yVals[hi], zVals[hi])
+
+        let newExtents = (maxLocal - minLocal) / 2
+        let localCenter = (maxLocal + minLocal) / 2
+        let newCenter = existingBox.center + existingBox.rotation.act(localCenter)
+
+        return BoundingBox3D(center: newCenter, extents: newExtents, rotation: existingBox.rotation)
+    }
+
     // MARK: - Box Priority Mode
 
     /// Estimate OBB with vertical axis locked to world Y-axis
