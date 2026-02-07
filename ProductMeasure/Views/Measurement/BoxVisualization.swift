@@ -699,7 +699,6 @@ class BoxVisualization {
         let containerEntity = Entity()
         containerEntity.position = position
 
-        let cubicMeters = storedHeight * storedLength * storedWidth
         let accentBarWidth: Float = 0.002
         let padding: Float = 0.007
         let innerPadding: Float = 0.004
@@ -723,16 +722,7 @@ class BoxVisualization {
         let lVal = formatDimensionValue(storedLength)
         let wVal = formatDimensionValue(storedWidth)
         let hVal = formatDimensionValue(storedHeight)
-        let dimLine = "L: \(lVal)  W: \(wVal)  H: \(hVal) \(storedUnit.rawValue)"
-
-        let volText = formatVolumeValue(cubicMeters)
-        let wgtText = storedUnit.formatVolumetricWeight(cubicMeters: cubicMeters)
-        let volLine = "\(volText)  Wgt: \(wgtText)"
-
-        let sizeClass = SizeClass.classify(volumeCubicMeters: cubicMeters)
-        let classLine = "Class: \(sizeClass.displayName)"
-
-        let bodyText = "\(dimLine)\n\(volLine)\n\(classLine)"
+        let bodyText = "L: \(lVal)  W: \(wVal)  H: \(hVal) \(storedUnit.rawValue)"
         let bodyMesh = MeshResource.generateText(
             bodyText,
             extrusionDepth: 0.001,

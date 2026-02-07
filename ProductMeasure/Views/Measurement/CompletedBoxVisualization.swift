@@ -233,7 +233,6 @@ class CompletedBoxVisualization {
         let containerEntity = Entity()
         containerEntity.position = billboardPos
 
-        let cubicMeters = height * length * width
         let accentBarWidth: Float = 0.002
         let padding: Float = 0.007
         let innerPadding: Float = 0.004
@@ -257,16 +256,7 @@ class CompletedBoxVisualization {
         let lVal = formatDimension(length)
         let wVal = formatDimension(width)
         let hVal = formatDimension(height)
-        let dimLine = "L: \(lVal)  W: \(wVal)  H: \(hVal) \(unit.rawValue)"
-
-        let volText = formatVolume()
-        let wgtText = unit.formatVolumetricWeight(cubicMeters: cubicMeters)
-        let volLine = "\(volText)  Wgt: \(wgtText)"
-
-        let sizeClass = SizeClass.classify(volumeCubicMeters: cubicMeters)
-        let classLine = "Class: \(sizeClass.displayName)"
-
-        let bodyText = "\(dimLine)\n\(volLine)\n\(classLine)"
+        let bodyText = "L: \(lVal)  W: \(wVal)  H: \(hVal) \(unit.rawValue)"
         let bodyMesh = MeshResource.generateText(
             bodyText,
             extrusionDepth: 0.001,
