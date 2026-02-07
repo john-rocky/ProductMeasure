@@ -74,9 +74,37 @@ struct ARMeasurementView: View {
 
                         Spacer()
 
-                        // Instruction text when in targeting mode or refining
-                        if viewModel.isRefining {
-                            InstructionCard(mode: .refine)
+                        // Instruction text when in targeting mode or scanning
+                        if viewModel.isScanning {
+                            VStack(spacing: 12) {
+                                InstructionCard(mode: .scan, captureCount: viewModel.scanCaptureCount)
+                                HStack(spacing: 16) {
+                                    Button(action: { viewModel.cancelScan() }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "xmark")
+                                            Text("Cancel")
+                                                .font(PMTheme.mono(13))
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(PMTheme.red.opacity(0.8))
+                                        .clipShape(Capsule())
+                                    }
+                                    Button(action: { viewModel.finishScan() }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "checkmark")
+                                            Text("Done")
+                                                .font(PMTheme.mono(13))
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 10)
+                                        .background(PMTheme.green.opacity(0.8))
+                                        .clipShape(Capsule())
+                                    }
+                                }
+                            }
                         } else if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
                             if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
                                 InstructionCard(mode: .tap)
@@ -235,14 +263,8 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
                 return
             }
 
-            // 4. If editing, ignore taps (handle dragging is via pan)
-            if viewModel.isEditing { return }
-
-            // 4.5. If refining, route to refinement handler
-            if viewModel.isRefining {
-                Task { await viewModel.handleRefinementTap(at: location, mode: measurementMode) }
-                return
-            }
+            // 4. If editing or scanning, ignore taps (handle dragging is via pan, scan is automatic)
+            if viewModel.isEditing || viewModel.isScanning { return }
 
             // 5. Only handle new measurement taps in tap mode
             guard selectionMode == .tap else { return }
@@ -266,7 +288,7 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
                         lastPanLocation = location
                         print("[Pan] Started editing drag: \(dragType)")
                     }
-                } else if selectionMode == .box && !viewModel.isProcessing {
+                } else if selectionMode == .box && !viewModel.isProcessing && !viewModel.isScanning {
                     // Box selection mode: start drawing selection rectangle
                     activeDragType = .boxSelection(startPoint: location)
                     boxSelectionRectView?.clearSelection()
@@ -451,17 +473,18 @@ struct ScanningIndicator: View {
 
 struct InstructionCard: View {
     enum Mode {
-        case tap, box, refine
+        case tap, box, scan
     }
 
     var mode: Mode = .tap
+    var captureCount: Int = 0
     @State private var iconScale: CGFloat = 1.0
 
     private var iconName: String {
         switch mode {
         case .tap: return "hand.tap.fill"
         case .box: return "rectangle.dashed"
-        case .refine: return "arrow.triangle.2.circlepath"
+        case .scan: return "viewfinder"
         }
     }
 
@@ -469,7 +492,7 @@ struct InstructionCard: View {
         switch mode {
         case .tap: return "Tap on an object to measure"
         case .box: return "Draw a box to select"
-        case .refine: return "Refine from a different angle"
+        case .scan: return "Scanning... (\(captureCount)/\(AppConstants.scanMaxCaptures))"
         }
     }
 
@@ -477,7 +500,7 @@ struct InstructionCard: View {
         switch mode {
         case .tap: return "Point your device at an object and tap"
         case .box: return "Drag to draw a rectangle around the object"
-        case .refine: return "Move to a different angle and tap the same object"
+        case .scan: return "Move slowly around the object"
         }
     }
 
@@ -562,9 +585,10 @@ class ARMeasurementViewModel: ObservableObject {
     // Selected completed box for action icons
     @Published var selectedCompletedBoxId: Int? = nil
 
-    // Refinement state
-    @Published var isRefining = false
-    private var refinementCount: Int = 0
+    // Scan mode state
+    @Published var isScanning = false
+    @Published var scanCaptureCount: Int = 0
+    private var lastScanCameraDirection: SIMD3<Float>?
     private var accumulatedPointClouds: [[SIMD3<Float>]] = []
     private var accumulatedQualities: [MeasurementQuality] = []
     private var originalAxisMapping: BoundingBox3D.AxisMapping?
@@ -581,7 +605,6 @@ class ARMeasurementViewModel: ObservableObject {
     let sessionManager = ARSessionManager()
     private let measurementCalculator = MeasurementCalculator()
     private let boxEditingService = BoxEditingService()
-    private let sceneAccumulator = ScenePointCloudAccumulator()
     private var boxVisualization: BoxVisualization?
     private var boxVisualizationAnchor: AnchorEntity?
     private var pointCloudEntity: Entity?
@@ -619,7 +642,6 @@ class ARMeasurementViewModel: ObservableObject {
 
     func startSession() {
         sessionManager.startSession()
-        sceneAccumulator.reset()
         // Configure animation coordinator with AR view
         if let arView = sessionManager.arView {
             animationCoordinator.configure(arView: arView)
@@ -628,9 +650,9 @@ class ARMeasurementViewModel: ObservableObject {
 
     /// Called on each AR frame update
     private func onFrameUpdate(frame: ARFrame) {
-        // Background scene accumulation (only when idle)
-        if !isProcessing {
-            sceneAccumulator.accumulate(frame: frame)
+        // Scan mode: check for auto-capture trigger
+        if isScanning && !isProcessing {
+            checkAndTriggerScanCapture(frame: frame)
         }
 
         let cameraPosition = SIMD3<Float>(
@@ -742,25 +764,34 @@ class ARMeasurementViewModel: ObservableObject {
                 print("[ViewModel] Measurement successful!")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
 
-                // Enhance with accumulated background points
-                let enhancedResult = enhanceWithAccumulatedPoints(result, mode: mode, frame: frame)
+                debugMaskImage = result.debugMaskImage
+                debugDepthImage = result.debugDepthImage
 
-                // Store debug images (only if available)
-                debugMaskImage = enhancedResult.debugMaskImage
-                debugDepthImage = enhancedResult.debugDepthImage
+                // Store result and enter scan mode (no wireframe yet)
+                currentMeasurement = result
+                storedPointCloud = result.pointCloud
+                originalFloorY = raycastHitPosition?.y
+                originalAxisMapping = result.axisMapping
 
-                // Store the floor Y for later use
-                let floorY = raycastHitPosition?.y
+                // Seed accumulated point clouds
+                if let pc = result.pointCloud {
+                    accumulatedPointClouds = [pc]
+                    accumulatedQualities = [result.quality]
+                }
 
-                // Start the animation sequence
-                startBoxAnimation(
-                    at: location,
-                    boundingBox: enhancedResult.boundingBox,
-                    frame: frame,
-                    viewSize: viewSize,
-                    result: enhancedResult,
-                    floorY: floorY
+                // Enter scan mode immediately
+                isScanning = true
+                scanCaptureCount = 0
+                let cameraPos = SIMD3<Float>(
+                    frame.camera.transform.columns.3.x,
+                    frame.camera.transform.columns.3.y,
+                    frame.camera.transform.columns.3.z
                 )
+                lastScanCameraDirection = simd_normalize(result.boundingBox.center - cameraPos)
+                animationPhase = .complete
+                isProcessing = false
+
+                print("[Scan] Auto-entered scan mode after measurement")
             } else {
                 print("[ViewModel] Measurement returned nil")
                 isProcessing = false
@@ -828,22 +859,34 @@ class ARMeasurementViewModel: ObservableObject {
                 print("[ViewModel] Box selection measurement successful!")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
 
-                // Enhance with accumulated background points
-                let enhancedResult = enhanceWithAccumulatedPoints(result, mode: mode, frame: frame)
+                debugMaskImage = result.debugMaskImage
+                debugDepthImage = result.debugDepthImage
 
-                debugMaskImage = enhancedResult.debugMaskImage
-                debugDepthImage = enhancedResult.debugDepthImage
+                // Store result and enter scan mode (no wireframe yet)
+                currentMeasurement = result
+                storedPointCloud = result.pointCloud
+                originalFloorY = raycastHitPosition?.y
+                originalAxisMapping = result.axisMapping
 
-                let floorY = raycastHitPosition?.y
+                // Seed accumulated point clouds
+                if let pc = result.pointCloud {
+                    accumulatedPointClouds = [pc]
+                    accumulatedQualities = [result.quality]
+                }
 
-                startBoxAnimation(
-                    at: boxCenter,
-                    boundingBox: enhancedResult.boundingBox,
-                    frame: frame,
-                    viewSize: viewSize,
-                    result: enhancedResult,
-                    floorY: floorY
+                // Enter scan mode immediately
+                isScanning = true
+                scanCaptureCount = 0
+                let cameraPos = SIMD3<Float>(
+                    frame.camera.transform.columns.3.x,
+                    frame.camera.transform.columns.3.y,
+                    frame.camera.transform.columns.3.z
                 )
+                lastScanCameraDirection = simd_normalize(result.boundingBox.center - cameraPos)
+                animationPhase = .complete
+                isProcessing = false
+
+                print("[Scan] Auto-entered scan mode after box selection")
             } else {
                 print("[ViewModel] Box selection measurement returned nil")
                 isProcessing = false
@@ -1046,9 +1089,10 @@ class ARMeasurementViewModel: ObservableObject {
         animationContext = nil
         animationCoordinator.cancelAnimation()
 
-        // Reset refinement state
-        isRefining = false
-        refinementCount = 0
+        // Reset scan state
+        isScanning = false
+        scanCaptureCount = 0
+        lastScanCameraDirection = nil
         accumulatedPointClouds = []
         accumulatedQualities = []
         originalAxisMapping = nil
@@ -1262,26 +1306,27 @@ class ARMeasurementViewModel: ObservableObject {
         case .discard:
             discardMeasurement()
         case .done:
-            stopEditing()
+            if isScanning { finishScan() } else { stopEditing() }
         case .fit:
             fitToPointCloud(mode: mode)
         case .cancel:
-            if isRefining { cancelRefinement() } else { discardMeasurement() }
+            if isScanning { cancelScan() } else { discardMeasurement() }
         case .reEdit:
             reEditCompletedBox()
         case .delete:
             deleteCompletedBox()
-        case .refine:
-            startRefinementMode()
+        case .scan:
+            startScanMode()
         }
     }
 
-    // MARK: - Refinement
+    // MARK: - Scan Mode
 
-    private func startRefinementMode() {
-        guard let result = currentMeasurement else { return }
+    private func startScanMode() {
+        guard let result = currentMeasurement,
+              let frame = sessionManager.currentFrame else { return }
 
-        // Save original axis mapping and floor on first refinement
+        // Save original axis mapping and floor on first scan
         if originalAxisMapping == nil {
             originalAxisMapping = result.axisMapping
         }
@@ -1295,41 +1340,130 @@ class ARMeasurementViewModel: ObservableObject {
             accumulatedQualities = [result.quality]
         }
 
-        isRefining = true
-        boxVisualization?.updateActionMode(.refining)
-        print("[Refine] Entered refinement mode (round \(refinementCount + 1))")
+        // Initialize scan state
+        isScanning = true
+        scanCaptureCount = 0
+
+        // Record current camera-to-box direction as baseline
+        let cameraPos = SIMD3<Float>(
+            frame.camera.transform.columns.3.x,
+            frame.camera.transform.columns.3.y,
+            frame.camera.transform.columns.3.z
+        )
+        lastScanCameraDirection = simd_normalize(result.boundingBox.center - cameraPos)
+
+        // Hide 3D action buttons during scanning (SwiftUI overlay handles controls)
+        boxVisualization?.updateActionMode(.scanning)
+        print("[Scan] Entered scan mode")
     }
 
-    private func cancelRefinement() {
-        isRefining = false
-        let mode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
-            ? .normalNoRefine : .normal
-        boxVisualization?.updateActionMode(mode)
-        print("[Refine] Cancelled refinement mode")
+    func finishScan() {
+        guard isScanning else { return }
+        let captures = scanCaptureCount
+        endScanAndShowBox(
+            actionMode: captures >= AppConstants.scanMaxCaptures ? .normalNoScan : .normal
+        )
+        print("[Scan] Finished (\(captures) captures)")
     }
 
-    func handleRefinementTap(at location: CGPoint, mode: MeasurementMode) async {
-        guard let result = currentMeasurement,
-              let frame = sessionManager.currentFrame else { return }
+    func cancelScan() {
+        guard isScanning else { return }
+        let captures = scanCaptureCount
+        endScanAndShowBox(actionMode: .normal)
+        print("[Scan] Cancelled (\(captures) captures)")
+    }
+
+    /// End scan mode and show the wireframe box visualization
+    private func endScanAndShowBox(actionMode: BoxVisualization.ActionMode) {
+        isScanning = false
+        lastScanCameraDirection = nil
+
+        guard let result = currentMeasurement else { return }
+
+        // Apply floor extension
+        var adjustedBox = result.boundingBox
+        if let floorY = originalFloorY {
+            adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+        }
+
+        // Recalculate with original axis mapping
+        let mapping = originalAxisMapping ?? result.axisMapping
+        var newResult = measurementCalculator.recalculate(
+            boundingBox: adjustedBox, quality: result.quality, axisMapping: mapping
+        )
+        newResult.pointCloud = storedPointCloud
+        newResult.debugMaskImage = result.debugMaskImage
+        newResult.debugDepthImage = result.debugDepthImage
+        currentMeasurement = newResult
+
+        if boxVisualization == nil {
+            // Initial scan: show box for the first time
+            showBoxVisualization(for: adjustedBox, pointCloud: storedPointCloud, floorY: originalFloorY, unit: currentUnit)
+        } else {
+            // Re-scan: update existing box
+            boxVisualization?.update(boundingBox: adjustedBox)
+            boxVisualization?.updateDimensions(
+                height: newResult.height, length: newResult.length, width: newResult.width
+            )
+        }
+
+        boxVisualization?.updateActionMode(actionMode)
+        animationPhase = .complete
+    }
+
+    private func checkAndTriggerScanCapture(frame: ARFrame) {
+        guard frame.camera.trackingState == .normal else { return }
+        guard let result = currentMeasurement else { return }
+
+        // 1. Calculate camera-to-box direction
+        let cameraPos = SIMD3<Float>(
+            frame.camera.transform.columns.3.x,
+            frame.camera.transform.columns.3.y,
+            frame.camera.transform.columns.3.z
+        )
+        let toBox = simd_normalize(result.boundingBox.center - cameraPos)
+
+        // 2. Check angle change from last capture
+        if let lastDir = lastScanCameraDirection {
+            let dot = simd_dot(toBox, lastDir)
+            let clampedDot = min(1.0, max(-1.0, dot))
+            let angle = acos(clampedDot)
+            guard angle >= AppConstants.scanMinAngleChange else { return }
+        }
+
+        // 3. Check box center is on screen
+        guard let screenPos = sessionManager.projectToScreen(worldPosition: result.boundingBox.center) else { return }
+        let bounds = sessionManager.arView.bounds
+        guard screenPos.x > 0 && screenPos.y > 0 &&
+              screenPos.x < bounds.width && screenPos.y < bounds.height else { return }
+
+        // 4. Trigger capture
+        lastScanCameraDirection = toBox
+        Task { await performScanCapture(at: screenPos, frame: frame) }
+    }
+
+    private func performScanCapture(at screenPoint: CGPoint, frame: ARFrame) async {
+        guard isScanning else { return }
+        guard let result = currentMeasurement else { return }
         guard !isProcessing else { return }
 
         isProcessing = true
         let viewSize = sessionManager.arView.bounds.size
-        let raycastHitPosition = sessionManager.raycastWorldPosition(from: location)
+        let raycastHitPosition = sessionManager.raycastWorldPosition(from: screenPoint)
 
         do {
             if let refinement = try await measurementCalculator.measureForRefinement(
                 frame: frame,
-                tapPoint: location,
+                tapPoint: screenPoint,
                 viewSize: viewSize,
-                mode: mode,
+                mode: currentMeasurementMode,
                 existingBox: result.boundingBox,
                 raycastHitPosition: raycastHitPosition
             ) {
                 // Success: merge point clouds and re-estimate
                 accumulatedPointClouds.append(refinement.points)
                 accumulatedQualities.append(refinement.quality)
-                refinementCount += 1
+                scanCaptureCount += 1
 
                 let mergedPoints = accumulatedPointClouds.flatMap { $0 }
                 let mergedQuality = MeasurementQuality.merged(accumulatedQualities)
@@ -1341,9 +1475,9 @@ class ARMeasurementViewModel: ObservableObject {
                 }
 
                 guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
-                    points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+                    points: mergedPoints, mode: currentMeasurementMode, verticalPlaneAnchors: verticalPlanes
                 ) else {
-                    print("[Refine] Re-estimation failed")
+                    print("[Scan] Re-estimation failed")
                     isProcessing = false
                     return
                 }
@@ -1369,85 +1503,20 @@ class ARMeasurementViewModel: ObservableObject {
                     height: newResult.height, length: newResult.length, width: newResult.width
                 )
 
-                // Exit refinement mode
-                isRefining = false
-                let actionMode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
-                    ? .normalNoRefine : .normal
-                boxVisualization?.updateActionMode(actionMode)
+                print("[Scan] Capture \(scanCaptureCount)/\(AppConstants.scanMaxCaptures). Dimensions: L=\(newResult.length*100)cm W=\(newResult.width*100)cm H=\(newResult.height*100)cm")
 
-                print("[Refine] Refinement \(refinementCount) complete. Dimensions: L=\(newResult.length*100)cm W=\(newResult.width*100)cm H=\(newResult.height*100)cm")
+                // Auto-finish if max captures reached
+                if scanCaptureCount >= AppConstants.scanMaxCaptures {
+                    finishScan()
+                }
             } else {
-                print("[Refine] Object not matched – stay in refinement mode")
-                // Could show a transient message here in the future
+                print("[Scan] Object not matched – skipping capture")
             }
         } catch {
-            print("[Refine] Error: \(error)")
+            print("[Scan] Error: \(error)")
         }
 
         isProcessing = false
-    }
-
-    // MARK: - Scene Accumulation Enhancement
-
-    /// Enhance a measurement result by merging accumulated background points.
-    /// Only keeps accumulated points that are near the original point cloud surface,
-    /// filtering out floor/wall/background points that would inflate the box.
-    private func enhanceWithAccumulatedPoints(
-        _ result: MeasurementCalculator.MeasurementResult,
-        mode: MeasurementMode,
-        frame: ARFrame
-    ) -> MeasurementCalculator.MeasurementResult {
-        guard let originalPoints = result.pointCloud, !originalPoints.isEmpty else {
-            print("[Accumulator] No original point cloud, skipping enhancement")
-            return result
-        }
-
-        // Query accumulated points in the region around the bounding box
-        let extraPoints = sceneAccumulator.queryPoints(
-            near: result.boundingBox,
-            expansion: AppConstants.accumulatorQueryExpansion
-        )
-
-        guard extraPoints.count >= AppConstants.accumulatorMinExtraPoints else {
-            print("[Accumulator] Not enough extra points (\(extraPoints.count)), skipping enhancement")
-            return result
-        }
-
-        // Filter: only keep accumulated points that are within the original bounding box.
-        // This ensures we only densify the existing surface rather than expanding the box.
-        let filteredExtra = extraPoints.filter { result.boundingBox.contains($0) }
-
-        guard filteredExtra.count >= AppConstants.accumulatorMinExtraPoints else {
-            print("[Accumulator] Not enough points inside box (\(filteredExtra.count)/\(extraPoints.count)), skipping")
-            return result
-        }
-
-        let mergedPoints = originalPoints + filteredExtra
-        print("[Accumulator] Merging \(originalPoints.count) + \(filteredExtra.count) = \(mergedPoints.count) points (filtered from \(extraPoints.count) candidates)")
-
-        // Re-estimate bounding box from merged points
-        let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
-            guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
-            return plane
-        }
-
-        guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
-            points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
-        ) else {
-            print("[Accumulator] Re-estimation failed, using original result")
-            return result
-        }
-
-        // Recalculate dimensions with original axis mapping
-        var enhanced = measurementCalculator.recalculate(
-            boundingBox: newBox, quality: result.quality, axisMapping: result.axisMapping
-        )
-        enhanced.pointCloud = mergedPoints
-        enhanced.debugMaskImage = result.debugMaskImage
-        enhanced.debugDepthImage = result.debugDepthImage
-
-        print("[Accumulator] Enhanced: L=\(enhanced.length*100)cm W=\(enhanced.width*100)cm H=\(enhanced.height*100)cm")
-        return enhanced
     }
 
     /// Find the completed box ID that owns a given entity

@@ -29,9 +29,9 @@ class BoxVisualization {
     /// Current action mode
     enum ActionMode {
         case normal
-        case normalNoRefine
+        case normalNoScan
         case editing
-        case refining
+        case scanning
     }
     private var currentActionMode: ActionMode = .normal
 
@@ -164,12 +164,13 @@ class BoxVisualization {
         switch mode {
         case .normal:
             actions = ActionIconBuilder.activeNormalActions
-        case .normalNoRefine:
-            actions = ActionIconBuilder.activeNormalActionsNoRefine
+        case .normalNoScan:
+            actions = ActionIconBuilder.activeNormalActionsNoScan
         case .editing:
             actions = ActionIconBuilder.activeEditActions
-        case .refining:
-            actions = ActionIconBuilder.activeRefiningActions
+        case .scanning:
+            // No 3D action buttons during scanning — SwiftUI overlay handles controls
+            return
         }
 
         let row = ActionIconBuilder.createActionRow(actions: actions)

@@ -16,7 +16,7 @@ enum ActionType: String, CaseIterable {
     case cancel = "action_cancel"
     case reEdit = "action_reedit"
     case delete = "action_delete"
-    case refine = "action_refine"
+    case scan = "action_scan"
 }
 
 /// Configuration for a single action icon
@@ -30,24 +30,19 @@ struct ActionIconConfig {
 enum ActionIconBuilder {
     // MARK: - Presets
 
-    /// Actions for active box in normal mode: Discard, Refine, Edit, Save
+    /// Actions for active box in normal mode: Discard, Scan, Edit, Save
     static let activeNormalActions: [ActionIconConfig] = [
         ActionIconConfig(type: .discard, sfSymbol: "xmark", color: PMTheme.uiRed),
-        ActionIconConfig(type: .refine, sfSymbol: "arrow.triangle.2.circlepath", color: PMTheme.uiCyan),
+        ActionIconConfig(type: .scan, sfSymbol: "camera.viewfinder", color: PMTheme.uiCyan),
         ActionIconConfig(type: .edit, sfSymbol: "pencil", color: PMTheme.uiAmber),
         ActionIconConfig(type: .save, sfSymbol: "checkmark", color: PMTheme.uiGreen),
     ]
 
-    /// Actions for active box when refinement limit reached: Discard, Edit, Save
-    static let activeNormalActionsNoRefine: [ActionIconConfig] = [
+    /// Actions for active box when scan limit reached: Discard, Edit, Save
+    static let activeNormalActionsNoScan: [ActionIconConfig] = [
         ActionIconConfig(type: .discard, sfSymbol: "xmark", color: PMTheme.uiRed),
         ActionIconConfig(type: .edit, sfSymbol: "pencil", color: PMTheme.uiAmber),
         ActionIconConfig(type: .save, sfSymbol: "checkmark", color: PMTheme.uiGreen),
-    ]
-
-    /// Actions for refining mode: Cancel only
-    static let activeRefiningActions: [ActionIconConfig] = [
-        ActionIconConfig(type: .cancel, sfSymbol: "xmark", color: PMTheme.uiRed),
     ]
 
     /// Actions for active box in editing mode: Cancel, Fit, Done
