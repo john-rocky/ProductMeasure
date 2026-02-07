@@ -12,6 +12,9 @@ enum BoundingBoxAnimationPhase: Equatable {
     /// Showing 2D target brackets - waiting for user tap
     case showingTargetBrackets
 
+    /// Scanning — first tap captured, scan line animating, waiting for second tap
+    case scanning
+
     /// Edge trace: bottom edges draw sequentially with corner markers
     case edgeTrace
 

@@ -25,8 +25,8 @@ struct ARMeasurementView: View {
                 )
                     .ignoresSafeArea()
 
-                // Corner brackets overlay - visible only in tap mode
-                if selectionMode == .tap {
+                // Corner brackets overlay - visible only in tap mode (not during scanning)
+                if selectionMode == .tap && viewModel.animationPhase != .scanning {
                     GeometryReader { geometry in
                         CornerBracketsView(
                             phase: viewModel.animationPhase,
@@ -35,6 +35,17 @@ struct ARMeasurementView: View {
                     }
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
+                }
+
+                // Scanning line overlay
+                if viewModel.animationPhase == .scanning {
+                    ScanningLineView(
+                        boundingBox: viewModel.currentMeasurement?.boundingBox,
+                        arView: viewModel.sessionManager.arView
+                    )
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
                 }
 
                 // Overlay UI (on top)
@@ -74,8 +85,10 @@ struct ARMeasurementView: View {
 
                         Spacer()
 
-                        // Instruction text when in targeting mode or refining
-                        if viewModel.isRefining {
+                        // Instruction text when in targeting mode, scanning, or refining
+                        if viewModel.isScanning {
+                            InstructionCard(mode: .scanning)
+                        } else if viewModel.isRefining {
                             InstructionCard(mode: .refine)
                         } else if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
                             if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
@@ -451,7 +464,7 @@ struct ScanningIndicator: View {
 
 struct InstructionCard: View {
     enum Mode {
-        case tap, box, refine
+        case tap, box, refine, scanning
     }
 
     var mode: Mode = .tap
@@ -462,6 +475,7 @@ struct InstructionCard: View {
         case .tap: return "hand.tap.fill"
         case .box: return "rectangle.dashed"
         case .refine: return "arrow.triangle.2.circlepath"
+        case .scanning: return "sensor.fill"
         }
     }
 
@@ -470,6 +484,7 @@ struct InstructionCard: View {
         case .tap: return "Tap on an object to measure"
         case .box: return "Draw a box to select"
         case .refine: return "Refine from a different angle"
+        case .scanning: return "Scanning... Tap again to confirm"
         }
     }
 
@@ -478,6 +493,7 @@ struct InstructionCard: View {
         case .tap: return "Point your device at an object and tap"
         case .box: return "Drag to draw a rectangle around the object"
         case .refine: return "Move to a different angle and tap the same object"
+        case .scanning: return "Move to a different angle for better accuracy"
         }
     }
 
@@ -569,6 +585,11 @@ class ARMeasurementViewModel: ObservableObject {
     private var accumulatedQualities: [MeasurementQuality] = []
     private var originalAxisMapping: BoundingBox3D.AxisMapping?
     private var originalFloorY: Float?
+
+    // Two-tap scanning state
+    @Published var isScanning = false
+    private var firstMeasurementResult: MeasurementCalculator.MeasurementResult?
+    private var firstTapFloorY: Float?
 
     // Current measurement mode (synced from view)
     var currentMeasurementMode: MeasurementMode = .boxPriority
@@ -676,19 +697,27 @@ class ARMeasurementViewModel: ObservableObject {
 
     func handleTap(at location: CGPoint, mode: MeasurementMode) async {
         print("[ViewModel] handleTap called at \(location)")
-        print("[ViewModel] isProcessing: \(isProcessing), trackingState: \(sessionManager.trackingState)")
+        print("[ViewModel] isProcessing: \(isProcessing), isScanning: \(isScanning), trackingState: \(sessionManager.trackingState)")
 
         guard !isProcessing else {
             print("[ViewModel] Already processing, ignoring tap")
             return
         }
 
+        if isScanning {
+            await handleSecondTap(at: location, mode: mode)
+        } else {
+            await handleFirstTap(at: location, mode: mode)
+        }
+    }
+
+    /// First tap: run measure(), store result silently, show scanning line
+    private func handleFirstTap(at location: CGPoint, mode: MeasurementMode) async {
         guard let frame = sessionManager.currentFrame else {
             print("[ViewModel] No current frame available")
             return
         }
 
-        // Allow tapping even with limited tracking for testing
         guard sessionManager.trackingState == .normal ||
               (sessionManager.trackingState != .notAvailable) else {
             print("[ViewModel] Tracking state not ready: \(sessionManager.trackingState)")
@@ -708,22 +737,14 @@ class ARMeasurementViewModel: ObservableObject {
         debugMaskImage = nil
         debugDepthImage = nil
         animationContext = nil
-        // Keep showing target brackets during processing
 
         isProcessing = true
-        print("[ViewModel] Starting measurement...")
+        print("[ViewModel] Starting first tap measurement...")
 
-        // Get 3D world position from raycast - this is reliable for filtering
         let raycastHitPosition = sessionManager.raycastWorldPosition(from: location)
-        if let pos = raycastHitPosition {
-            print("[ViewModel] Raycast hit position: \(pos)")
-        } else {
-            print("[ViewModel] Raycast did not hit any surface")
-        }
 
         do {
             let viewSize = sessionManager.arView.bounds.size
-            print("[ViewModel] View size: \(viewSize)")
 
             if let result = try await measurementCalculator.measure(
                 frame: frame,
@@ -732,31 +753,111 @@ class ARMeasurementViewModel: ObservableObject {
                 mode: mode,
                 raycastHitPosition: raycastHitPosition
             ) {
-                print("[ViewModel] Measurement successful!")
+                print("[ViewModel] First tap measurement successful!")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
 
-                // Store debug images (only if available)
-                debugMaskImage = result.debugMaskImage
-                debugDepthImage = result.debugDepthImage
+                // Store result silently — no wireframe yet
+                firstMeasurementResult = result
+                firstTapFloorY = raycastHitPosition?.y
 
-                // Store the floor Y for later use
-                let floorY = raycastHitPosition?.y
+                // Store the result as currentMeasurement so ScanningLineView can project the box
+                currentMeasurement = result
 
-                // Start the animation sequence
+                // Enter scanning mode
+                isScanning = true
+                animationPhase = .scanning
+
+                print("[ViewModel] Entered scanning mode — waiting for second tap")
+            } else {
+                print("[ViewModel] First tap measurement returned nil")
+            }
+        } catch {
+            print("[ViewModel] First tap measurement failed: \(error)")
+        }
+
+        isProcessing = false
+    }
+
+    /// Second tap: run measureForRefinement(), merge point clouds, show wireframe
+    private func handleSecondTap(at location: CGPoint, mode: MeasurementMode) async {
+        guard let firstResult = firstMeasurementResult,
+              let frame = sessionManager.currentFrame else {
+            print("[ViewModel] No first measurement or frame for second tap")
+            return
+        }
+
+        isProcessing = true
+        print("[ViewModel] Starting second tap refinement...")
+
+        let viewSize = sessionManager.arView.bounds.size
+        let raycastHitPosition = sessionManager.raycastWorldPosition(from: location)
+
+        do {
+            if let refinement = try await measurementCalculator.measureForRefinement(
+                frame: frame,
+                tapPoint: location,
+                viewSize: viewSize,
+                mode: mode,
+                existingBox: firstResult.boundingBox,
+                raycastHitPosition: raycastHitPosition
+            ) {
+                // Merge first + second point clouds
+                let firstPoints = firstResult.pointCloud ?? []
+                let mergedPoints = firstPoints + refinement.points
+                let mergedQuality = MeasurementQuality.merged([firstResult.quality, refinement.quality])
+
+                print("[ViewModel] Merged point clouds: \(firstPoints.count) + \(refinement.points.count) = \(mergedPoints.count) points")
+
+                // Re-estimate bounding box from merged points
+                let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+                    guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
+                    return plane
+                }
+
+                guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
+                    points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+                ) else {
+                    print("[ViewModel] Re-estimation failed after second tap")
+                    isProcessing = false
+                    return
+                }
+
+                // Apply floor extension
+                var adjustedBox = newBox
+                if let floorY = firstTapFloorY {
+                    adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                }
+
+                // Recalculate with original axis mapping
+                var newResult = measurementCalculator.recalculate(
+                    boundingBox: adjustedBox,
+                    quality: mergedQuality,
+                    axisMapping: firstResult.axisMapping
+                )
+                newResult.pointCloud = mergedPoints
+
+                // Exit scanning mode
+                isScanning = false
+                firstMeasurementResult = nil
+                currentMeasurement = nil  // Clear before animation sets it
+
+                // Start box animation with merged result
                 startBoxAnimation(
                     at: location,
-                    boundingBox: result.boundingBox,
+                    boundingBox: adjustedBox,
                     frame: frame,
                     viewSize: viewSize,
-                    result: result,
-                    floorY: floorY
+                    result: newResult,
+                    floorY: firstTapFloorY
                 )
+
+                print("[ViewModel] Second tap complete — showing merged wireframe")
             } else {
-                print("[ViewModel] Measurement returned nil")
+                print("[ViewModel] Object not matched on second tap — stay in scanning mode")
                 isProcessing = false
             }
         } catch {
-            print("[ViewModel] Measurement failed with error: \(error)")
+            print("[ViewModel] Second tap failed: \(error)")
             isProcessing = false
         }
     }
@@ -1040,6 +1141,11 @@ class ARMeasurementViewModel: ObservableObject {
         accumulatedQualities = []
         originalAxisMapping = nil
         originalFloorY = nil
+
+        // Reset scanning state
+        isScanning = false
+        firstMeasurementResult = nil
+        firstTapFloorY = nil
 
         print("[ViewModel] clearActiveBoxOnly completed. Completed boxes preserved: \(completedBoxAnchors.count)")
     }

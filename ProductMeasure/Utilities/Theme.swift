@@ -77,6 +77,12 @@ enum PMTheme {
 
     static let uiPulseColor = UIColor(hex: 0x80FF57)
 
+    // MARK: Scanning Line
+
+    static let scanLineDuration: Double = 2.0
+    static let scanLineWidth: CGFloat = 2.0
+    static let scanLineGlowRadius: CGFloat = 8.0
+
     // MARK: Animation Timing
 
     static let edgeTraceDuration: Double = 0.5
