@@ -50,8 +50,8 @@ class CompletedBoxVisualization {
     private let cornerMarkerColor: UIColor = PMTheme.uiCornerMarkerDim
 
     // Label styling
-    private let billboardIdFontSize: CGFloat = 0.010
-    private let billboardBodyFontSize: CGFloat = 0.007
+    private let billboardIdFontSize: CGFloat = 0.014
+    private let billboardBodyFontSize: CGFloat = 0.010
     private let labelTextColor: UIColor = PMTheme.uiBillboardText
     private let labelBackgroundColor: UIColor = PMTheme.uiBillboardBg
     private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
@@ -234,9 +234,9 @@ class CompletedBoxVisualization {
         containerEntity.position = billboardPos
 
         let cubicMeters = height * length * width
-        let accentBarWidth: Float = 0.0015
-        let padding: Float = 0.005
-        let innerPadding: Float = 0.003
+        let accentBarWidth: Float = 0.002
+        let padding: Float = 0.007
+        let innerPadding: Float = 0.004
 
         // -- Header --
         let idText = String(format: "#%03d", boxId)
@@ -281,7 +281,7 @@ class CompletedBoxVisualization {
         let bodyHeight = bodyMesh.bounds.extents.y
 
         // -- Layout --
-        let gap: Float = 0.003
+        let gap: Float = 0.004
         let contentWidth = max(idWidth, bodyWidth)
         let contentHeight = idHeight + gap + bodyHeight
         let totalWidth = accentBarWidth + innerPadding + contentWidth + padding * 2

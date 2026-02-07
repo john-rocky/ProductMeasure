@@ -81,8 +81,8 @@ class BoxVisualization {
     private let handleCollisionRadius: Float = 0.015
 
     // Dimension label styling
-    private let billboardIdFontSize: CGFloat = 0.010
-    private let billboardBodyFontSize: CGFloat = 0.007
+    private let billboardIdFontSize: CGFloat = 0.014
+    private let billboardBodyFontSize: CGFloat = 0.010
     private let dimensionLabelTextColor: UIColor = PMTheme.uiBillboardText
     private let dimensionLabelBackgroundColor: UIColor = PMTheme.uiBillboardBg
     private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
@@ -700,9 +700,9 @@ class BoxVisualization {
         containerEntity.position = position
 
         let cubicMeters = storedHeight * storedLength * storedWidth
-        let accentBarWidth: Float = 0.0015
-        let padding: Float = 0.005
-        let innerPadding: Float = 0.003
+        let accentBarWidth: Float = 0.002
+        let padding: Float = 0.007
+        let innerPadding: Float = 0.004
 
         // -- Header: Box ID --
         let idText = String(format: "#%03d", boxId)
@@ -747,7 +747,7 @@ class BoxVisualization {
         let bodyHeight = bodyMesh.bounds.extents.y
 
         // -- Layout --
-        let gap: Float = 0.003
+        let gap: Float = 0.004
         let contentWidth = max(idWidth, bodyWidth)
         let contentHeight = idHeight + gap + bodyHeight
         let totalWidth = accentBarWidth + innerPadding + contentWidth + padding * 2
