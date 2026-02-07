@@ -713,8 +713,7 @@ class MeasurementCalculator {
         }
 
         // Neighbor distance threshold - points within this distance are connected
-        // Use larger threshold because point cloud can be sparse
-        let neighborThreshold: Float = 0.08  // 8cm
+        let neighborThreshold: Float = 0.05  // 5cm
 
         while !frontier.isEmpty {
             let currentIdx = frontier.removeFirst()

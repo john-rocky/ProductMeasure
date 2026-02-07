@@ -165,16 +165,23 @@ class BoundingBoxEstimator {
         centroid: SIMD3<Float>,
         rotation: simd_quatf
     ) -> (center: SIMD3<Float>, extents: SIMD3<Float>) {
-        var minLocal = SIMD3<Float>(Float.infinity, Float.infinity, Float.infinity)
-        var maxLocal = SIMD3<Float>(-Float.infinity, -Float.infinity, -Float.infinity)
-
         let inverseRotation = rotation.inverse
+        let localPoints = points.map { inverseRotation.act($0 - centroid) }
 
-        for point in points {
-            let local = inverseRotation.act(point - centroid)
-            minLocal = simd_min(minLocal, local)
-            maxLocal = simd_max(maxLocal, local)
-        }
+        // Use percentile-based extents to trim noise from mask bleeding / LiDAR edge artifacts
+        // Trim 2% from each side per axis — robust against outlier points at boundaries
+        let n = localPoints.count
+        let trimCount = max(1, Int(Float(n) * 0.02))
+
+        let xVals = localPoints.map { $0.x }.sorted()
+        let yVals = localPoints.map { $0.y }.sorted()
+        let zVals = localPoints.map { $0.z }.sorted()
+
+        let lo = max(0, trimCount)
+        let hi = max(lo + 1, n - 1 - trimCount)
+
+        let minLocal = SIMD3<Float>(xVals[lo], yVals[lo], zVals[lo])
+        let maxLocal = SIMD3<Float>(xVals[hi], yVals[hi], zVals[hi])
 
         // Compute the true box center (not the centroid)
         let localCenter = (minLocal + maxLocal) / 2
