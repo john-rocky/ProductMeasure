@@ -33,35 +33,75 @@ class BoundingBoxEstimator {
     }
 
     /// Refit bounding box from merged multi-angle points using the existing box's orientation.
-    /// Uses light percentile trim (0.2%) instead of the standard 1% to avoid truncating
-    /// the depth axis — merged L-shaped clouds have most points on the front face, so
-    /// aggressive trimming disproportionately removes the fewer side-face depth points.
+    /// Uses per-axis gap-based outlier detection: finds points at axis extremes that are
+    /// separated from the main body by abnormally large gaps (edge bleed, flying pixels).
+    /// Unlike symmetric percentile trim (density-biased) or MAD (over-trims sparse axes),
+    /// gap detection adapts naturally to each axis's point density.
     func refitExtents(points: [SIMD3<Float>], existingBox: BoundingBox3D) -> BoundingBox3D? {
         guard points.count >= 4 else { return nil }
 
         let inverseRotation = existingBox.rotation.inverse
         let localPoints = points.map { inverseRotation.act($0 - existingBox.center) }
 
-        let n = localPoints.count
-        // 0.2% trim: enough to reject extreme outliers without cutting into
-        // the less-populated depth axis of the bimodal merged cloud
-        let trimCount = max(1, Int(Float(n) * 0.002))
-
         let xVals = localPoints.map { $0.x }.sorted()
         let yVals = localPoints.map { $0.y }.sorted()
         let zVals = localPoints.map { $0.z }.sorted()
 
-        let lo = trimCount
-        let hi = max(lo + 1, n - 1 - trimCount)
+        let xRange = gapTrimmedRange(xVals)
+        let yRange = gapTrimmedRange(yVals)
+        let zRange = gapTrimmedRange(zVals)
 
-        let minLocal = SIMD3<Float>(xVals[lo], yVals[lo], zVals[lo])
-        let maxLocal = SIMD3<Float>(xVals[hi], yVals[hi], zVals[hi])
+        let minLocal = SIMD3<Float>(xRange.min, yRange.min, zRange.min)
+        let maxLocal = SIMD3<Float>(xRange.max, yRange.max, zRange.max)
 
         let newExtents = (maxLocal - minLocal) / 2
         let localCenter = (maxLocal + minLocal) / 2
         let newCenter = existingBox.center + existingBox.rotation.act(localCenter)
 
         return BoundingBox3D(center: newCenter, extents: newExtents, rotation: existingBox.rotation)
+    }
+
+    /// Trim outlier points at axis extremes using gap detection.
+    /// Examines the outermost 5% of sorted values on each end for gaps
+    /// significantly larger than the typical point spacing, indicating
+    /// segmentation edge bleed or LiDAR flying pixels.
+    private func gapTrimmedRange(_ sorted: [Float]) -> (min: Float, max: Float) {
+        let n = sorted.count
+        guard n >= 10 else {
+            return (min: sorted.first ?? 0, max: sorted.last ?? 0)
+        }
+
+        // Typical point spacing: median gap in the middle 50%
+        let q1 = n / 4, q3 = 3 * n / 4
+        var middleGaps: [Float] = []
+        for i in (q1 + 1)...q3 {
+            middleGaps.append(sorted[i] - sorted[i - 1])
+        }
+        middleGaps.sort()
+        let medianGap = middleGaps[middleGaps.count / 2]
+
+        // Gap > 5x typical spacing = outlier boundary; minimum 2mm
+        let threshold = max(medianGap * 5.0, 0.002)
+        let edgeCount = max(2, n / 20)
+
+        // Low end: find the innermost large gap in the bottom edge region
+        var lo = 0
+        for i in 0..<min(edgeCount, n - 1) {
+            if sorted[i + 1] - sorted[i] > threshold {
+                lo = i + 1
+            }
+        }
+
+        // High end: find the innermost large gap in the top edge region
+        var hi = n - 1
+        let highStart = max(n - 1 - edgeCount, lo + 1)
+        for i in stride(from: n - 2, through: highStart, by: -1) {
+            if sorted[i + 1] - sorted[i] > threshold {
+                hi = i
+            }
+        }
+
+        return (min: sorted[lo], max: sorted[hi])
     }
 
     // MARK: - Box Priority Mode
