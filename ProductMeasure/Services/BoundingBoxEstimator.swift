@@ -8,7 +8,7 @@ import Foundation
 import ARKit
 
 /// Estimates oriented bounding boxes from point clouds using MABR (Minimum Area Bounding Rectangle)
-class BoundingBoxEstimator {
+final class BoundingBoxEstimator: Sendable {
     // MARK: - Public Methods
 
     /// Estimate an oriented bounding box for a point cloud
@@ -51,10 +51,14 @@ class BoundingBoxEstimator {
 
         if horizontalPoints.count >= 20 {
             let hull = convexHull2D(horizontalPoints)
-            if hull.count >= 3 {
-                var mabrAngle = minimumAreaBoundingRect(hull: hull)
+            let simplifiedHull = simplifyConvexHull(hull)
+            if simplifiedHull.count >= 3 {
+                var mabrAngle = minimumAreaBoundingRect(hull: simplifiedHull)
 
-                // Snap to vertical plane if one is nearby and aligned
+                // Percentile-based angular refinement using all projected points
+                mabrAngle = refineAngleWithPercentiles(initialAngle: mabrAngle, points: horizontalPoints)
+
+                // Snap to vertical plane if one is nearby and aligned (final authority)
                 mabrAngle = snapToVerticalPlane(
                     angle: mabrAngle,
                     boxCenter: centroid,
@@ -156,6 +160,36 @@ class BoundingBoxEstimator {
         return lower + upper
     }
 
+    /// Simplify a convex hull by removing vertices whose adjacent edges are both short (noise).
+    /// Retains only structurally significant vertices to reduce LiDAR boundary feathering effects.
+    private func simplifyConvexHull(_ hull: [SIMD2<Float>], minEdgeFraction: Float = 0.03) -> [SIMD2<Float>] {
+        guard hull.count > 3 else { return hull }
+
+        // Compute total perimeter
+        let n = hull.count
+        var perimeter: Float = 0
+        for i in 0..<n {
+            perimeter += simd_distance(hull[i], hull[(i + 1) % n])
+        }
+
+        let minEdgeLength = perimeter * minEdgeFraction
+
+        // Keep vertex if at least one adjacent edge is long enough
+        var simplified: [SIMD2<Float>] = []
+        for i in 0..<n {
+            let prev = (i - 1 + n) % n
+            let next = (i + 1) % n
+            let edgePrev = simd_distance(hull[prev], hull[i])
+            let edgeNext = simd_distance(hull[i], hull[next])
+            if edgePrev >= minEdgeLength || edgeNext >= minEdgeLength {
+                simplified.append(hull[i])
+            }
+        }
+
+        // Ensure at least 3 vertices remain
+        return simplified.count >= 3 ? simplified : hull
+    }
+
     /// 2D cross product for convex hull: (b-a) x (c-a)
     private func cross2D(_ a: SIMD2<Float>, _ b: SIMD2<Float>, _ c: SIMD2<Float>) -> Float {
         (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
@@ -200,7 +234,115 @@ class BoundingBoxEstimator {
         return bestAngle
     }
 
-    // MARK: - Iterative Angle Refinement
+    // MARK: - Percentile-Based Angular Refinement
+
+    /// Refine MABR angle using percentile-based robust area minimization over all projected points.
+    /// Two-phase search: coarse (1° steps over ±10°) then fine (0.2° steps over ±1°).
+    /// Uses nth-element partial sort for O(n) percentile lookup instead of O(n log n) full sort.
+    private func refineAngleWithPercentiles(
+        initialAngle: Float,
+        points: [SIMD2<Float>]
+    ) -> Float {
+        guard points.count >= 50 else { return initialAngle }
+
+        let n = points.count
+        let loIdx = max(0, Int(Float(n) * 0.02))
+        let hiIdx = min(n - 1, Int(Float(n) * 0.98))
+        guard loIdx < hiIdx else { return initialAngle }
+
+        var xProj = [Float](repeating: 0, count: n)
+        var yProj = [Float](repeating: 0, count: n)
+
+        // Phase 1: coarse search ±10° in 1° steps (21 iterations)
+        let coarseRange: Float = 10.0 * .pi / 180.0
+        let coarseStep: Float = 1.0 * .pi / 180.0
+        var bestAngle = initialAngle
+        var bestArea: Float = .infinity
+
+        var angle = initialAngle - coarseRange
+        while angle <= initialAngle + coarseRange {
+            let area = percentileArea(angle: angle, points: points, n: n, loIdx: loIdx, hiIdx: hiIdx, xProj: &xProj, yProj: &yProj)
+            if area < bestArea {
+                bestArea = area
+                bestAngle = angle
+            }
+            angle += coarseStep
+        }
+
+        // Phase 2: fine search ±1° around best in 0.2° steps (11 iterations)
+        let fineRange: Float = 1.0 * .pi / 180.0
+        let fineStep: Float = 0.2 * .pi / 180.0
+        let coarseBest = bestAngle
+
+        angle = coarseBest - fineRange
+        while angle <= coarseBest + fineRange {
+            let area = percentileArea(angle: angle, points: points, n: n, loIdx: loIdx, hiIdx: hiIdx, xProj: &xProj, yProj: &yProj)
+            if area < bestArea {
+                bestArea = area
+                bestAngle = angle
+            }
+            angle += fineStep
+        }
+
+        let delta = abs(bestAngle - initialAngle) * 180.0 / .pi
+        if delta > 0.1 {
+            print("[BBoxEstimator] Angular refinement: \(initialAngle * 180 / .pi)° -> \(bestAngle * 180 / .pi)° (Δ\(String(format: "%.1f", delta))°)")
+        }
+
+        return bestAngle
+    }
+
+    /// Compute percentile-based bounding area for a given rotation angle.
+    /// Uses partial sort (partitioningIndex) for O(n) percentile extraction.
+    private func percentileArea(
+        angle: Float,
+        points: [SIMD2<Float>],
+        n: Int,
+        loIdx: Int,
+        hiIdx: Int,
+        xProj: inout [Float],
+        yProj: inout [Float]
+    ) -> Float {
+        let cosA = cos(-angle)
+        let sinA = sin(-angle)
+
+        for i in 0..<n {
+            xProj[i] = points[i].x * cosA - points[i].y * sinA
+            yProj[i] = points[i].x * sinA + points[i].y * cosA
+        }
+
+        let xLo = nthElement(&xProj, n: n, k: loIdx)
+        let xHi = nthElement(&xProj, n: n, k: hiIdx)
+        let yLo = nthElement(&yProj, n: n, k: loIdx)
+        let yHi = nthElement(&yProj, n: n, k: hiIdx)
+
+        return (xHi - xLo) * (yHi - yLo)
+    }
+
+    /// Find the k-th smallest element using partial sort (Introselect-like).
+    /// Average O(n), avoids full O(n log n) sort.
+    private func nthElement(_ arr: inout [Float], n: Int, k: Int) -> Float {
+        var lo = 0, hi = n - 1
+        while lo < hi {
+            let pivotIdx = lo + (hi - lo) / 2
+            let pivot = arr[pivotIdx]
+            arr.swapAt(pivotIdx, hi)
+            var store = lo
+            for i in lo..<hi {
+                if arr[i] < pivot {
+                    arr.swapAt(i, store)
+                    store += 1
+                }
+            }
+            arr.swapAt(store, hi)
+            if store == k { return arr[store] }
+            else if store < k { lo = store + 1 }
+            else { hi = store - 1 }
+        }
+        return arr[lo]
+    }
+
+    // MARK: - Iterative Box Refinement
 
     /// Refine box orientation by filtering far-off points and re-running MABR,
     /// but always compute final extents from ALL original points to avoid shrinkage
@@ -233,9 +375,11 @@ class BoundingBoxEstimator {
 
         guard horizontalPoints.count >= 20 else { return initialBox }
         let hull = convexHull2D(horizontalPoints)
-        guard hull.count >= 3 else { return initialBox }
+        let simplifiedHull = simplifyConvexHull(hull)
+        guard simplifiedHull.count >= 3 else { return initialBox }
 
-        var angle = minimumAreaBoundingRect(hull: hull)
+        var angle = minimumAreaBoundingRect(hull: simplifiedHull)
+        angle = refineAngleWithPercentiles(initialAngle: angle, points: horizontalPoints)
         angle = snapToVerticalPlane(
             angle: angle,
             boxCenter: centroid,

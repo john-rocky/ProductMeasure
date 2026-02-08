@@ -830,15 +830,18 @@ class ARMeasurementViewModel: ObservableObject {
                 let mergedPoints = accumulatedPointClouds.flatMap { $0 }
                 let mergedQuality = MeasurementQuality.merged(accumulatedQualities)
 
-                // Re-estimate bounding box from merged points
+                // Re-estimate bounding box from merged points (off main thread)
                 let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
                     guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
                     return plane
                 }
 
-                guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
-                    points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
-                ) else {
+                let estimatedBox = await Task.detached(priority: .userInitiated) {
+                    BoundingBoxEstimator().estimateBoundingBox(
+                        points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+                    )
+                }.value
+                guard let newBox = estimatedBox else {
                     print("[ViewModel] Second-tap re-estimation failed, falling back to first-tap result")
                     // Fall back to showing the first-tap result directly
                     showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
@@ -1551,15 +1554,18 @@ class ARMeasurementViewModel: ObservableObject {
                 let mergedPoints = accumulatedPointClouds.flatMap { $0 }
                 let mergedQuality = MeasurementQuality.merged(accumulatedQualities)
 
-                // Re-estimate bounding box from merged points
+                // Re-estimate bounding box from merged points (off main thread)
                 let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
                     guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
                     return plane
                 }
 
-                guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
-                    points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
-                ) else {
+                let estimatedBox = await Task.detached(priority: .userInitiated) {
+                    BoundingBoxEstimator().estimateBoundingBox(
+                        points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+                    )
+                }.value
+                guard let newBox = estimatedBox else {
                     print("[Refine] Re-estimation failed")
                     isProcessing = false
                     return
