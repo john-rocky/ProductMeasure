@@ -61,9 +61,9 @@ enum PMTheme {
     /// Corner marker: cyan sphere
     static let uiCornerMarker = UIColor(hex: 0x39FF14).withAlphaComponent(0.9)
 
-    /// Completed box inner edge: slightly dimmer
-    static let uiEdgeInnerDim  = UIColor(hex: 0x39FF14).withAlphaComponent(0.7)
-    static let uiEdgeOuterDim  = UIColor(hex: 0x39FF14).withAlphaComponent(0.10)
+    /// Completed box inner edge: same bright green, opaque to avoid transparent depth-sort issues
+    static let uiEdgeInnerDim  = UIColor(hex: 0x39FF14)
+    static let uiEdgeOuterDim  = UIColor(hex: 0x39FF14).withAlphaComponent(0.15)
     static let uiCornerMarkerDim = UIColor(hex: 0x39FF14).withAlphaComponent(0.6)
 
     // MARK: Billboard

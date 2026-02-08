@@ -185,10 +185,10 @@ class CompletedBoxVisualization {
         let midpoint = (start + end) / 2
         let orientation = calculateOrientation(direction: direction)
 
-        // Outer glow layer
+        // Outer glow layer (transparent like active box — glow is subtle so depth-sort issues are negligible)
         let outerMesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
         var outerMaterial = UnlitMaterial(color: outerEdgeColor)
-        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.10))
+        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.15))
         let outerEntity = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
         outerEntity.name = "completed_edge_outer_\(index)"
         outerEntity.position = midpoint
@@ -196,8 +196,7 @@ class CompletedBoxVisualization {
 
         // Inner line
         let innerMesh = MeshResource.generateBox(size: [innerEdgeRadius * 2, innerEdgeRadius * 2, length])
-        var innerMaterial = UnlitMaterial(color: innerEdgeColor)
-        innerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.70))
+        let innerMaterial = UnlitMaterial(color: innerEdgeColor)
         let innerEntity = ModelEntity(mesh: innerMesh, materials: [innerMaterial])
         innerEntity.name = "completed_edge_inner_\(index)"
         innerEntity.position = midpoint
