@@ -1699,10 +1699,16 @@ class ARMeasurementViewModel: ObservableObject {
             // Create lift animation
             let liftAnim = LabelLiftAnimation()
             let raycastPos = sessionManager.raycastWorldPosition(from: location)
+            let camPos = SIMD3<Float>(
+                frame.camera.transform.columns.3.x,
+                frame.camera.transform.columns.3.y,
+                frame.camera.transform.columns.3.z
+            )
             liftAnim.setup(
                 labelImage: result.correctedImage,
                 worldCorners: result.worldCorners,
                 surfaceNormal: result.surfaceNormal,
+                cameraPosition: camPos,
                 fallbackPosition: raycastPos
             )
 

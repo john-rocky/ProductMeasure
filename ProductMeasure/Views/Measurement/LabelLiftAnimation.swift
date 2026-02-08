@@ -43,6 +43,7 @@ class LabelLiftAnimation {
         labelImage: UIImage,
         worldCorners: [SIMD3<Float>]?,
         surfaceNormal: SIMD3<Float>?,
+        cameraPosition: SIMD3<Float>? = nil,
         fallbackPosition: SIMD3<Float>? = nil
     ) {
         guard let corners = worldCorners, corners.count == 4 else {
@@ -83,14 +84,28 @@ class LabelLiftAnimation {
         entity.position = labelCenter
         entity.addChild(plane)
 
-        // Orient entity to face along the surface normal
-        let up = SIMD3<Float>(0, 1, 0)
-        let forward = simd_normalize(self.surfaceNormal)
-        let right = simd_normalize(simd_cross(up, forward))
-        let correctedUp = simd_cross(forward, right)
+        // Orient entity using actual world corners so the 3D plane matches
+        // the label's real-world orientation exactly.
+        // generatePlane: width along local X, height along local Z, face normal along local +Y
+        // corners: [0]=topLeft, [1]=topRight, [2]=bottomRight, [3]=bottomLeft
+        var rightDir = simd_normalize(corners[1] - corners[0])
+        let downDir = simd_normalize(corners[3] - corners[0])
+        var orthoDown = simd_normalize(downDir - simd_dot(downDir, rightDir) * rightDir)
+        // Right-handed basis: Y = cross(Z, X)
+        var normal = simd_normalize(simd_cross(orthoDown, rightDir))
 
-        let rotationMatrix = simd_float3x3(columns: (right, correctedUp, forward))
-        entity.orientation = simd_quatf(rotationMatrix)
+        // Ensure normal points toward camera (face visible from camera side)
+        if let camPos = cameraPosition {
+            let toCamera = camPos - labelCenter
+            if simd_dot(normal, toCamera) < 0 {
+                // Normal faces away from camera — flip normal and one tangent
+                normal = -normal
+                orthoDown = -orthoDown
+                // Maintain right-handed: Y = cross(Z, X) = cross(-orthoDown, rightDir) = -cross(orthoDown, rightDir) = normal ✓
+            }
+        }
+
+        entity.orientation = simd_quatf(simd_float3x3(columns: (rightDir, normal, orthoDown)))
 
         // Add glow border edges
         addGlowBorder()
@@ -164,30 +179,33 @@ class LabelLiftAnimation {
 
     // MARK: - Animation
 
-    /// Animate the label lift: peel → move+rotate → settle
+    /// Animate the label lift: move straight toward camera → settle
     func animate(cameraTransform: simd_float4x4, completion: @escaping () -> Void) {
         let cameraPosition = SIMD3<Float>(
             cameraTransform.columns.3.x,
             cameraTransform.columns.3.y,
             cameraTransform.columns.3.z
         )
-        let cameraForward = -SIMD3<Float>(
-            cameraTransform.columns.2.x,
-            cameraTransform.columns.2.y,
-            cameraTransform.columns.2.z
-        )
 
-        // Target: 0.5m in front of camera
-        let targetPosition = cameraPosition + cameraForward * 0.5
-        // Target orientation: face the camera
-        let targetOrientation = simd_quatf(
-            from: SIMD3<Float>(0, 0, 1),
-            to: simd_normalize(cameraPosition - targetPosition)
-        )
+        // Target position: 35cm from label toward camera, at least 25cm from camera
+        let toCamera = simd_normalize(cameraPosition - labelCenter)
+        var targetPosition = labelCenter + toCamera * 0.35
+        let distToCamera = simd_length(cameraPosition - targetPosition)
+        if distToCamera < 0.25 {
+            targetPosition = cameraPosition - toCamera * 0.25
+        }
+
+        // Target orientation: face the camera while staying upright (no spin)
+        let toCameraFromTarget = simd_normalize(cameraPosition - targetPosition)
+        let worldUp = SIMD3<Float>(0, 1, 0)
+        let right = simd_normalize(simd_cross(worldUp, toCameraFromTarget))
+        let correctedUp = simd_cross(toCameraFromTarget, right)
+        let targetOrientation = simd_quatf(simd_float3x3(columns: (right, correctedUp, toCameraFromTarget)))
 
         let startPosition = entity.position
         let startOrientation = entity.orientation
         let startScale = entity.scale
+        let finalScale: Float = 1.8
 
         let duration = PMTheme.labelLiftDuration
         let startTime = Date()
@@ -204,36 +222,26 @@ class LabelLiftAnimation {
                 self.animationTimer = nil
                 self.entity.position = targetPosition
                 self.entity.orientation = targetOrientation
-                self.entity.scale = startScale * 1.3
+                self.entity.scale = startScale * finalScale
                 completion()
                 return
             }
 
-            // Phase breakdown
-            if rawT <= 0.30 {
-                // Peel: lift 5cm along surface normal
-                let peelT = Self.easeOut(rawT / 0.30)
-                let peelOffset = self.surfaceNormal * 0.05 * peelT
-                self.entity.position = startPosition + peelOffset
-
-            } else if rawT <= 0.80 {
-                // Move + Rotate: slide toward camera, slerp orientation, scale up
-                let moveT = Self.easeOutCubic((rawT - 0.30) / 0.50)
-                let peelEnd = startPosition + self.surfaceNormal * 0.05
-
-                self.entity.position = simd_mix(peelEnd, targetPosition, SIMD3(repeating: moveT))
+            // Phase: Move (0–85%) → Settle (85–100%)
+            if rawT <= 0.85 {
+                // Move straight from label to target position
+                let moveT = Self.easeOutCubic(rawT / 0.85)
+                self.entity.position = simd_mix(startPosition, targetPosition, SIMD3(repeating: moveT))
                 self.entity.orientation = simd_slerp(startOrientation, targetOrientation, moveT)
-                self.entity.scale = startScale * (1.0 + 0.3 * moveT)
+                self.entity.scale = startScale * (1.0 + (finalScale - 1.0) * moveT)
 
             } else {
-                // Settle: small bounce at final position
-                let settleT = (rawT - 0.80) / 0.20
-                let bounceT = Self.easeOutBounce(settleT)
-
-                let overshoot = targetPosition + cameraForward * 0.01
-                self.entity.position = simd_mix(targetPosition, overshoot, SIMD3(repeating: 1.0 - bounceT))
+                // Settle: subtle Y oscillation at final position
+                let settleT = (rawT - 0.85) / 0.15
+                let bounce = sin(settleT * .pi) * 0.005
+                self.entity.position = targetPosition + SIMD3<Float>(0, bounce, 0)
                 self.entity.orientation = targetOrientation
-                self.entity.scale = startScale * 1.3
+                self.entity.scale = startScale * finalScale
             }
         }
     }
