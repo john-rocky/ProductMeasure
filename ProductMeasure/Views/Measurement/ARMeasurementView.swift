@@ -77,10 +77,8 @@ struct ARMeasurementView: View {
                         // Instruction text when in targeting mode or refining
                         if viewModel.isRefining {
                             InstructionCard(mode: .refine)
-                        } else if viewModel.hasPendingFirstTap && !viewModel.isProcessing {
-                            InstructionCard(mode: .secondTap)
                         } else if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
-                            if selectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
+                            if selectionMode == .tap && (viewModel.animationPhase == .showingTargetBrackets || viewModel.hasPendingFirstTap) {
                                 InstructionCard(mode: .tap)
                             } else if selectionMode == .box {
                                 InstructionCard(mode: .box)
