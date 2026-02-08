@@ -194,7 +194,7 @@ class LabelLiftAnimation {
 
     // MARK: - Animation
 
-    /// Animate the label lift: move straight toward camera → settle
+    /// Animate: rise up halfway to camera height → move to in front of camera → settle
     func animate(cameraTransform: simd_float4x4, completion: @escaping () -> Void) {
         let cameraPosition = SIMD3<Float>(
             cameraTransform.columns.3.x,
@@ -202,18 +202,41 @@ class LabelLiftAnimation {
             cameraTransform.columns.3.z
         )
 
-        // Target position: 35cm from label toward camera, at least 25cm from camera
+        // Midpoint: rise up by quarter of the height difference between label and camera
+        let heightDiff = cameraPosition.y - labelCenter.y
+        let midPosition = SIMD3<Float>(labelCenter.x, labelCenter.y + heightDiff * 0.25, labelCenter.z)
+
+        // Final position: 35cm from label toward camera, at least 25cm from camera
         let toCamera = simd_normalize(cameraPosition - labelCenter)
-        var targetPosition = labelCenter + toCamera * 0.35
-        let distToCamera = simd_length(cameraPosition - targetPosition)
+        var finalPosition = labelCenter + toCamera * 0.35
+        let distToCamera = simd_length(cameraPosition - finalPosition)
         if distToCamera < 0.25 {
-            targetPosition = cameraPosition - toCamera * 0.25
+            finalPosition = cameraPosition - toCamera * 0.25
         }
 
-        // Target orientation: rotate mesh face normal (+Y) to point toward camera.
-        // simd_quatf(from:to:) gives shortest-arc rotation, preserving text orientation.
-        let facingDir = simd_normalize(cameraPosition - targetPosition)
-        let targetOrientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: facingDir)
+        // Target orientation: face toward camera (face normal = +Z for this mesh)
+        // with upright text (local +Y = screen up)
+        let facingDir = simd_normalize(cameraPosition - finalPosition)
+
+        // Step 1: rotate face normal +Z to facingDir
+        let tq1 = simd_quatf(from: SIMD3<Float>(0, 0, 1), to: facingDir)
+
+        // Step 2: roll correction so text is upright (local +Y aligned with screen up)
+        let currentUp = simd_act(tq1, SIMD3<Float>(0, 1, 0))
+        // Desired up = world up projected perpendicular to facingDir
+        var desiredUp = SIMD3<Float>(0, 1, 0) - simd_dot(SIMD3<Float>(0, 1, 0), facingDir) * facingDir
+        if simd_length(desiredUp) < 0.001 {
+            // facingDir nearly vertical — fall back to camera right
+            let camRight = SIMD3<Float>(cameraTransform.columns.0.x, cameraTransform.columns.0.y, cameraTransform.columns.0.z)
+            desiredUp = simd_normalize(simd_cross(facingDir, camRight))
+        } else {
+            desiredUp = simd_normalize(desiredUp)
+        }
+        let rollDot = max(Float(-1), min(Float(1), simd_dot(currentUp, desiredUp)))
+        let rollCross = simd_cross(currentUp, desiredUp)
+        let rollAngle = atan2(simd_dot(rollCross, facingDir), rollDot)
+        let tq2 = simd_quatf(angle: rollAngle, axis: facingDir)
+        let targetOrientation = tq2 * tq1
 
         let startPosition = entity.position
         let startOrientation = entity.orientation
@@ -233,24 +256,32 @@ class LabelLiftAnimation {
             if rawT >= 1.0 {
                 timer.invalidate()
                 self.animationTimer = nil
-                self.entity.position = targetPosition
+                self.entity.position = finalPosition
                 self.entity.orientation = targetOrientation
                 self.entity.scale = startScale * finalScale
                 completion()
                 return
             }
 
-            // Phase: Move (0–85%) → Settle (85–100%)
-            if rawT <= 0.85 {
-                let moveT = Self.easeOutCubic(rawT / 0.85)
-                self.entity.position = simd_mix(startPosition, targetPosition, SIMD3(repeating: moveT))
-                self.entity.orientation = simd_slerp(startOrientation, targetOrientation, moveT)
-                self.entity.scale = startScale * (1.0 + (finalScale - 1.0) * moveT)
+            // Phase 1: Rise (0–40%) — lift up from label surface to midpoint
+            // Phase 2: Present (40–85%) — move from midpoint to final position in front of camera
+            // Phase 3: Settle (85–100%) — subtle bounce
+            if rawT <= 0.40 {
+                let riseT = Self.easeOutCubic(rawT / 0.40)
+                self.entity.position = simd_mix(startPosition, midPosition, SIMD3(repeating: riseT))
+                // Keep start orientation during rise (label stays flat)
+                self.entity.scale = startScale * (1.0 + (finalScale - 1.0) * riseT * 0.3)
+
+            } else if rawT <= 0.85 {
+                let presentT = Self.easeOutCubic((rawT - 0.40) / 0.45)
+                self.entity.position = simd_mix(midPosition, finalPosition, SIMD3(repeating: presentT))
+                self.entity.orientation = simd_slerp(startOrientation, targetOrientation, presentT)
+                self.entity.scale = startScale * (1.0 + (finalScale - 1.0) * (0.3 + 0.7 * presentT))
 
             } else {
                 let settleT = (rawT - 0.85) / 0.15
                 let bounce = sin(settleT * .pi) * 0.005
-                self.entity.position = targetPosition + SIMD3<Float>(0, bounce, 0)
+                self.entity.position = finalPosition + SIMD3<Float>(0, bounce, 0)
                 self.entity.orientation = targetOrientation
                 self.entity.scale = startScale * finalScale
             }

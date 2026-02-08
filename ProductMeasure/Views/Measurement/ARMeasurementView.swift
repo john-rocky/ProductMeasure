@@ -1694,24 +1694,9 @@ class ARMeasurementViewModel: ObservableObject {
                 return
             }
 
-            print("[LabelReader] Label detected, placing AR label on top")
+            print("[LabelReader] Label detected, starting lift animation")
 
-            // Debug: log placement parameters
-            if let corners = result.worldCorners {
-                for (i, c) in corners.enumerated() {
-                    print("[LabelReader] worldCorner[\(i)] = (\(c.x), \(c.y), \(c.z))")
-                }
-            }
-            if let normal = result.surfaceNormal {
-                print("[LabelReader] surfaceNormal = (\(normal.x), \(normal.y), \(normal.z))")
-            }
-            let camT = frame.camera.transform
-            print("[LabelReader] camera pos = (\(camT.columns.3.x), \(camT.columns.3.y), \(camT.columns.3.z))")
-            print("[LabelReader] camera col0 = (\(camT.columns.0.x), \(camT.columns.0.y), \(camT.columns.0.z))")
-            print("[LabelReader] camera col1 = (\(camT.columns.1.x), \(camT.columns.1.y), \(camT.columns.1.z))")
-            print("[LabelReader] camera col2 = (\(camT.columns.2.x), \(camT.columns.2.y), \(camT.columns.2.z))")
-
-            // Create lift animation (placement only, no animation for now)
+            // Create lift animation
             let liftAnim = LabelLiftAnimation()
             let raycastPos = sessionManager.raycastWorldPosition(from: location)
             liftAnim.setup(
@@ -1725,10 +1710,42 @@ class ARMeasurementViewModel: ObservableObject {
             labelLiftAnimation = liftAnim
             labelLiftAnchor = sessionManager.addEntityWithAnchor(liftAnim.entity)
 
-            // Stop here - no animation. Just show the AR label on the real label.
-            isProcessing = false
-            isReadingLabel = false
-            print("[LabelReader] AR label placed. No animation — verify placement.")
+            // Animate
+            let cameraTransform = frame.camera.transform
+            liftAnim.animate(cameraTransform: cameraTransform) { [weak self] in
+                guard let self = self else { return }
+
+                // Animation complete - show result overlay
+                let fields = result.labelData.displayFields
+                self.labelLineRevealed = Array(repeating: false, count: max(fields.count, 1))
+                self.currentLabelData = result.labelData
+                self.showLabelResult = true
+                self.labelReadingComplete = false
+                self.isProcessing = false
+
+                // Stagger line reveals
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    let count = max(fields.count, 1)
+                    let stagger = PMTheme.labelTypingStagger
+
+                    for i in 0..<count {
+                        try? await Task.sleep(nanoseconds: UInt64(stagger * 1_000_000_000))
+                        guard self.showLabelResult else { return }
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            if i < self.labelLineRevealed.count {
+                                self.labelLineRevealed[i] = true
+                            }
+                        }
+                    }
+
+                    // Brief pause then mark complete
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        self.labelReadingComplete = true
+                    }
+                }
+            }
         } catch {
             print("[LabelReader] Error: \(error)")
             isProcessing = false
