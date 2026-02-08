@@ -221,14 +221,15 @@ class LabelLiftAnimation {
         // Step 1: rotate face normal +Z to facingDir
         let tq1 = simd_quatf(from: SIMD3<Float>(0, 0, 1), to: facingDir)
 
-        // Step 2: roll correction so text is upright (local +Y aligned with screen up)
+        // Step 2: roll correction so text is upright on screen
         let currentUp = simd_act(tq1, SIMD3<Float>(0, 1, 0))
-        // Desired up = world up projected perpendicular to facingDir
-        var desiredUp = SIMD3<Float>(0, 1, 0) - simd_dot(SIMD3<Float>(0, 1, 0), facingDir) * facingDir
+        // In portrait mode, screen up = camera sensor's -X axis (sensor left)
+        let sensorRight = SIMD3<Float>(cameraTransform.columns.0.x, cameraTransform.columns.0.y, cameraTransform.columns.0.z)
+        let screenUp = -sensorRight
+        // Project screen up perpendicular to facingDir
+        var desiredUp = screenUp - simd_dot(screenUp, facingDir) * facingDir
         if simd_length(desiredUp) < 0.001 {
-            // facingDir nearly vertical — fall back to camera right
-            let camRight = SIMD3<Float>(cameraTransform.columns.0.x, cameraTransform.columns.0.y, cameraTransform.columns.0.z)
-            desiredUp = simd_normalize(simd_cross(facingDir, camRight))
+            desiredUp = simd_normalize(simd_cross(facingDir, sensorRight))
         } else {
             desiredUp = simd_normalize(desiredUp)
         }
