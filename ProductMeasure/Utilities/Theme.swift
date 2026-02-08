@@ -26,6 +26,23 @@ enum PMTheme {
     static let uiRed      = UIColor(hex: 0xFF404D)
     static let uiBlue     = UIColor(hex: 0x3380FF)
 
+    // MARK: Label Reader (Neon Blue)
+
+    static let labelBlue       = Color(hex: 0x00BFFF)
+    static let uiLabelBlue     = UIColor(hex: 0x00BFFF)
+    static let uiLabelBlueGlow = UIColor(hex: 0x00BFFF).withAlphaComponent(0.15)
+    static let labelLiftDuration: Double = 1.2
+    static let labelTypingStagger: Double = 0.12
+    static let labelDismissDuration: Double = 0.3
+
+    static var labelBlueGradient: LinearGradient {
+        LinearGradient(
+            colors: [labelBlue, labelBlue.opacity(0.6)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     // MARK: Surfaces
 
     static let surfaceDark     = Color(hex: 0x0F1219)

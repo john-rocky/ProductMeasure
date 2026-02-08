@@ -46,6 +46,11 @@
 		001000098 /* ActionIconBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000099 /* ActionIconBuilder.swift */; };
 		001000100 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000101 /* Theme.swift */; };
 		001000102 /* DimensionCalloutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000103 /* DimensionCalloutView.swift */; };
+		001000104 /* LabelData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000105 /* LabelData.swift */; };
+		001000106 /* LabelReaderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000107 /* LabelReaderService.swift */; };
+		001000108 /* LabelLiftAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000109 /* LabelLiftAnimation.swift */; };
+		001000110 /* LabelResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000111 /* LabelResultView.swift */; };
+		001000112 /* LabelScanBracketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000113 /* LabelScanBracketsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -90,6 +95,11 @@
 		001000099 /* ActionIconBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionIconBuilder.swift; sourceTree = "<group>"; };
 		001000101 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		001000103 /* DimensionCalloutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DimensionCalloutView.swift; sourceTree = "<group>"; };
+		001000105 /* LabelData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelData.swift; sourceTree = "<group>"; };
+		001000107 /* LabelReaderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReaderService.swift; sourceTree = "<group>"; };
+		001000109 /* LabelLiftAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelLiftAnimation.swift; sourceTree = "<group>"; };
+		001000111 /* LabelResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelResultView.swift; sourceTree = "<group>"; };
+		001000113 /* LabelScanBracketsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelScanBracketsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +152,7 @@
 				001000026 /* MeasurementQuality.swift */,
 				001000081 /* HandleType.swift */,
 				001000085 /* BoundingBoxAnimationState.swift */,
+				001000105 /* LabelData.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -169,6 +180,7 @@
 				001000079 /* DebugVisualization.swift */,
 				001000083 /* BoxEditingService.swift */,
 				001000091 /* BoxAnimationCoordinator.swift */,
+				001000107 /* LabelReaderService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -208,6 +220,9 @@
 				001000093 /* BoxSelectionRectView.swift */,
 				001000095 /* SelectionModeToggle.swift */,
 				001000103 /* DimensionCalloutView.swift */,
+				001000109 /* LabelLiftAnimation.swift */,
+				001000111 /* LabelResultView.swift */,
+				001000113 /* LabelScanBracketsView.swift */,
 			);
 			path = Measurement;
 			sourceTree = "<group>";
@@ -345,6 +360,11 @@
 				001000098 /* ActionIconBuilder.swift in Sources */,
 				001000100 /* Theme.swift in Sources */,
 				001000102 /* DimensionCalloutView.swift in Sources */,
+				001000104 /* LabelData.swift in Sources */,
+				001000106 /* LabelReaderService.swift in Sources */,
+				001000108 /* LabelLiftAnimation.swift in Sources */,
+				001000110 /* LabelResultView.swift in Sources */,
+				001000112 /* LabelScanBracketsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

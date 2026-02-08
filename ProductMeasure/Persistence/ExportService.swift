@@ -11,7 +11,7 @@ class ExportService {
     // MARK: - CSV Export
 
     func exportToCSV(measurements: [ProductMeasurement], unit: MeasurementUnit) -> Data {
-        var csv = "ID,Date,Length (\(unit.rawValue)),Width (\(unit.rawValue)),Height (\(unit.rawValue)),Volume (\(unit.volumeUnit())),Quality,Mode,Notes\n"
+        var csv = "ID,Date,Length (\(unit.rawValue)),Width (\(unit.rawValue)),Height (\(unit.rawValue)),Volume (\(unit.volumeUnit())),Quality,Mode,Notes,Carton ID,Barcode,Destination,PO#,ASN,LOT,Pack Date,Weight(Gross),Weight(Net),Carrier,Tracking#,Handling\n"
 
         let dateFormatter = ISO8601DateFormatter()
 
@@ -27,10 +27,31 @@ class ExportService {
             let notes = measurement.notes.replacingOccurrences(of: ",", with: ";")
                                          .replacingOccurrences(of: "\n", with: " ")
 
-            csv += "\(id),\(date),\(String(format: "%.2f", length)),\(String(format: "%.2f", width)),\(String(format: "%.2f", height)),\(String(format: "%.2f", volume)),\(quality),\(mode),\"\(notes)\"\n"
+            let label = measurement.labelData
+            let cartonId = csvEscape(label?.cartonId)
+            let barcode = csvEscape(label?.barcodeValue)
+            let dest = csvEscape(label?.destination)
+            let po = csvEscape(label?.poNumber)
+            let asn = csvEscape(label?.asnNumber)
+            let lot = csvEscape(label?.lotNumber)
+            let packDate = csvEscape(label?.packDate)
+            let gw = csvEscape(label?.grossWeight)
+            let nw = csvEscape(label?.netWeight)
+            let carrier = csvEscape(label?.carrier)
+            let tracking = csvEscape(label?.trackingNumber)
+            let handling = csvEscape(label?.handlingIcons?.map(\.rawValue).joined(separator: "; "))
+
+            csv += "\(id),\(date),\(String(format: "%.2f", length)),\(String(format: "%.2f", width)),\(String(format: "%.2f", height)),\(String(format: "%.2f", volume)),\(quality),\(mode),\"\(notes)\",\(cartonId),\(barcode),\(dest),\(po),\(asn),\(lot),\(packDate),\(gw),\(nw),\(carrier),\(tracking),\(handling)\n"
         }
 
         return csv.data(using: .utf8) ?? Data()
+    }
+
+    private func csvEscape(_ value: String?) -> String {
+        guard let v = value else { return "" }
+        let escaped = v.replacingOccurrences(of: ",", with: ";")
+                       .replacingOccurrences(of: "\n", with: " ")
+        return "\"\(escaped)\""
     }
 
     // MARK: - JSON Export
@@ -63,7 +84,8 @@ class ExportService {
                     trackingState: measurement.trackingStateDescription
                 ),
                 mode: measurement.measurementMode.rawValue,
-                notes: measurement.notes
+                notes: measurement.notes,
+                label: measurement.labelData
             )
         }
 
@@ -154,6 +176,7 @@ private struct MeasurementExport: Codable {
     let quality: QualityExport
     let mode: String
     let notes: String
+    let label: LabelData?
 }
 
 private struct DimensionsExport: Codable {

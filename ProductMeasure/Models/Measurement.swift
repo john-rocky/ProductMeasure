@@ -53,6 +53,24 @@ final class ProductMeasurement {
     /// User notes
     var notes: String
 
+    /// JSON-encoded label data (if a label was scanned before this measurement)
+    var labelDataJSON: String?
+
+    /// Computed property to get/set LabelData
+    var labelData: LabelData? {
+        get {
+            guard let json = labelDataJSON, let data = json.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode(LabelData.self, from: data)
+        }
+        set {
+            if let value = newValue, let data = try? JSONEncoder().encode(value) {
+                labelDataJSON = String(data: data, encoding: .utf8)
+            } else {
+                labelDataJSON = nil
+            }
+        }
+    }
+
     /// Measurement mode used
     var measurementModeRaw: String
 
@@ -100,7 +118,8 @@ final class ProductMeasurement {
         quality: MeasurementQuality,
         mode: MeasurementMode,
         annotatedImageData: Data? = nil,
-        notes: String = ""
+        notes: String = "",
+        labelData: LabelData? = nil
     ) {
         self.id = UUID()
         self.timestamp = Date()
@@ -134,6 +153,11 @@ final class ProductMeasurement {
         self.annotatedImageData = annotatedImageData
         self.notes = notes
         self.measurementModeRaw = mode.rawValue
+
+        // Encode label data if provided
+        if let labelData = labelData, let data = try? JSONEncoder().encode(labelData) {
+            self.labelDataJSON = String(data: data, encoding: .utf8)
+        }
     }
 
     /// Get formatted dimensions string

@@ -25,10 +25,19 @@ struct ARMeasurementView: View {
                 )
                     .ignoresSafeArea()
 
-                // Corner brackets overlay - visible only in tap mode
+                // Corner brackets overlay
                 if selectionMode == .tap {
                     GeometryReader { geometry in
                         CornerBracketsView(
+                            phase: viewModel.animationPhase,
+                            screenSize: geometry.size
+                        )
+                    }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                } else if selectionMode == .label {
+                    GeometryReader { geometry in
+                        LabelScanBracketsView(
                             phase: viewModel.animationPhase,
                             screenSize: geometry.size
                         )
@@ -77,11 +86,13 @@ struct ARMeasurementView: View {
                         // Instruction text when in targeting mode or refining
                         if viewModel.isRefining {
                             InstructionCard(mode: .refine)
-                        } else if viewModel.currentMeasurement == nil && !viewModel.isProcessing {
+                        } else if viewModel.currentMeasurement == nil && !viewModel.isProcessing && !viewModel.isReadingLabel {
                             if selectionMode == .tap && (viewModel.animationPhase == .showingTargetBrackets || viewModel.hasPendingFirstTap) {
                                 InstructionCard(mode: .tap)
                             } else if selectionMode == .box {
                                 InstructionCard(mode: .box)
+                            } else if selectionMode == .label {
+                                InstructionCard(mode: .label)
                             }
                         }
                     }
@@ -97,6 +108,27 @@ struct ARMeasurementView: View {
                     if let image = viewModel.debugDepthImage {
                         DebugImageView(image: image, title: "Depth Map (Bright=Close) + Masked Pixels (Green)")
                     }
+                }
+
+                // Label result overlay
+                if viewModel.showLabelResult, let labelData = viewModel.currentLabelData {
+                    ZStack {
+                        // Dim background
+                        Color.black.opacity(0.3)
+                            .ignoresSafeArea()
+                            .allowsHitTesting(false)
+
+                        LabelResultView(
+                            labelData: labelData,
+                            lineRevealed: viewModel.labelLineRevealed,
+                            isComplete: viewModel.labelReadingComplete,
+                            onDismiss: {
+                                viewModel.dismissLabelResult()
+                                selectionMode = .tap
+                            }
+                        )
+                    }
+                    .transition(.opacity)
                 }
 
                 // Dimension callout overlay
@@ -262,7 +294,13 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
                 return
             }
 
-            // 5. Only handle new measurement taps in tap mode
+            // 5. Handle label mode taps
+            guard selectionMode != .label else {
+                Task { await viewModel.handleLabelTap(at: location) }
+                return
+            }
+
+            // 6. Only handle new measurement taps in tap mode
             guard selectionMode == .tap else { return }
 
             Task {
@@ -469,7 +507,7 @@ struct ScanningIndicator: View {
 
 struct InstructionCard: View {
     enum Mode {
-        case tap, box, refine, secondTap
+        case tap, box, refine, secondTap, label
     }
 
     var mode: Mode = .tap
@@ -481,6 +519,7 @@ struct InstructionCard: View {
         case .box: return "rectangle.dashed"
         case .refine: return "arrow.triangle.2.circlepath"
         case .secondTap: return "arrow.triangle.2.circlepath"
+        case .label: return "doc.text.viewfinder"
         }
     }
 
@@ -490,6 +529,7 @@ struct InstructionCard: View {
         case .box: return "Draw a box to select"
         case .refine: return "Refine from a different angle"
         case .secondTap: return "Tap again from a different angle"
+        case .label: return "Point at a label and tap"
         }
     }
 
@@ -499,20 +539,27 @@ struct InstructionCard: View {
         case .box: return "Drag to draw a rectangle around the object"
         case .refine: return "Move to a different angle and tap the same object"
         case .secondTap: return "Move around and tap the same object to refine"
+        case .label: return "Tap on a shipping label to read its contents"
         }
+    }
+
+    private var isLabelMode: Bool { mode == .label }
+
+    private var accentColor: Color {
+        isLabelMode ? PMTheme.labelBlue : PMTheme.cyan
     }
 
     var body: some View {
         VStack(spacing: 10) {
             ZStack {
                 Circle()
-                    .fill(PMTheme.cyan.opacity(0.12))
+                    .fill(accentColor.opacity(0.12))
                     .frame(width: 52, height: 52)
                     .scaleEffect(iconScale)
 
                 Image(systemName: iconName)
                     .font(.title2)
-                    .foregroundStyle(PMTheme.cyanGradient)
+                    .foregroundStyle(isLabelMode ? PMTheme.labelBlueGradient : PMTheme.cyanGradient)
                     .scaleEffect(iconScale)
             }
 
@@ -530,7 +577,7 @@ struct InstructionCard: View {
         .background(PMTheme.surfaceGlass)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(PMTheme.cyan.opacity(0.20), lineWidth: 0.5)
+                .strokeBorder(accentColor.opacity(0.20), lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .onAppear {
@@ -605,6 +652,17 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var hasPendingFirstTap = false
     private var pendingFirstTapResult: MeasurementCalculator.MeasurementResult?
     private var pendingFirstTapFloorY: Float?
+
+    // Label reader state
+    @Published var isReadingLabel = false
+    @Published var showLabelResult = false
+    @Published var currentLabelData: LabelData?
+    @Published var labelLineRevealed: [Bool] = []
+    @Published var labelReadingComplete = false
+    var pendingLabelData: LabelData?
+    private let labelReaderService = LabelReaderService()
+    private var labelLiftAnimation: LabelLiftAnimation?
+    private var labelLiftAnchor: AnchorEntity?
 
     // Current measurement mode (synced from view)
     var currentMeasurementMode: MeasurementMode = .boxPriority
@@ -1152,13 +1210,15 @@ class ARMeasurementViewModel: ObservableObject {
         // Capture annotated image
         let imageData = captureAnnotatedImage()
 
-        // Create and save measurement
+        // Create and save measurement (attach pending label data if available)
         let measurement = ProductMeasurement(
             boundingBox: result.boundingBox,
             quality: result.quality,
             mode: mode,
-            annotatedImageData: imageData
+            annotatedImageData: imageData,
+            labelData: pendingLabelData
         )
+        pendingLabelData = nil
 
         // Save to SwiftData (will be handled by the view's modelContext)
         NotificationCenter.default.post(
@@ -1602,6 +1662,119 @@ class ARMeasurementViewModel: ObservableObject {
         }
 
         isProcessing = false
+    }
+
+    // MARK: - Label Reader
+
+    func handleLabelTap(at location: CGPoint) async {
+        guard !isProcessing, !isReadingLabel else {
+            print("[LabelReader] Already processing, ignoring tap")
+            return
+        }
+
+        guard let frame = sessionManager.currentFrame else {
+            print("[LabelReader] No current frame")
+            return
+        }
+
+        isReadingLabel = true
+        isProcessing = true
+
+        let viewSize = sessionManager.arView.bounds.size
+
+        do {
+            guard let result = try await labelReaderService.detectAndReadLabel(
+                frame: frame,
+                tapPoint: location,
+                viewSize: viewSize
+            ) else {
+                print("[LabelReader] No label detected near tap point")
+                isProcessing = false
+                isReadingLabel = false
+                return
+            }
+
+            print("[LabelReader] Label detected, starting lift animation")
+
+            // Create lift animation
+            let liftAnim = LabelLiftAnimation()
+            let raycastPos = sessionManager.raycastWorldPosition(from: location)
+            liftAnim.setup(
+                labelImage: result.correctedImage,
+                worldCorners: result.worldCorners,
+                surfaceNormal: result.surfaceNormal,
+                fallbackPosition: raycastPos
+            )
+
+            labelLiftAnimation = liftAnim
+            labelLiftAnchor = sessionManager.addEntityWithAnchor(liftAnim.entity)
+
+            // Animate
+            let cameraTransform = frame.camera.transform
+            liftAnim.animate(cameraTransform: cameraTransform) { [weak self] in
+                guard let self = self else { return }
+
+                // Animation complete - show result overlay
+                let fields = result.labelData.displayFields
+                self.labelLineRevealed = Array(repeating: false, count: max(fields.count, 1))
+                self.currentLabelData = result.labelData
+                self.showLabelResult = true
+                self.labelReadingComplete = false
+                self.isProcessing = false
+
+                // Stagger line reveals
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    let count = max(fields.count, 1)
+                    let stagger = PMTheme.labelTypingStagger
+
+                    for i in 0..<count {
+                        try? await Task.sleep(nanoseconds: UInt64(stagger * 1_000_000_000))
+                        guard self.showLabelResult else { return }
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            if i < self.labelLineRevealed.count {
+                                self.labelLineRevealed[i] = true
+                            }
+                        }
+                    }
+
+                    // Brief pause then mark complete
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        self.labelReadingComplete = true
+                    }
+                }
+            }
+        } catch {
+            print("[LabelReader] Error: \(error)")
+            isProcessing = false
+            isReadingLabel = false
+        }
+    }
+
+    func dismissLabelResult() {
+        showLabelResult = false
+
+        // Store label data for next measurement
+        pendingLabelData = currentLabelData
+
+        // Dismiss lift animation
+        if let liftAnim = labelLiftAnimation {
+            liftAnim.dismiss { [weak self] in
+                guard let self = self else { return }
+                if let anchor = self.labelLiftAnchor {
+                    self.sessionManager.removeAnchor(anchor)
+                }
+                self.labelLiftAnchor = nil
+                self.labelLiftAnimation = nil
+            }
+        }
+
+        // Reset label state
+        currentLabelData = nil
+        labelLineRevealed = []
+        labelReadingComplete = false
+        isReadingLabel = false
     }
 
     /// Find the completed box ID that owns a given entity

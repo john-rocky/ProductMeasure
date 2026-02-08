@@ -34,6 +34,12 @@ enum AppConstants {
     static let maxRefinementRounds = 3
     static let refinementProximityScale: Float = 2.0   // Scale factor for same-object validation
     static let refinementOverlapThreshold: Float = 0.30 // Minimum overlap ratio for new point cloud
+
+    // MARK: - Label Reader
+    static let labelMinConfidence: Float = 0.6
+    static let labelMinSize: Float = 0.1
+    static let labelLiftDuration: Double = 1.2
+    static let labelTypingStagger: Double = 0.12
 }
 
 enum MeasurementUnit: String, CaseIterable, Codable {
@@ -154,11 +160,13 @@ enum SizeClass: String, CaseIterable {
 enum SelectionMode: String, CaseIterable, Codable {
     case tap = "tap"
     case box = "box"
+    case label = "label"
 
     var displayName: String {
         switch self {
         case .tap: return "Tap"
         case .box: return "Box"
+        case .label: return "Label"
         }
     }
 
@@ -166,6 +174,7 @@ enum SelectionMode: String, CaseIterable, Codable {
         switch self {
         case .tap: return "hand.tap"
         case .box: return "rectangle.dashed"
+        case .label: return "doc.text.viewfinder"
         }
     }
 }
