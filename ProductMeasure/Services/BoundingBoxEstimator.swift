@@ -13,20 +13,22 @@ final class BoundingBoxEstimator: Sendable {
 
     /// Estimate an oriented bounding box for a point cloud
     /// - Parameters:
-    ///   - points: 3D points in world coordinates
+    ///   - points: 3D points in world coordinates (used for extents/refinement)
     ///   - mode: Measurement mode (box priority or free object)
     ///   - verticalPlaneAnchors: Optional vertical plane anchors for orientation snapping
+    ///   - angleEstimationPoints: Optional eroded point cloud for angle estimation only
     /// - Returns: Oriented bounding box
     func estimateBoundingBox(
         points: [SIMD3<Float>],
         mode: MeasurementMode,
-        verticalPlaneAnchors: [ARPlaneAnchor] = []
+        verticalPlaneAnchors: [ARPlaneAnchor] = [],
+        angleEstimationPoints: [SIMD3<Float>]? = nil
     ) -> BoundingBox3D? {
         guard points.count >= 4 else { return nil }
 
         switch mode {
         case .boxPriority:
-            return estimateBoxPriorityOBB(points: points, verticalPlaneAnchors: verticalPlaneAnchors)
+            return estimateBoxPriorityOBB(points: points, verticalPlaneAnchors: verticalPlaneAnchors, angleEstimationPoints: angleEstimationPoints)
         case .freeObject:
             return estimateFreeObjectOBB(points: points)
         }
@@ -35,17 +37,24 @@ final class BoundingBoxEstimator: Sendable {
     // MARK: - Box Priority Mode
 
     /// Estimate OBB with vertical axis locked to world Y-axis
-    /// Uses MABR (Minimum Area Bounding Rectangle) for horizontal orientation
+    /// Uses MABR (Minimum Area Bounding Rectangle) for horizontal orientation.
+    /// Tries RANSAC plane-fit MABR first for tilted surfaces, falls back to XZ-projection MABR.
+    /// - Parameter angleEstimationPoints: Optional eroded point cloud for angle estimation (reduces boundary noise)
     private func estimateBoxPriorityOBB(
         points: [SIMD3<Float>],
-        verticalPlaneAnchors: [ARPlaneAnchor]
+        verticalPlaneAnchors: [ARPlaneAnchor],
+        angleEstimationPoints: [SIMD3<Float>]? = nil
     ) -> BoundingBox3D? {
         let centroid = points.reduce(.zero, +) / Float(points.count)
 
-        // Project points onto horizontal plane (XZ)
-        let horizontalPoints = points.map { SIMD2<Float>($0.x, $0.z) }
+        // Use eroded points for angle estimation if available, full points for extents
+        let anglePoints = angleEstimationPoints ?? points
 
-        // Use MABR for orientation (fall back to PCA if too few points for convex hull)
+        // Try RANSAC plane-fit MABR first (handles tilted surfaces)
+        var mabrAngle: Float? = planeFitMABRAngle(points: anglePoints)
+
+        // XZ-projection MABR using angle estimation points
+        let horizontalPoints = anglePoints.map { SIMD2<Float>($0.x, $0.z) }
         let xAxis: SIMD3<Float>
         let zAxis: SIMD3<Float>
 
@@ -53,20 +62,26 @@ final class BoundingBoxEstimator: Sendable {
             let hull = convexHull2D(horizontalPoints)
             let simplifiedHull = simplifyConvexHull(hull)
             if simplifiedHull.count >= 3 {
-                var mabrAngle = minimumAreaBoundingRect(hull: simplifiedHull)
+                if mabrAngle == nil {
+                    mabrAngle = minimumAreaBoundingRect(hull: simplifiedHull)
+                }
+                var angle = mabrAngle!
 
-                // Percentile-based angular refinement using all projected points
-                mabrAngle = refineAngleWithPercentiles(initialAngle: mabrAngle, points: horizontalPoints)
+                // Percentile-based angular refinement using angle estimation points
+                angle = refineAngleWithPercentiles(initialAngle: angle, points: horizontalPoints)
+
+                // Face-distance refinement using full points (more discriminating than area for partial clouds)
+                angle = refineAngleWithFaceDistance(initialAngle: angle, points3D: points)
 
                 // Snap to vertical plane if one is nearby and aligned (final authority)
-                mabrAngle = snapToVerticalPlane(
-                    angle: mabrAngle,
+                angle = snapToVerticalPlane(
+                    angle: angle,
                     boxCenter: centroid,
                     verticalPlaneAnchors: verticalPlaneAnchors
                 )
 
-                let cosA = cos(mabrAngle)
-                let sinA = sin(mabrAngle)
+                let cosA = cos(angle)
+                let sinA = sin(angle)
                 xAxis = SIMD3<Float>(cosA, 0, sinA).normalized
                 zAxis = SIMD3<Float>(-sinA, 0, cosA).normalized
             } else {
@@ -342,16 +357,282 @@ final class BoundingBoxEstimator: Sendable {
         return arr[lo]
     }
 
+    // MARK: - Face-Distance Angular Refinement
+
+    /// Refine angle by minimizing the median distance from points to the nearest box face.
+    /// More discriminating than area minimization for partial/one-sided point clouds.
+    /// Two-phase: coarse ±5° in 0.5° steps, then fine ±0.5° in 0.1° steps.
+    private func refineAngleWithFaceDistance(
+        initialAngle: Float,
+        points3D: [SIMD3<Float>]
+    ) -> Float {
+        guard points3D.count >= 50 else { return initialAngle }
+
+        let initialScore = faceDistanceScore(angle: initialAngle, points3D: points3D)
+        guard initialScore > 0 else { return initialAngle }
+
+        // Phase 1: coarse sweep ±5° in 0.5° steps (21 candidates)
+        let coarseRange: Float = 5.0 * .pi / 180.0
+        let coarseStep: Float = 0.5 * .pi / 180.0
+        var bestAngle = initialAngle
+        var bestScore = initialScore
+
+        var angle = initialAngle - coarseRange
+        while angle <= initialAngle + coarseRange {
+            let score = faceDistanceScore(angle: angle, points3D: points3D)
+            if score < bestScore {
+                bestScore = score
+                bestAngle = angle
+            }
+            angle += coarseStep
+        }
+
+        // Phase 2: fine sweep ±0.5° around best in 0.1° steps (11 candidates)
+        let fineRange: Float = 0.5 * .pi / 180.0
+        let fineStep: Float = 0.1 * .pi / 180.0
+        let coarseBest = bestAngle
+
+        angle = coarseBest - fineRange
+        while angle <= coarseBest + fineRange {
+            let score = faceDistanceScore(angle: angle, points3D: points3D)
+            if score < bestScore {
+                bestScore = score
+                bestAngle = angle
+            }
+            angle += fineStep
+        }
+
+        // Safety gate: only accept if >5% better than input
+        let improvement = (initialScore - bestScore) / initialScore
+        if improvement > 0.05 {
+            let delta = abs(bestAngle - initialAngle) * 180.0 / .pi
+            print("[BBoxEstimator] Face-distance refinement: \(initialAngle * 180 / .pi)° -> \(bestAngle * 180 / .pi)° (Δ\(String(format: "%.1f", delta))°, improvement \(String(format: "%.1f", improvement * 100))%)")
+            return bestAngle
+        }
+
+        return initialAngle
+    }
+
+    /// Compute median distance from each point to its nearest OBB face for a given yaw angle.
+    /// Lower score = better alignment.
+    private func faceDistanceScore(
+        angle: Float,
+        points3D: [SIMD3<Float>]
+    ) -> Float {
+        let n = points3D.count
+        guard n > 0 else { return .infinity }
+
+        let cosA = cos(angle)
+        let sinA = sin(angle)
+        let xAxis = SIMD3<Float>(cosA, 0, sinA)
+        let yAxis = SIMD3<Float>(0, 1, 0)
+        let zAxis = SIMD3<Float>(-sinA, 0, cosA)
+
+        let rotationMatrix = simd_float3x3(xAxis, yAxis, zAxis)
+        let rotation = simd_quatf(rotationMatrix: rotationMatrix)
+        let inverseRotation = rotation.inverse
+
+        let centroid = points3D.reduce(.zero, +) / Float(n)
+
+        // Transform all points to local coordinates
+        let localPoints = points3D.map { inverseRotation.act($0 - centroid) }
+
+        // Compute percentile extents (2%/98%)
+        let loIdx = max(0, Int(Float(n) * 0.02))
+        let hiIdx = min(n - 1, Int(Float(n) * 0.98))
+
+        var xVals = localPoints.map { $0.x }
+        var yVals = localPoints.map { $0.y }
+        var zVals = localPoints.map { $0.z }
+
+        let xLo = nthElement(&xVals, n: n, k: loIdx)
+        let xHi = nthElement(&xVals, n: n, k: hiIdx)
+        let yLo = nthElement(&yVals, n: n, k: loIdx)
+        let yHi = nthElement(&yVals, n: n, k: hiIdx)
+        let zLo = nthElement(&zVals, n: n, k: loIdx)
+        let zHi = nthElement(&zVals, n: n, k: hiIdx)
+
+        let halfExtents = SIMD3<Float>(
+            (xHi - xLo) / 2,
+            (yHi - yLo) / 2,
+            (zHi - zLo) / 2
+        )
+        let boxCenter = SIMD3<Float>(
+            (xHi + xLo) / 2,
+            (yHi + yLo) / 2,
+            (zHi + zLo) / 2
+        )
+
+        guard halfExtents.x > 0.001 && halfExtents.y > 0.001 && halfExtents.z > 0.001 else {
+            return .infinity
+        }
+
+        // Compute each point's distance to nearest face
+        var distances = [Float](repeating: 0, count: n)
+        for i in 0..<n {
+            let p = localPoints[i] - boxCenter
+            let dx = halfExtents.x - abs(p.x)
+            let dy = halfExtents.y - abs(p.y)
+            let dz = halfExtents.z - abs(p.z)
+            distances[i] = max(0, min(dx, dy, dz))
+        }
+
+        // Return median distance
+        let medianIdx = n / 2
+        return nthElement(&distances, n: n, k: medianIdx)
+    }
+
+    // MARK: - RANSAC Plane-Fit MABR
+
+    /// Try to extract the MABR angle from the dominant plane of the point cloud.
+    /// Returns nil if quality gates fail (falls back to XZ-projection MABR).
+    private func planeFitMABRAngle(points: [SIMD3<Float>]) -> Float? {
+        guard points.count >= 30 else { return nil }
+
+        // Fit dominant plane via RANSAC
+        guard let planeResult = fitDominantPlane(points: points) else { return nil }
+
+        let normal = planeResult.normal
+        let planePoint = planeResult.point
+        let inlierIndices = planeResult.inlierIndices
+
+        // Quality gate: enough inliers
+        let inlierRatio = Float(inlierIndices.count) / Float(points.count)
+        guard inlierRatio >= 0.4, inlierIndices.count >= 30 else {
+            print("[BBoxEstimator] Plane-fit rejected: inlier ratio \(String(format: "%.1f%%", inlierRatio * 100)), count \(inlierIndices.count)")
+            return nil
+        }
+
+        // Quality gate: plane must be tilted from world Y by >10°
+        let worldY = SIMD3<Float>(0, 1, 0)
+        let tiltAngle = acos(min(1, abs(simd_dot(normal, worldY))))
+        guard tiltAngle > 10.0 * .pi / 180.0 else {
+            print("[BBoxEstimator] Plane-fit skipped: tilt \(String(format: "%.1f°", tiltAngle * 180 / .pi)) too close to horizontal")
+            return nil
+        }
+
+        // Project all points onto the plane's tangent basis
+        let (projected2D, tangentU, _) = projectToPlane(points: points, normal: normal, point: planePoint)
+
+        guard projected2D.count >= 20 else { return nil }
+
+        // Run convex hull + MABR in the plane's 2D coordinate system
+        let hull = convexHull2D(projected2D)
+        let simplifiedHull = simplifyConvexHull(hull)
+        guard simplifiedHull.count >= 3 else { return nil }
+
+        let planeAngle = minimumAreaBoundingRect(hull: simplifiedHull)
+
+        // Convert the MABR direction back to 3D and extract yaw angle in world XZ
+        let cosP = cos(planeAngle)
+        let sinP = sin(planeAngle)
+        let tangentV = simd_cross(normal, tangentU)
+        let direction3D = cosP * tangentU + sinP * tangentV
+        let yawAngle = atan2(direction3D.z, direction3D.x)
+
+        print("[BBoxEstimator] Plane-fit MABR: tilt=\(String(format: "%.1f°", tiltAngle * 180 / .pi)), inliers=\(String(format: "%.0f%%", inlierRatio * 100)), yaw=\(String(format: "%.1f°", yawAngle * 180 / .pi))")
+
+        return yawAngle
+    }
+
+    /// RANSAC plane fitting with PCA refit on inliers.
+    /// Returns (normal, point on plane, inlier indices) or nil if insufficient points.
+    private func fitDominantPlane(
+        points: [SIMD3<Float>]
+    ) -> (normal: SIMD3<Float>, point: SIMD3<Float>, inlierIndices: [Int])? {
+        let n = points.count
+        guard n >= 3 else { return nil }
+
+        let iterations = AppConstants.ransacIterations
+        let threshold = AppConstants.ransacDistanceThreshold
+
+        var bestInlierIndices: [Int] = []
+
+        for _ in 0..<iterations {
+            // Pick 3 random points
+            let i0 = Int.random(in: 0..<n)
+            var i1 = Int.random(in: 0..<n)
+            while i1 == i0 { i1 = Int.random(in: 0..<n) }
+            var i2 = Int.random(in: 0..<n)
+            while i2 == i0 || i2 == i1 { i2 = Int.random(in: 0..<n) }
+
+            let v1 = points[i1] - points[i0]
+            let v2 = points[i2] - points[i0]
+            var normal = simd_cross(v1, v2)
+            let len = simd_length(normal)
+            guard len > 1e-8 else { continue }
+            normal /= len
+
+            // Count inliers
+            var inliers: [Int] = []
+            for j in 0..<n {
+                let dist = abs(simd_dot(points[j] - points[i0], normal))
+                if dist <= threshold {
+                    inliers.append(j)
+                }
+            }
+
+            if inliers.count > bestInlierIndices.count {
+                bestInlierIndices = inliers
+            }
+        }
+
+        guard bestInlierIndices.count >= 3 else { return nil }
+
+        // Refit plane via PCA on inliers (smallest eigenvector = plane normal)
+        let inlierPoints = bestInlierIndices.map { points[$0] }
+        let inlierCentroid = inlierPoints.reduce(.zero, +) / Float(inlierPoints.count)
+        let covariance = computeCovariance3D(inlierPoints, centroid: inlierCentroid)
+        let (_, eigenvectors) = eigenDecomposition(covariance)
+
+        // Smallest eigenvalue's eigenvector = plane normal (3rd column, sorted descending)
+        let planeNormal = SIMD3<Float>(
+            eigenvectors.columns.2.x,
+            eigenvectors.columns.2.y,
+            eigenvectors.columns.2.z
+        ).normalized
+
+        return (normal: planeNormal, point: inlierCentroid, inlierIndices: bestInlierIndices)
+    }
+
+    /// Project 3D points onto a plane defined by (normal, point).
+    /// Returns 2D coordinates in the plane's tangent basis and the basis vectors.
+    private func projectToPlane(
+        points: [SIMD3<Float>],
+        normal: SIMD3<Float>,
+        point: SIMD3<Float>
+    ) -> (projected2D: [SIMD2<Float>], tangentU: SIMD3<Float>, tangentV: SIMD3<Float>) {
+        // Construct tangent basis
+        let worldUp = SIMD3<Float>(0, 1, 0)
+        var tangentU: SIMD3<Float>
+        if abs(simd_dot(normal, worldUp)) > 0.9 {
+            tangentU = simd_cross(normal, SIMD3<Float>(1, 0, 0))
+        } else {
+            tangentU = simd_cross(normal, worldUp)
+        }
+        tangentU = tangentU.normalized
+        let tangentV = simd_cross(normal, tangentU).normalized
+
+        // Project each point
+        let projected = points.map { p -> SIMD2<Float> in
+            let d = p - point
+            return SIMD2<Float>(simd_dot(d, tangentU), simd_dot(d, tangentV))
+        }
+
+        return (projected, tangentU, tangentV)
+    }
+
     // MARK: - Iterative Box Refinement
 
-    /// Refine box orientation by filtering far-off points and re-running MABR,
-    /// but always compute final extents from ALL original points to avoid shrinkage
+    /// Refine box extents by filtering outlier points, preserving the initial angle.
+    /// The initial angle was carefully refined (RANSAC + percentile + face-distance + snap)
+    /// so we only recompute tighter extents from filtered points, not re-estimate the angle.
     private func refineBoxIteratively(
         initialBox: BoundingBox3D,
         points: [SIMD3<Float>],
         verticalPlaneAnchors: [ARPlaneAnchor]
     ) -> BoundingBox3D {
-        // Single refinement pass: filter outlier points, re-estimate angle only
+        // Filter outlier points, then recompute tighter extents with preserved angle
         let margin: Float = 0.015  // 1.5cm
         let minRetainRatio: Float = 0.5
 
@@ -370,34 +651,12 @@ final class BoundingBoxEstimator: Sendable {
             return initialBox
         }
 
-        let centroid = filteredPoints.reduce(.zero, +) / Float(filteredPoints.count)
-        let horizontalPoints = filteredPoints.map { SIMD2<Float>($0.x, $0.z) }
+        // Preserve the initial angle — it was carefully refined (RANSAC + percentile + face-distance + snap)
+        // Only recompute tighter extents from filtered points (outliers removed)
+        let rotation = initialBox.rotation
 
-        guard horizontalPoints.count >= 20 else { return initialBox }
-        let hull = convexHull2D(horizontalPoints)
-        let simplifiedHull = simplifyConvexHull(hull)
-        guard simplifiedHull.count >= 3 else { return initialBox }
-
-        var angle = minimumAreaBoundingRect(hull: simplifiedHull)
-        angle = refineAngleWithPercentiles(initialAngle: angle, points: horizontalPoints)
-        angle = snapToVerticalPlane(
-            angle: angle,
-            boxCenter: centroid,
-            verticalPlaneAnchors: verticalPlaneAnchors
-        )
-
-        let cosA = cos(angle)
-        let sinA = sin(angle)
-        let xAxis = SIMD3<Float>(cosA, 0, sinA).normalized
-        let yAxis = SIMD3<Float>(0, 1, 0)
-        let zAxis = SIMD3<Float>(-sinA, 0, cosA).normalized
-
-        let rotationMatrix = simd_float3x3(xAxis, yAxis, zAxis)
-        let rotation = simd_quatf(rotationMatrix: rotationMatrix)
-
-        // Compute extents from ALL original points (not filtered) to avoid shrinkage
-        let fullCentroid = points.reduce(.zero, +) / Float(points.count)
-        let (center, extents) = computeExtents(points: points, centroid: fullCentroid, rotation: rotation)
+        let filteredCentroid = filteredPoints.reduce(.zero, +) / Float(filteredPoints.count)
+        let (center, extents) = computeExtents(points: filteredPoints, centroid: filteredCentroid, rotation: rotation)
 
         return BoundingBox3D(center: center, extents: extents, rotation: rotation)
     }

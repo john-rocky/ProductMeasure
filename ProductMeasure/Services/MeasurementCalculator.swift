@@ -132,6 +132,9 @@ class MeasurementCalculator {
         }
         print("[Calculator] Found \(filteredPixels.count) masked pixels after depth filtering")
 
+        // Generate eroded mask pixels for angle estimation (removes boundary noise)
+        let erodedPixels = segmentationService.erodeMaskPixels(pixels: filteredPixels, imageSize: imageSize)
+
         // Create debug mask image (memory-optimized version)
         let debugMaskImage = DebugVisualization.visualizeMask(
             mask: segmentation.mask,
@@ -148,6 +151,19 @@ class MeasurementCalculator {
             maskedPixels: filteredPixels,
             imageSize: imageSize
         )
+
+        // Generate eroded point cloud for angle estimation
+        var erodedPointCloud: PointCloudGenerator.PointCloud?
+        if erodedPixels.count < filteredPixels.count {
+            erodedPointCloud = pointCloudGenerator.generatePointCloud(
+                frame: frame,
+                maskedPixels: erodedPixels,
+                imageSize: imageSize
+            )
+            if let eroded = erodedPointCloud, !eroded.isEmpty {
+                print("[Calculator] Eroded point cloud: \(eroded.points.count) points (vs \(pointCloud.points.count) full)")
+            }
+        }
 
         guard !pointCloud.isEmpty else {
             print("[Calculator] Point cloud is empty")
@@ -207,10 +223,24 @@ class MeasurementCalculator {
             return plane
         }
 
+        // Prepare eroded points for angle estimation (filter by same proximity/clustering as main cloud)
+        let anglePoints: [SIMD3<Float>]? = erodedPointCloud.flatMap { eroded -> [SIMD3<Float>]? in
+            guard !eroded.isEmpty else { return nil }
+            // Apply same proximity filter to eroded points
+            if let hitPosition = raycastHitPosition {
+                let pointSpread = Self.estimatePointSpread(points: eroded.points)
+                let radius: Float = max(1.0, pointSpread)
+                let filtered = eroded.points.filter { simd_distance($0, hitPosition) <= radius }
+                return filtered.count >= 20 ? filtered : nil
+            }
+            return eroded.points.count >= 20 ? eroded.points : nil
+        }
+
         guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
             points: pointCloud.points,
             mode: mode,
-            verticalPlaneAnchors: verticalPlanes
+            verticalPlaneAnchors: verticalPlanes,
+            angleEstimationPoints: anglePoints
         ) else {
             print("[Calculator] Failed to estimate bounding box")
             return nil
@@ -325,6 +355,9 @@ class MeasurementCalculator {
         }
         print("[Calculator] Found \(depthFilteredPixels.count) masked pixels after depth filtering")
 
+        // Generate eroded mask pixels for angle estimation (removes boundary noise)
+        let erodedPixels = segmentationService.erodeMaskPixels(pixels: depthFilteredPixels, imageSize: imageSize)
+
         // Create debug mask image with ROI
         let debugMaskImage = DebugVisualization.visualizeMaskWithROI(
             mask: segmentation.mask,
@@ -341,6 +374,19 @@ class MeasurementCalculator {
             maskedPixels: depthFilteredPixels,
             imageSize: imageSize
         )
+
+        // Generate eroded point cloud for angle estimation
+        var erodedPointCloud: PointCloudGenerator.PointCloud?
+        if erodedPixels.count < depthFilteredPixels.count {
+            erodedPointCloud = pointCloudGenerator.generatePointCloud(
+                frame: frame,
+                maskedPixels: erodedPixels,
+                imageSize: imageSize
+            )
+            if let eroded = erodedPointCloud, !eroded.isEmpty {
+                print("[Calculator] Eroded point cloud: \(eroded.points.count) points (vs \(pointCloud.points.count) full)")
+            }
+        }
 
         guard !pointCloud.isEmpty else {
             print("[Calculator] Point cloud is empty")
@@ -395,10 +441,23 @@ class MeasurementCalculator {
             return plane
         }
 
+        // Prepare eroded points for angle estimation (filter by same proximity/clustering as main cloud)
+        let anglePoints: [SIMD3<Float>]? = erodedPointCloud.flatMap { eroded -> [SIMD3<Float>]? in
+            guard !eroded.isEmpty else { return nil }
+            if let hitPosition = raycastHitPosition {
+                let pointSpread = Self.estimatePointSpread(points: eroded.points)
+                let radius: Float = max(1.0, pointSpread)
+                let filtered = eroded.points.filter { simd_distance($0, hitPosition) <= radius }
+                return filtered.count >= 20 ? filtered : nil
+            }
+            return eroded.points.count >= 20 ? eroded.points : nil
+        }
+
         guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
             points: pointCloud.points,
             mode: mode,
-            verticalPlaneAnchors: verticalPlanes
+            verticalPlaneAnchors: verticalPlanes,
+            angleEstimationPoints: anglePoints
         ) else {
             print("[Calculator] Failed to estimate bounding box")
             return nil

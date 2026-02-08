@@ -457,6 +457,57 @@ extension InstanceSegmentationService {
         return pixels
     }
 
+    /// Erode mask pixels by removing boundary pixels (those without enough cardinal neighbors).
+    /// Removes ~1 step-width of boundary to eliminate mixed-depth fringe pixels.
+    /// - Parameters:
+    ///   - pixels: Original sampled mask pixel coordinates (in image space)
+    ///   - imageSize: The original camera image size (used to compute step distance)
+    /// - Returns: Eroded pixel set (interior-only pixels)
+    func erodeMaskPixels(
+        pixels: [(x: Int, y: Int)],
+        imageSize: CGSize
+    ) -> [(x: Int, y: Int)] {
+        guard pixels.count >= 100 else { return pixels }
+
+        // Compute neighbor distance matching the mask sampling grid spacing in image coords.
+        // getMaskedPixels samples every `step` mask pixels, then scales to image coords.
+        // For a typical 1920x1440 image with mask ~same size, step≈9, so image-space gap ≈ step.
+        let minDim = min(Int(imageSize.width), Int(imageSize.height))
+        let neighborDist = max(4, minDim / 160)
+
+        // Build hash set for O(1) neighbor lookup
+        struct PixelKey: Hashable { let x: Int; let y: Int }
+        var pixelSet = Set<PixelKey>(minimumCapacity: pixels.count)
+        for p in pixels {
+            pixelSet.insert(PixelKey(x: p.x, y: p.y))
+        }
+
+        // Keep pixel only if >= 3 of 4 cardinal neighbors exist
+        var eroded: [(x: Int, y: Int)] = []
+        eroded.reserveCapacity(pixels.count)
+
+        for p in pixels {
+            var neighborCount = 0
+            if pixelSet.contains(PixelKey(x: p.x + neighborDist, y: p.y)) { neighborCount += 1 }
+            if pixelSet.contains(PixelKey(x: p.x - neighborDist, y: p.y)) { neighborCount += 1 }
+            if pixelSet.contains(PixelKey(x: p.x, y: p.y + neighborDist)) { neighborCount += 1 }
+            if pixelSet.contains(PixelKey(x: p.x, y: p.y - neighborDist)) { neighborCount += 1 }
+
+            if neighborCount >= 3 {
+                eroded.append(p)
+            }
+        }
+
+        // Safety: if erosion removed > 50%, return uneroded
+        if eroded.count < pixels.count / 2 {
+            print("[Segmentation] Erosion removed too many pixels (\(pixels.count) -> \(eroded.count)), skipping")
+            return pixels
+        }
+
+        print("[Segmentation] Eroded mask: \(pixels.count) -> \(eroded.count) pixels")
+        return eroded
+    }
+
     /// Get mask coverage statistics
     func getMaskStats(mask: CVPixelBuffer) -> (totalPixels: Int, maskedPixels: Int) {
         CVPixelBufferLockBaseAddress(mask, .readOnly)
