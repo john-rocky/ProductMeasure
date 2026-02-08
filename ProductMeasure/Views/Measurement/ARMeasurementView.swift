@@ -830,17 +830,11 @@ class ARMeasurementViewModel: ObservableObject {
                 let mergedPoints = accumulatedPointClouds.flatMap { $0 }
                 let mergedQuality = MeasurementQuality.merged(accumulatedQualities)
 
-                // Re-estimate bounding box from merged points
-                let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
-                    guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
-                    return plane
-                }
-
-                guard let newBox = BoundingBoxEstimator().estimateBoundingBox(
-                    points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
+                // Refit bounding box from merged points, preserving first-tap yaw orientation
+                guard let newBox = BoundingBoxEstimator().refitWithFixedRotation(
+                    points: mergedPoints, rotation: firstResult.boundingBox.rotation
                 ) else {
-                    print("[ViewModel] Second-tap re-estimation failed, falling back to first-tap result")
-                    // Fall back to showing the first-tap result directly
+                    print("[ViewModel] Second-tap refit failed, falling back to first-tap result")
                     showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
                     return
                 }

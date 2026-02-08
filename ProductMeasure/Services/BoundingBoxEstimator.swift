@@ -32,6 +32,18 @@ class BoundingBoxEstimator {
         }
     }
 
+    /// Refit bounding box using a fixed rotation (preserves yaw from a previous estimation)
+    /// Only updates center and extents from the new point cloud
+    func refitWithFixedRotation(
+        points: [SIMD3<Float>],
+        rotation: simd_quatf
+    ) -> BoundingBox3D? {
+        guard points.count >= 4 else { return nil }
+        let centroid = points.reduce(.zero, +) / Float(points.count)
+        let (center, extents) = computeExtents(points: points, centroid: centroid, rotation: rotation)
+        return BoundingBox3D(center: center, extents: extents, rotation: rotation)
+    }
+
     // MARK: - Box Priority Mode
 
     /// Estimate OBB with vertical axis locked to world Y-axis
