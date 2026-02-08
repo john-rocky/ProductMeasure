@@ -67,7 +67,7 @@ class LabelLiftAnimation {
             simd_length(corners[2] - corners[1])
         )
 
-        // Simple plane with RealityKit's built-in UV mapping
+        // Simple plane in XY (vertical by default), face normal +Z
         let mesh = MeshResource.generatePlane(width: labelWidth, height: labelHeight)
         var material = UnlitMaterial()
         if let cgImage = labelImage.cgImage,
@@ -78,7 +78,7 @@ class LabelLiftAnimation {
         let plane = ModelEntity(mesh: mesh, materials: [material])
         planeEntity = plane
 
-        // Orient: face normal (+Y) toward camera
+        // Orient: face normal (+Z for generatePlane(width:height:)) toward camera
         var normal = simd_normalize(self.surfaceNormal)
         if let camTransform = cameraTransform {
             let camPos = SIMD3<Float>(camTransform.columns.3.x, camTransform.columns.3.y, camTransform.columns.3.z)
@@ -86,7 +86,42 @@ class LabelLiftAnimation {
                 normal = -normal
             }
         }
-        let orientation = simd_quatf(from: SIMD3<Float>(0, 1, 0), to: normal)
+
+        // Step 1: Align face normal (+Z) to surface normal
+        let q1 = simd_quatf(from: SIMD3<Float>(0, 0, 1), to: normal)
+
+        // Step 2: Roll correction using world corners
+        // After q1, local +X (plane's width axis) is at:
+        let currentRight = simd_act(q1, SIMD3<Float>(1, 0, 0))
+
+        // Find the world corner edge direction closest to currentRight on the surface plane
+        let edgeCandidates = [
+            corners[1] - corners[0],
+            corners[0] - corners[1],
+            corners[3] - corners[0],
+            corners[0] - corners[3],
+        ]
+        var bestDir = currentRight
+        var bestDot: Float = -1
+        for edge in edgeCandidates {
+            var projected = edge - simd_dot(edge, normal) * normal
+            let len = simd_length(projected)
+            guard len > 0.001 else { continue }
+            projected = projected / len
+            let d = simd_dot(projected, currentRight)
+            if d > bestDot {
+                bestDot = d
+                bestDir = projected
+            }
+        }
+
+        // Compute roll around normal to align currentRight → bestDir
+        let rollDot = max(-1, min(1, simd_dot(currentRight, bestDir)))
+        let rollCross = simd_cross(currentRight, bestDir)
+        let rollAngle = atan2(simd_dot(rollCross, normal), rollDot)
+        let q2 = simd_quatf(angle: rollAngle, axis: normal)
+
+        let orientation = q2 * q1
 
         entity.position = labelCenter
         entity.orientation = orientation
@@ -123,12 +158,12 @@ class LabelLiftAnimation {
         let innerMaterial = UnlitMaterial(color: glowInnerColor)
         let outerMaterial = UnlitMaterial(color: glowOuterColor)
 
-        // Edges in entity local space (XZ rectangle, Y = face normal)
+        // Edges in entity local space (XY rectangle, Z = face normal)
         let edges: [(SIMD3<Float>, Float, Bool)] = [
-            (SIMD3(0, 0.001, -hh), labelWidth, true),   // top
-            (SIMD3(0, 0.001,  hh), labelWidth, true),   // bottom
-            (SIMD3(-hw, 0.001, 0), labelHeight, false),  // left
-            (SIMD3( hw, 0.001, 0), labelHeight, false),  // right
+            (SIMD3(0,  hh, 0.001), labelWidth, true),   // top
+            (SIMD3(0, -hh, 0.001), labelWidth, true),   // bottom
+            (SIMD3(-hw, 0, 0.001), labelHeight, false),  // left
+            (SIMD3( hw, 0, 0.001), labelHeight, false),  // right
         ]
 
         for (pos, length, isHorizontal) in edges {
@@ -136,7 +171,7 @@ class LabelLiftAnimation {
             if isHorizontal {
                 innerMesh = MeshResource.generateBox(size: SIMD3(length, borderWidth, borderWidth))
             } else {
-                innerMesh = MeshResource.generateBox(size: SIMD3(borderWidth, borderWidth, length))
+                innerMesh = MeshResource.generateBox(size: SIMD3(borderWidth, length, borderWidth))
             }
             let innerEdge = ModelEntity(mesh: innerMesh, materials: [innerMaterial])
             innerEdge.position = pos
@@ -148,7 +183,7 @@ class LabelLiftAnimation {
             if isHorizontal {
                 outerMesh = MeshResource.generateBox(size: SIMD3(length, outerWidth, outerWidth))
             } else {
-                outerMesh = MeshResource.generateBox(size: SIMD3(outerWidth, outerWidth, length))
+                outerMesh = MeshResource.generateBox(size: SIMD3(outerWidth, length, outerWidth))
             }
             let outerEdge = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
             outerEdge.position = pos
