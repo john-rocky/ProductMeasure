@@ -16,15 +16,10 @@ struct SelectionModeToggle: View {
                         selectionMode = mode
                     }
                 }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: mode.icon)
-                            .font(.system(size: 12, weight: .medium))
-                        Text(mode.displayName)
-                            .font(PMTheme.mono(11))
-                    }
-                    .foregroundColor(selectionMode == mode ? .white : PMTheme.textSecondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    Image(systemName: mode.icon)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(selectionMode == mode ? .white : PMTheme.textSecondary)
+                        .frame(width: 32, height: 32)
                     .background(
                         selectionMode == mode
                             ? PMTheme.cyan.opacity(0.80)
