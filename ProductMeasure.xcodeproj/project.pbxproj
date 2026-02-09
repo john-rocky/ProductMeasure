@@ -51,6 +51,9 @@
 		001000108 /* LabelLiftAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000109 /* LabelLiftAnimation.swift */; };
 		001000110 /* LabelResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000111 /* LabelResultView.swift */; };
 		001000112 /* LabelScanBracketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000113 /* LabelScanBracketsView.swift */; };
+		001000114 /* WorkflowStepIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000115 /* WorkflowStepIndicator.swift */; };
+		001000116 /* MeasurementConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000117 /* MeasurementConsoleView.swift */; };
+		001000118 /* CSVDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000119 /* CSVDisplayView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -100,6 +103,9 @@
 		001000109 /* LabelLiftAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelLiftAnimation.swift; sourceTree = "<group>"; };
 		001000111 /* LabelResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelResultView.swift; sourceTree = "<group>"; };
 		001000113 /* LabelScanBracketsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelScanBracketsView.swift; sourceTree = "<group>"; };
+		001000115 /* WorkflowStepIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowStepIndicator.swift; sourceTree = "<group>"; };
+		001000117 /* MeasurementConsoleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementConsoleView.swift; sourceTree = "<group>"; };
+		001000119 /* CSVDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVDisplayView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -223,6 +229,9 @@
 				001000109 /* LabelLiftAnimation.swift */,
 				001000111 /* LabelResultView.swift */,
 				001000113 /* LabelScanBracketsView.swift */,
+				001000115 /* WorkflowStepIndicator.swift */,
+				001000117 /* MeasurementConsoleView.swift */,
+				001000119 /* CSVDisplayView.swift */,
 			);
 			path = Measurement;
 			sourceTree = "<group>";
@@ -365,6 +374,9 @@
 				001000108 /* LabelLiftAnimation.swift in Sources */,
 				001000110 /* LabelResultView.swift in Sources */,
 				001000112 /* LabelScanBracketsView.swift in Sources */,
+				001000114 /* WorkflowStepIndicator.swift in Sources */,
+				001000116 /* MeasurementConsoleView.swift in Sources */,
+				001000118 /* CSVDisplayView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

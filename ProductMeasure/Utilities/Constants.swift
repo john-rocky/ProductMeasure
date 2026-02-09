@@ -157,6 +157,16 @@ enum SizeClass: String, CaseIterable {
     }
 }
 
+enum WorkflowStep: Equatable {
+    case idle
+    case awaitingLabelScan
+    case showingLabelResult
+    case awaitingSecondTap
+    case showingResult
+    case showingConsole
+    case showingCSV
+}
+
 enum SelectionMode: String, CaseIterable, Codable {
     case tap = "tap"
     case box = "box"

@@ -129,6 +129,13 @@ enum PMTheme {
         )
     }
 
+    // MARK: Console
+
+    static let consoleTypingStagger: Double = 0.08
+    static let consoleHeaderFontSize: CGFloat = 16
+    static let consoleFieldFontSize: CGFloat = 12
+    static let consoleSectionFontSize: CGFloat = 11
+
     // MARK: Fonts
 
     static func mono(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {

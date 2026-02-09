@@ -1,0 +1,99 @@
+//
+//  WorkflowStepIndicator.swift
+//  ProductMeasure
+//
+
+import SwiftUI
+
+/// Horizontal step indicator for guided measurement workflow
+struct WorkflowStepIndicator: View {
+    let currentStep: WorkflowStep
+    let onSkipLabel: (() -> Void)?
+
+    private struct StepInfo {
+        let icon: String
+        let label: String
+    }
+
+    private let steps: [StepInfo] = [
+        StepInfo(icon: "hand.tap", label: "Measure"),
+        StepInfo(icon: "doc.text.viewfinder", label: "Label"),
+        StepInfo(icon: "arrow.triangle.2.circlepath", label: "Refine"),
+        StepInfo(icon: "checkmark.rectangle", label: "Review"),
+        StepInfo(icon: "doc.text", label: "Export"),
+    ]
+
+    private var activeIndex: Int {
+        switch currentStep {
+        case .idle: return 0
+        case .awaitingLabelScan, .showingLabelResult: return 1
+        case .awaitingSecondTap: return 2
+        case .showingResult: return 3
+        case .showingConsole, .showingCSV: return 4
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 0) {
+                ForEach(0..<steps.count, id: \.self) { index in
+                    stepDot(index: index)
+
+                    if index < steps.count - 1 {
+                        Rectangle()
+                            .fill(index < activeIndex ? PMTheme.cyan : PMTheme.textDimmed.opacity(0.3))
+                            .frame(height: 1)
+                    }
+                }
+            }
+
+            // Skip button during label scan step
+            if currentStep == .awaitingLabelScan, let onSkip = onSkipLabel {
+                Button(action: onSkip) {
+                    HStack(spacing: 4) {
+                        Text("SKIP")
+                            .font(PMTheme.mono(10, weight: .bold))
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 8))
+                    }
+                    .foregroundColor(PMTheme.textSecondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(PMTheme.surfaceElevated.opacity(0.8))
+                    .clipShape(Capsule())
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .background(PMTheme.surfaceDark.opacity(0.85))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(PMTheme.cyan.opacity(0.2), lineWidth: 0.5)
+        )
+    }
+
+    @ViewBuilder
+    private func stepDot(index: Int) -> some View {
+        let isActive = index == activeIndex
+        let isComplete = index < activeIndex
+
+        VStack(spacing: 3) {
+            ZStack {
+                Circle()
+                    .fill(isActive ? PMTheme.cyan : isComplete ? PMTheme.cyan.opacity(0.6) : PMTheme.textDimmed.opacity(0.2))
+                    .frame(width: isActive ? 26 : 20, height: isActive ? 26 : 20)
+
+                Image(systemName: isComplete ? "checkmark" : steps[index].icon)
+                    .font(.system(size: isActive ? 11 : 9, weight: .bold))
+                    .foregroundColor(isActive || isComplete ? .black : PMTheme.textDimmed)
+            }
+
+            Text(steps[index].label)
+                .font(PMTheme.mono(8, weight: isActive ? .bold : .medium))
+                .foregroundColor(isActive ? PMTheme.cyan : PMTheme.textDimmed)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}

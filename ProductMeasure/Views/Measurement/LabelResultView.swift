@@ -11,6 +11,7 @@ struct LabelResultView: View {
     let lineRevealed: [Bool]
     let isComplete: Bool
     let onDismiss: () -> Void
+    var dismissButtonLabel: String = "DONE"
 
     @State private var scanlineOffset: CGFloat = 0
     @State private var cursorVisible = true
@@ -168,7 +169,7 @@ struct LabelResultView: View {
 
     private var doneButton: some View {
         Button(action: onDismiss) {
-            Text("DONE")
+            Text(dismissButtonLabel)
                 .font(PMTheme.mono(13, weight: .bold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)

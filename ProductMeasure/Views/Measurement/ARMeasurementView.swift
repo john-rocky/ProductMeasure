@@ -14,6 +14,11 @@ struct ARMeasurementView: View {
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
 
+    /// When workflow is active, derives selection mode from workflow step
+    private var activeSelectionMode: SelectionMode {
+        viewModel.isWorkflowActive ? viewModel.effectiveSelectionMode : selectionMode
+    }
+
     var body: some View {
         ZStack {
             // AR Camera View
@@ -21,12 +26,12 @@ struct ARMeasurementView: View {
                 ARMeasurementViewRepresentable(
                     viewModel: viewModel,
                     measurementMode: measurementMode,
-                    selectionMode: selectionMode
+                    selectionMode: activeSelectionMode
                 )
                     .ignoresSafeArea()
 
                 // Corner brackets overlay
-                if selectionMode == .tap {
+                if activeSelectionMode == .tap {
                     GeometryReader { geometry in
                         CornerBracketsView(
                             phase: viewModel.animationPhase,
@@ -35,7 +40,7 @@ struct ARMeasurementView: View {
                     }
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
-                } else if selectionMode == .label {
+                } else if activeSelectionMode == .label {
                     GeometryReader { geometry in
                         LabelScanBracketsView(
                             phase: viewModel.animationPhase,
@@ -59,7 +64,7 @@ struct ARMeasurementView: View {
                             Spacer()
 
                             // Clear all button (visible when completed boxes exist)
-                            if viewModel.completedBoxCount > 0 {
+                            if viewModel.completedBoxCount > 0 && !viewModel.isWorkflowActive {
                                 Button(action: {
                                     viewModel.clearAllMeasurements()
                                 }) {
@@ -76,29 +81,73 @@ struct ARMeasurementView: View {
                                 }
                             }
 
-                            // Selection mode toggle (always visible)
-                            SelectionModeToggle(selectionMode: $selectionMode)
+                            // Selection mode toggle (hidden during workflow)
+                            if !viewModel.isWorkflowActive {
+                                SelectionModeToggle(selectionMode: $selectionMode)
+                            }
+                        }
 
+                        // Workflow step indicator
+                        if viewModel.isWorkflowActive {
+                            WorkflowStepIndicator(
+                                currentStep: viewModel.workflowStep,
+                                onSkipLabel: viewModel.workflowStep == .awaitingLabelScan ? {
+                                    viewModel.skipLabelScan()
+                                } : nil
+                            )
                         }
 
                         Spacer()
+
+                        // Save button when workflow reaches showingResult
+                        if viewModel.workflowStep == .showingResult {
+                            Button(action: {
+                                viewModel.showMeasurementConsole()
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "checkmark.rectangle")
+                                        .font(.system(size: 14))
+                                    Text("SAVE")
+                                        .font(PMTheme.mono(14, weight: .bold))
+                                }
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 32)
+                                .padding(.vertical, 12)
+                                .background(PMTheme.cyan)
+                                .clipShape(Capsule())
+                                .shadow(color: PMTheme.cyan.opacity(0.4), radius: 8, x: 0, y: 2)
+                            }
+                        }
 
                         // Instruction text when in targeting mode or refining
                         if viewModel.isRefining {
                             InstructionCard(mode: .refine)
                         } else if viewModel.currentMeasurement == nil && !viewModel.isProcessing && !viewModel.isReadingLabel {
-                            if selectionMode == .tap && (viewModel.animationPhase == .showingTargetBrackets || viewModel.hasPendingFirstTap) {
-                                InstructionCard(mode: .tap)
-                            } else if selectionMode == .box {
-                                InstructionCard(mode: .box)
-                            } else if selectionMode == .label {
-                                InstructionCard(mode: .label)
+                            if viewModel.isWorkflowActive {
+                                // Workflow-aware instructions
+                                switch viewModel.workflowStep {
+                                case .awaitingLabelScan:
+                                    InstructionCard(mode: .label)
+                                case .awaitingSecondTap:
+                                    InstructionCard(mode: .secondTap)
+                                default:
+                                    EmptyView()
+                                }
+                            } else {
+                                if selectionMode == .tap && (viewModel.animationPhase == .showingTargetBrackets || viewModel.hasPendingFirstTap) {
+                                    InstructionCard(mode: .tap)
+                                } else if selectionMode == .box {
+                                    InstructionCard(mode: .box)
+                                } else if selectionMode == .label {
+                                    InstructionCard(mode: .label)
+                                }
                             }
                         }
                     }
                     .padding()
                 }
                 .animation(.easeInOut(duration: 0.3), value: viewModel.currentMeasurement != nil)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.workflowStep)
                 .sheet(isPresented: $viewModel.showDebugMask) {
                     if let image = viewModel.debugMaskImage {
                         DebugImageView(image: image, title: "Segmentation Mask (Green) + Tap Point (Red)")
@@ -124,8 +173,11 @@ struct ARMeasurementView: View {
                             isComplete: viewModel.labelReadingComplete,
                             onDismiss: {
                                 viewModel.dismissLabelResult()
-                                selectionMode = .tap
-                            }
+                                if !viewModel.isWorkflowActive {
+                                    selectionMode = .tap
+                                }
+                            },
+                            dismissButtonLabel: viewModel.isWorkflowActive ? "CONTINUE" : "DONE"
                         )
                     }
                     .transition(.opacity)
@@ -148,6 +200,36 @@ struct ARMeasurementView: View {
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
                 }
+
+                // Measurement console overlay
+                if viewModel.showConsole, let result = viewModel.currentMeasurement {
+                    let unit = measurementUnit
+                    MeasurementConsoleView(
+                        width: formatValue(result.width, unit: unit),
+                        height: formatValue(result.height, unit: unit),
+                        length: formatValue(result.length, unit: unit),
+                        volume: String(format: "%.2f %@", unit.convertVolume(cubicMeters: result.boundingBox.volume), unit.volumeUnit()),
+                        volumetricWeight: unit.formatVolumetricWeight(cubicMeters: result.boundingBox.volume),
+                        sizeClass: SizeClass.classify(volumeCubicMeters: result.boundingBox.volume).rawValue,
+                        qualityLabel: result.quality.overallQuality.rawValue.capitalized,
+                        pointCount: result.quality.pointCount,
+                        labelData: viewModel.pendingLabelData,
+                        lineRevealed: viewModel.consoleLineRevealed,
+                        isComplete: viewModel.consoleReadingComplete,
+                        onExportCSV: { viewModel.showCSVExport() },
+                        onClose: { viewModel.closeWorkflow() }
+                    )
+                    .transition(.opacity)
+                }
+
+                // CSV display overlay
+                if viewModel.showCSVDisplay {
+                    CSVDisplayView(
+                        csvString: viewModel.csvString,
+                        onDone: { viewModel.closeWorkflow() }
+                    )
+                    .transition(.opacity)
+                }
             } else {
                 // LiDAR not available view
                 LiDARNotAvailableView()
@@ -167,6 +249,11 @@ struct ARMeasurementView: View {
         .onChange(of: measurementMode) { _, newMode in
             viewModel.currentMeasurementMode = newMode
         }
+    }
+
+    private func formatValue(_ meters: Float, unit: MeasurementUnit) -> String {
+        let value = unit.convert(meters: meters)
+        return String(format: "%.2f %@", value, unit.rawValue)
     }
 }
 
@@ -664,6 +751,29 @@ class ARMeasurementViewModel: ObservableObject {
     private var labelLiftAnimation: LabelLiftAnimation?
     private var labelLiftAnchor: AnchorEntity?
 
+    // Guided workflow state
+    @Published var workflowStep: WorkflowStep = .idle
+    @Published var showConsole = false
+    @Published var showCSVDisplay = false
+    @Published var consoleLineRevealed: [Bool] = []
+    @Published var consoleReadingComplete = false
+    @Published var csvString: String = ""
+    private let exportService = ExportService()
+
+    /// Derives selection mode from workflow step when workflow is active
+    var effectiveSelectionMode: SelectionMode {
+        switch workflowStep {
+        case .awaitingLabelScan, .showingLabelResult:
+            return .label
+        default:
+            return .tap
+        }
+    }
+
+    var isWorkflowActive: Bool {
+        workflowStep != .idle
+    }
+
     // Current measurement mode (synced from view)
     var currentMeasurementMode: MeasurementMode = .boxPriority
 
@@ -842,6 +952,9 @@ class ARMeasurementViewModel: ObservableObject {
                 pendingFirstTapResult = result
                 pendingFirstTapFloorY = raycastHitPosition?.y
                 hasPendingFirstTap = true
+
+                // Start guided workflow: auto-transition to label scan step
+                workflowStep = .awaitingLabelScan
 
                 // Seed refinement accumulators for the merge on second tap
                 if let pc = result.pointCloud {
@@ -1192,6 +1305,11 @@ class ARMeasurementViewModel: ObservableObject {
                             self.boxVisualization?.setDimensionBillboardVisible(true, forceShow: true)
                             self.animationPhase = .complete
                             self.isProcessing = false
+
+                            // Advance workflow to showingResult if in guided flow
+                            if self.workflowStep == .awaitingSecondTap {
+                                self.workflowStep = .showingResult
+                            }
                         }
                     }
                 }
@@ -1322,6 +1440,14 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Reset callout state
         resetCalloutState()
+
+        // Reset workflow state
+        workflowStep = .idle
+        showConsole = false
+        showCSVDisplay = false
+        consoleLineRevealed = []
+        consoleReadingComplete = false
+        csvString = ""
 
         print("[ViewModel] clearActiveBoxOnly completed. Completed boxes preserved: \(completedBoxAnchors.count)")
     }
@@ -1752,6 +1878,11 @@ class ARMeasurementViewModel: ObservableObject {
                 self.labelReadingComplete = false
                 self.isProcessing = false
 
+                // Advance workflow to showingLabelResult
+                if self.workflowStep == .awaitingLabelScan {
+                    self.workflowStep = .showingLabelResult
+                }
+
                 // Stagger line reveals
                 Task { [weak self] in
                     guard let self = self else { return }
@@ -1805,6 +1936,91 @@ class ARMeasurementViewModel: ObservableObject {
         labelLineRevealed = []
         labelReadingComplete = false
         isReadingLabel = false
+
+        // Advance workflow if active
+        if isWorkflowActive {
+            workflowStep = .awaitingSecondTap
+        }
+    }
+
+    // MARK: - Workflow Methods
+
+    func skipLabelScan() {
+        workflowStep = .awaitingSecondTap
+    }
+
+    func showMeasurementConsole() {
+        guard let result = currentMeasurement else { return }
+
+        let unit = currentUnit
+        let vol = unit.convertVolume(cubicMeters: result.boundingBox.volume)
+        let volWeight = unit.formatVolumetricWeight(cubicMeters: result.boundingBox.volume)
+        let sizeClass = SizeClass.classify(volumeCubicMeters: result.boundingBox.volume).rawValue
+
+        // Build console line count
+        var lineCount = 6 // dimensions section always has 6 lines
+        if let label = pendingLabelData {
+            lineCount += label.displayFields.count
+        }
+        lineCount += 2 // quality section
+
+        consoleLineRevealed = Array(repeating: false, count: lineCount)
+        consoleReadingComplete = false
+        showConsole = true
+        workflowStep = .showingConsole
+
+        // Stagger line reveals
+        Task { [weak self] in
+            guard let self = self else { return }
+            let stagger = PMTheme.consoleTypingStagger
+
+            for i in 0..<lineCount {
+                try? await Task.sleep(nanoseconds: UInt64(stagger * 1_000_000_000))
+                guard self.showConsole else { return }
+                withAnimation(.easeOut(duration: 0.15)) {
+                    if i < self.consoleLineRevealed.count {
+                        self.consoleLineRevealed[i] = true
+                    }
+                }
+            }
+
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            withAnimation(.easeOut(duration: 0.2)) {
+                self.consoleReadingComplete = true
+            }
+        }
+    }
+
+    func showCSVExport() {
+        guard let result = currentMeasurement else { return }
+
+        csvString = exportService.generateSingleRowCSV(
+            length: result.length,
+            width: result.width,
+            height: result.height,
+            volumeCubicMeters: result.boundingBox.volume,
+            quality: result.quality,
+            mode: currentMeasurementMode,
+            labelData: pendingLabelData,
+            unit: currentUnit
+        )
+
+        showConsole = false
+        showCSVDisplay = true
+        workflowStep = .showingCSV
+    }
+
+    func closeWorkflow() {
+        // Save measurement
+        saveMeasurement(mode: currentMeasurementMode, unit: currentUnit)
+
+        // Reset workflow
+        showConsole = false
+        showCSVDisplay = false
+        consoleLineRevealed = []
+        consoleReadingComplete = false
+        csvString = ""
+        workflowStep = .idle
     }
 
     /// Find the completed box ID that owns a given entity

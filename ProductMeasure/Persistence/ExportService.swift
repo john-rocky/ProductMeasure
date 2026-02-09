@@ -54,6 +54,50 @@ class ExportService {
         return "\"\(escaped)\""
     }
 
+    // MARK: - Single-Row CSV (In-Memory)
+
+    func generateSingleRowCSV(
+        length: Float,
+        width: Float,
+        height: Float,
+        volumeCubicMeters: Float,
+        quality: MeasurementQuality,
+        mode: MeasurementMode,
+        labelData: LabelData?,
+        unit: MeasurementUnit
+    ) -> String {
+        let header = "Date,Length (\(unit.rawValue)),Width (\(unit.rawValue)),Height (\(unit.rawValue)),Volume (\(unit.volumeUnit())),Vol.Weight (kg),Size Class,Quality,Mode,Carton ID,Barcode,Destination,PO#,ASN,LOT,Pack Date,Weight(Gross),Weight(Net),Carrier,Tracking#,Handling"
+
+        let dateFormatter = ISO8601DateFormatter()
+        let date = dateFormatter.string(from: Date())
+        let l = String(format: "%.2f", unit.convert(meters: length))
+        let w = String(format: "%.2f", unit.convert(meters: width))
+        let h = String(format: "%.2f", unit.convert(meters: height))
+        let vol = String(format: "%.2f", unit.convertVolume(cubicMeters: volumeCubicMeters))
+        let volWeight = unit.formatVolumetricWeight(cubicMeters: volumeCubicMeters)
+        let sizeClass = SizeClass.classify(volumeCubicMeters: volumeCubicMeters).rawValue
+        let qualityStr = quality.overallQuality.rawValue
+        let modeStr = mode.rawValue
+
+        let label = labelData
+        let cartonId = csvEscape(label?.cartonId)
+        let barcode = csvEscape(label?.barcodes?.map { $0.value }.joined(separator: "; "))
+        let dest = csvEscape(label?.destination)
+        let po = csvEscape(label?.poNumber)
+        let asn = csvEscape(label?.asnNumber)
+        let lot = csvEscape(label?.lotNumber)
+        let packDate = csvEscape(label?.packDate)
+        let gw = csvEscape(label?.grossWeight)
+        let nw = csvEscape(label?.netWeight)
+        let carrier = csvEscape(label?.carrier)
+        let tracking = csvEscape(label?.trackingNumber)
+        let handling = csvEscape(label?.handlingIcons?.map(\.rawValue).joined(separator: "; "))
+
+        let row = "\(date),\(l),\(w),\(h),\(vol),\(volWeight),\(sizeClass),\(qualityStr),\(modeStr),\(cartonId),\(barcode),\(dest),\(po),\(asn),\(lot),\(packDate),\(gw),\(nw),\(carrier),\(tracking),\(handling)"
+
+        return header + "\n" + row
+    }
+
     // MARK: - JSON Export
 
     func exportToJSON(measurements: [ProductMeasurement]) -> Data {
