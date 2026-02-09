@@ -130,8 +130,32 @@ class LabelLiftAnimation {
 
         let orientation = q2 * q1
 
+        // Step 3: Ensure label appears right-side-up from camera's perspective
+        // The corrected image's top corresponds to screen-up (via CIPerspectiveCorrection),
+        // and generatePlane maps texture top to +Y. So align +Y with screen-up on the surface.
+        let finalOrientation: simd_quatf
+        if let camTransform = cameraTransform {
+            let sensorRight = SIMD3<Float>(camTransform.columns.0.x, camTransform.columns.0.y, camTransform.columns.0.z)
+            let screenUp = -sensorRight
+            var surfaceUp = screenUp - simd_dot(screenUp, normal) * normal
+            let surfaceUpLen = simd_length(surfaceUp)
+            if surfaceUpLen > 0.001 {
+                surfaceUp /= surfaceUpLen
+                let currentUp = simd_act(orientation, SIMD3<Float>(0, 1, 0))
+                if simd_dot(currentUp, surfaceUp) < 0 {
+                    finalOrientation = simd_quatf(angle: .pi, axis: normal) * orientation
+                } else {
+                    finalOrientation = orientation
+                }
+            } else {
+                finalOrientation = orientation
+            }
+        } else {
+            finalOrientation = orientation
+        }
+
         entity.position = labelCenter
-        entity.orientation = orientation
+        entity.orientation = finalOrientation
         entity.addChild(plane)
 
         addGlowBorder()
