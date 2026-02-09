@@ -34,6 +34,9 @@ enum PMTheme {
     static let labelLiftDuration: Double = 2.0
     static let labelTypingStagger: Double = 0.12
     static let labelDismissDuration: Double = 0.3
+    static let barcodeScanDuration: Double = 2.0
+    static let barcodeScanDetectTime: Double = 1.2
+    static let barcodeScanFadeTime: Double = 1.6
 
     static var labelBlueGradient: LinearGradient {
         LinearGradient(

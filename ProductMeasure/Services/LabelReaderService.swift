@@ -66,13 +66,19 @@ class LabelReaderService {
 
         var labelData = parseLabelFields(rawText: rawText)
 
+        // Capture text line bounding boxes for scan effect
+        let lineBounds = textObservations.map { $0.boundingBox }
+        if !lineBounds.isEmpty {
+            labelData.textLineBounds = lineBounds
+        }
+
         // Merge barcode data (all detected barcodes)
         if !barcodeObservations.isEmpty {
             labelData.barcodes = barcodeObservations.compactMap { obs in
                 guard let value = obs.payloadStringValue else { return nil }
                 let sym = obs.symbology.rawValue
                     .replacingOccurrences(of: "VNBarcodeSymbology", with: "")
-                return LabelData.BarcodeItem(value: value, symbology: sym)
+                return LabelData.BarcodeItem(value: value, symbology: sym, boundingBox: obs.boundingBox)
             }
             if labelData.barcodes?.isEmpty == true { labelData.barcodes = nil }
         }

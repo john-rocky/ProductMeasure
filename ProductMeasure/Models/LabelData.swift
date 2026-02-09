@@ -23,9 +23,12 @@ struct LabelData: Codable {
     var expiryDate: String?
     var rawText: String
 
+    var textLineBounds: [CGRect]?  // Per-line bounding boxes (Vision normalized, bottom-left origin)
+
     struct BarcodeItem: Codable {
         var value: String
         var symbology: String?
+        var boundingBox: CGRect?  // Vision normalized (0-1, bottom-left origin)
     }
 
     struct SKUItem: Codable {
@@ -59,6 +62,7 @@ struct LabelData: Codable {
         handlingIcons = try container.decodeIfPresent([HandlingIcon].self, forKey: .handlingIcons)
         expiryDate = try container.decodeIfPresent(String.self, forKey: .expiryDate)
         rawText = try container.decode(String.self, forKey: .rawText)
+        textLineBounds = try container.decodeIfPresent([CGRect].self, forKey: .textLineBounds)
 
         // Migrate legacy single-barcode fields
         if barcodes == nil,
@@ -72,6 +76,7 @@ struct LabelData: Codable {
         case cartonId, barcodes, destination, poNumber, asnNumber, soNumber
         case skuList, lotNumber, packDate, grossWeight, netWeight
         case carrier, trackingNumber, handlingIcons, expiryDate, rawText
+        case textLineBounds
         case barcodeValue, barcodeSymbology  // legacy keys for decoding only
     }
 
@@ -93,6 +98,7 @@ struct LabelData: Codable {
         try container.encodeIfPresent(handlingIcons, forKey: .handlingIcons)
         try container.encodeIfPresent(expiryDate, forKey: .expiryDate)
         try container.encode(rawText, forKey: .rawText)
+        try container.encodeIfPresent(textLineBounds, forKey: .textLineBounds)
     }
 
     init(
@@ -103,7 +109,8 @@ struct LabelData: Codable {
         packDate: String? = nil, grossWeight: String? = nil,
         netWeight: String? = nil, carrier: String? = nil,
         trackingNumber: String? = nil, handlingIcons: [HandlingIcon]? = nil,
-        expiryDate: String? = nil, rawText: String
+        expiryDate: String? = nil, rawText: String,
+        textLineBounds: [CGRect]? = nil
     ) {
         self.cartonId = cartonId
         self.barcodes = barcodes
@@ -121,6 +128,7 @@ struct LabelData: Codable {
         self.handlingIcons = handlingIcons
         self.expiryDate = expiryDate
         self.rawText = rawText
+        self.textLineBounds = textLineBounds
     }
 
     /// Returns non-nil fields as display pairs (label, value)

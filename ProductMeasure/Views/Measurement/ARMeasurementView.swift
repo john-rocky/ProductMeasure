@@ -159,6 +159,17 @@ struct ARMeasurementView: View {
                     }
                 }
 
+                // Barcode scan effect overlay
+                if viewModel.showBarcodeScanEffect, let labelData = viewModel.currentLabelData {
+                    BarcodeScanEffectView(
+                        labelData: labelData,
+                        onComplete: { viewModel.barcodeScanEffectCompleted() }
+                    )
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                }
+
                 // Label result overlay
                 if viewModel.showLabelResult, let labelData = viewModel.currentLabelData {
                     ZStack {
@@ -743,6 +754,7 @@ class ARMeasurementViewModel: ObservableObject {
     // Label reader state
     @Published var isReadingLabel = false
     @Published var showLabelResult = false
+    @Published var showBarcodeScanEffect = false
     @Published var currentLabelData: LabelData?
     @Published var labelLineRevealed: [Bool] = []
     @Published var labelReadingComplete = false
@@ -1870,46 +1882,53 @@ class ARMeasurementViewModel: ObservableObject {
             liftAnim.animate(cameraTransform: cameraTransform) { [weak self] in
                 guard let self = self else { return }
 
-                // Animation complete - show result overlay
-                let fields = result.labelData.displayFields
-                self.labelLineRevealed = Array(repeating: false, count: max(fields.count, 1))
+                // Lift complete - start barcode scan effect
                 self.currentLabelData = result.labelData
-                self.showLabelResult = true
-                self.labelReadingComplete = false
                 self.isProcessing = false
-
-                // Advance workflow to showingLabelResult
-                if self.workflowStep == .awaitingLabelScan {
-                    self.workflowStep = .showingLabelResult
-                }
-
-                // Stagger line reveals
-                Task { [weak self] in
-                    guard let self = self else { return }
-                    let count = max(fields.count, 1)
-                    let stagger = PMTheme.labelTypingStagger
-
-                    for i in 0..<count {
-                        try? await Task.sleep(nanoseconds: UInt64(stagger * 1_000_000_000))
-                        guard self.showLabelResult else { return }
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            if i < self.labelLineRevealed.count {
-                                self.labelLineRevealed[i] = true
-                            }
-                        }
-                    }
-
-                    // Brief pause then mark complete
-                    try? await Task.sleep(nanoseconds: 300_000_000)
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        self.labelReadingComplete = true
-                    }
-                }
+                self.showBarcodeScanEffect = true
             }
         } catch {
             print("[LabelReader] Error: \(error)")
             isProcessing = false
             isReadingLabel = false
+        }
+    }
+
+    func barcodeScanEffectCompleted() {
+        showBarcodeScanEffect = false
+
+        // Show result overlay
+        let fields = currentLabelData?.displayFields ?? []
+        labelLineRevealed = Array(repeating: false, count: max(fields.count, 1))
+        showLabelResult = true
+        labelReadingComplete = false
+
+        // Advance workflow to showingLabelResult
+        if workflowStep == .awaitingLabelScan {
+            workflowStep = .showingLabelResult
+        }
+
+        // Stagger line reveals
+        Task { [weak self] in
+            guard let self = self else { return }
+            let count = max(fields.count, 1)
+            let stagger = PMTheme.labelTypingStagger
+
+            for i in 0..<count {
+                try? await Task.sleep(nanoseconds: UInt64(stagger * 1_000_000_000))
+                guard self.showLabelResult else { return }
+                withAnimation(.easeOut(duration: 0.15)) {
+                    if i < self.labelLineRevealed.count {
+                        self.labelLineRevealed[i] = true
+                    }
+                }
+            }
+
+            // Brief pause then mark complete
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            withAnimation(.easeOut(duration: 0.2)) {
+                self.labelReadingComplete = true
+            }
         }
     }
 
