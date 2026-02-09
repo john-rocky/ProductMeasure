@@ -13,6 +13,10 @@ import UIKit
 /// OCR + barcode detection, and returns parsed label data.
 class LabelReaderService {
 
+    /// Dedicated serial queue for Vision `perform()` calls.
+    /// Avoids blocking the cooperative thread pool during first-use ML model init.
+    private static let visionQueue = DispatchQueue(label: "com.productmeasure.vision", qos: .userInitiated)
+
     struct LabelDetectionResult {
         let quadrilateral: VNRectangleObservation
         let correctedImage: UIImage
@@ -110,7 +114,16 @@ class LabelReaderService {
             orientation: .right,
             options: [:]
         )
-        try handler.perform([request])
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Self.visionQueue.async {
+                do {
+                    try handler.perform([request])
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
 
         guard let results = request.results, !results.isEmpty else {
             return nil
@@ -201,7 +214,16 @@ class LabelReaderService {
         request.usesLanguageCorrection = true
 
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        try handler.perform([request])
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Self.visionQueue.async {
+                do {
+                    try handler.perform([request])
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
 
         return request.results ?? []
     }
@@ -217,7 +239,16 @@ class LabelReaderService {
         ]
 
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        try handler.perform([request])
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Self.visionQueue.async {
+                do {
+                    try handler.perform([request])
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
 
         return request.results ?? []
     }

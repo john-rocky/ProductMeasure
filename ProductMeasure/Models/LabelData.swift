@@ -69,4 +69,13 @@ struct LabelData: Codable {
 
         return fields
     }
+
+    /// Whether any OCR-parsed structured fields (excluding barcode) are present
+    var hasOCRFields: Bool {
+        cartonId != nil || destination != nil || poNumber != nil ||
+        asnNumber != nil || soNumber != nil || lotNumber != nil ||
+        packDate != nil || grossWeight != nil || netWeight != nil ||
+        carrier != nil || trackingNumber != nil || expiryDate != nil ||
+        handlingIcons != nil || skuList != nil
+    }
 }

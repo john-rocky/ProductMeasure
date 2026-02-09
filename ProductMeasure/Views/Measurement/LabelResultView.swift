@@ -42,8 +42,8 @@ struct LabelResultView: View {
                         }
                     }
 
-                    // Raw text fallback if no structured fields
-                    if labelData.displayFields.isEmpty, !labelData.rawText.isEmpty,
+                    // Raw text fallback if no structured OCR fields matched
+                    if !labelData.hasOCRFields, !labelData.rawText.isEmpty,
                        lineRevealed.first == true {
                         Text(labelData.rawText)
                             .font(PMTheme.mono(11))
