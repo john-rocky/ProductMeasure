@@ -10,6 +10,11 @@ import SwiftData
 
 @main
 struct ProductMeasureApp: App {
+
+    init() {
+        LabelReaderService.warmup()
+    }
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             ProductMeasurement.self,

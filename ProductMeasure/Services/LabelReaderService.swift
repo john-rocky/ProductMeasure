@@ -13,9 +13,78 @@ import UIKit
 /// OCR + barcode detection, and returns parsed label data.
 class LabelReaderService {
 
-    /// Dedicated serial queue for Vision `perform()` calls.
-    /// Avoids blocking the cooperative thread pool during first-use ML model init.
-    private static let visionQueue = DispatchQueue(label: "com.productmeasure.vision", qos: .userInitiated)
+    /// Dedicated serial queues per Vision task type — enables true parallelism
+    /// and isolates first-use ML model init latency per request type.
+    private static let rectQueue = DispatchQueue(label: "com.productmeasure.vision.rect", qos: .userInitiated)
+    private static let ocrQueue = DispatchQueue(label: "com.productmeasure.vision.ocr", qos: .userInitiated)
+    private static let barcodeQueue = DispatchQueue(label: "com.productmeasure.vision.barcode", qos: .userInitiated)
+
+    /// Shared CIContext — avoids recreating on every perspectiveCorrect() call.
+    private static let ciContext = CIContext()
+
+    /// Whether ML models have been pre-loaded via warmup().
+    private static var isWarmedUp = false
+
+    /// Pre-load Vision ML models on background queues so the first real scan is instant.
+    /// Safe to call multiple times; only the first invocation performs work.
+    static func warmup() {
+        guard !isWarmedUp else { return }
+        isWarmedUp = true
+
+        // 256x256 dummy image with text-like content — large enough to trigger
+        // full Vision pipeline (1x1 images cause Vision to skip model loading).
+        let size = CGSize(width: 256, height: 256)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let uiImage = renderer.image { ctx in
+            UIColor.white.setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+            UIColor.black.setFill()
+            for y in stride(from: 30, to: 220, by: 18) {
+                ctx.fill(CGRect(x: 20, y: y, width: 200, height: 3))
+            }
+        }
+        guard let cgImage = uiImage.cgImage else {
+            print("[LabelReader] Warmup: failed to create dummy image")
+            return
+        }
+
+        let start = CFAbsoluteTimeGetCurrent()
+
+        // Rectangle detection warmup
+        rectQueue.async {
+            let req = VNDetectRectanglesRequest()
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            try? handler.perform([req])
+            print("[LabelReader] Rectangle detection warmed up (\(String(format: "%.1f", CFAbsoluteTimeGetCurrent() - start))s)")
+        }
+
+        // OCR warmup (heaviest — accurate level loads ~100MB model)
+        ocrQueue.async {
+            let req = VNRecognizeTextRequest()
+            req.recognitionLevel = .accurate
+            req.recognitionLanguages = ["en-US"]
+            req.usesLanguageCorrection = true
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            try? handler.perform([req])
+            print("[LabelReader] OCR warmed up (\(String(format: "%.1f", CFAbsoluteTimeGetCurrent() - start))s)")
+        }
+
+        // Barcode detection warmup
+        barcodeQueue.async {
+            let req = VNDetectBarcodesRequest()
+            req.symbologies = [.qr, .ean13, .code128, .code39, .dataMatrix, .itf14]
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            try? handler.perform([req])
+            print("[LabelReader] Barcode detection warmed up (\(String(format: "%.1f", CFAbsoluteTimeGetCurrent() - start))s)")
+        }
+
+        // CIContext GPU warmup — first render initializes Metal pipeline
+        DispatchQueue.global(qos: .utility).async {
+            let ci = CIImage(cgImage: cgImage)
+            _ = ciContext.createCGImage(ci, from: ci.extent)
+            print("[LabelReader] CIContext warmed up (\(String(format: "%.1f", CFAbsoluteTimeGetCurrent() - start))s)")
+        }
+    }
 
     struct LabelDetectionResult {
         let quadrilateral: VNRectangleObservation
@@ -125,7 +194,7 @@ class LabelReaderService {
             options: [:]
         )
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            Self.visionQueue.async {
+            Self.rectQueue.async {
                 do {
                     try handler.perform([request])
                     continuation.resume()
@@ -205,8 +274,7 @@ class LabelReaderService {
 
         guard let outputImage = filter.outputImage else { return nil }
 
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(outputImage, from: outputImage.extent) else {
+        guard let cgImage = Self.ciContext.createCGImage(outputImage, from: outputImage.extent) else {
             return nil
         }
 
@@ -225,7 +293,7 @@ class LabelReaderService {
 
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            Self.visionQueue.async {
+            Self.ocrQueue.async {
                 do {
                     try handler.perform([request])
                     continuation.resume()
@@ -250,7 +318,7 @@ class LabelReaderService {
 
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            Self.visionQueue.async {
+            Self.barcodeQueue.async {
                 do {
                     try handler.perform([request])
                     continuation.resume()

@@ -163,6 +163,7 @@ struct ARMeasurementView: View {
                 if viewModel.showBarcodeScanEffect, let labelData = viewModel.currentLabelData {
                     BarcodeScanEffectView(
                         labelData: labelData,
+                        labelImageSize: viewModel.correctedLabelImageSize,
                         onComplete: { viewModel.barcodeScanEffectCompleted() }
                     )
                     .ignoresSafeArea()
@@ -756,6 +757,7 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var showLabelResult = false
     @Published var showBarcodeScanEffect = false
     @Published var currentLabelData: LabelData?
+    @Published var correctedLabelImageSize: CGSize = .zero
     @Published var labelLineRevealed: [Bool] = []
     @Published var labelReadingComplete = false
     var pendingLabelData: LabelData?
@@ -1884,6 +1886,7 @@ class ARMeasurementViewModel: ObservableObject {
 
                 // Lift complete - start barcode scan effect
                 self.currentLabelData = result.labelData
+                self.correctedLabelImageSize = result.correctedImage.size
                 self.isProcessing = false
                 self.showBarcodeScanEffect = true
             }

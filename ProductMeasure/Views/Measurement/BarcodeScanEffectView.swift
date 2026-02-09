@@ -10,6 +10,7 @@ import SwiftUI
 /// and framing detected barcodes with soft neon green highlights.
 struct BarcodeScanEffectView: View {
     let labelData: LabelData
+    let labelImageSize: CGSize
     let onComplete: () -> Void
 
     // MARK: - Animation State
@@ -28,8 +29,8 @@ struct BarcodeScanEffectView: View {
         case idle, scanning, detected, fading
     }
 
-    /// Label display area inset (fraction of screen on each side)
-    private let labelInset: CGFloat = 0.08
+    /// Fill fraction matching LabelLiftAnimation's 85% placement
+    private let fillFraction: CGFloat = 0.85
 
     var body: some View {
         GeometryReader { geometry in
@@ -70,13 +71,39 @@ struct BarcodeScanEffectView: View {
 
     // MARK: - Layout
 
-    /// The label fills ~84% of screen centered (8% inset each side)
+    /// Compute screen rect matching where LabelLiftAnimation places the label:
+    /// fills 85% of the screen while preserving the corrected image's aspect ratio.
     private func labelDisplayRect(in size: CGSize) -> CGRect {
-        CGRect(
-            x: size.width * labelInset,
-            y: size.height * labelInset,
-            width: size.width * (1 - 2 * labelInset),
-            height: size.height * (1 - 2 * labelInset)
+        guard labelImageSize.width > 0, labelImageSize.height > 0 else {
+            // Fallback: centered square-ish area
+            let inset: CGFloat = 0.08
+            return CGRect(
+                x: size.width * inset, y: size.height * inset,
+                width: size.width * (1 - 2 * inset), height: size.height * (1 - 2 * inset)
+            )
+        }
+
+        let imageAspect = labelImageSize.width / labelImageSize.height
+        let screenAspect = size.width / size.height
+
+        let w: CGFloat
+        let h: CGFloat
+
+        if imageAspect > screenAspect {
+            // Width-limited (label is wider relative to screen)
+            w = size.width * fillFraction
+            h = w / imageAspect
+        } else {
+            // Height-limited
+            h = size.height * fillFraction
+            w = h * imageAspect
+        }
+
+        return CGRect(
+            x: (size.width - w) / 2,
+            y: (size.height - h) / 2,
+            width: w,
+            height: h
         )
     }
 
@@ -338,6 +365,7 @@ struct BarcodeScanEffectView: View {
                     CGRect(x: 0.1, y: 0.4, width: 0.6, height: 0.05)
                 ]
             ),
+            labelImageSize: CGSize(width: 400, height: 300),
             onComplete: {}
         )
     }
