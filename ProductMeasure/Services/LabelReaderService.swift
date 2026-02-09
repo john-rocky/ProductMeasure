@@ -129,9 +129,9 @@ class LabelReaderService {
         let (textObservations, barcodeObservations) = try await (ocrResult, barcodeResult)
 
         // Step 4: Parse fields from OCR text and barcodes
-        let rawText = textObservations
-            .compactMap { $0.topCandidates(1).first?.string }
-            .joined(separator: "\n")
+        // Reconstruct lines using spatial position so that field names and
+        // values at the same height are merged into one line (e.g. "PO#  12345").
+        let rawText = reconstructLines(from: textObservations)
 
         var labelData = parseLabelFields(rawText: rawText)
 
@@ -368,7 +368,80 @@ class LabelReaderService {
         return request.results ?? []
     }
 
+    // MARK: - Spatial Line Reconstruction
+
+    /// Groups text observations that share the same visual line (by Y overlap),
+    /// sorts each group left-to-right, and joins with spaces.
+    /// This handles labels where field name and value are on the same row
+    /// but recognized as separate observations (e.g. "PO#" and "12345").
+    private func reconstructLines(from observations: [VNRecognizedTextObservation]) -> String {
+        struct TextBlock {
+            let text: String
+            let box: CGRect  // Vision normalized (bottom-left origin)
+        }
+
+        let blocks: [TextBlock] = observations.compactMap { obs in
+            guard let text = obs.topCandidates(1).first?.string else { return nil }
+            return TextBlock(text: text, box: obs.boundingBox)
+        }
+
+        guard !blocks.isEmpty else { return "" }
+
+        // Sort by midY descending (top of image first, since Vision Y=0 is bottom)
+        let sorted = blocks.sorted { $0.box.midY > $1.box.midY }
+
+        // Group blocks whose Y ranges overlap significantly
+        var lines: [[TextBlock]] = []
+        var currentLine: [TextBlock] = [sorted[0]]
+        var currentMinY = sorted[0].box.minY
+        var currentMaxY = sorted[0].box.maxY
+
+        for i in 1..<sorted.count {
+            let block = sorted[i]
+            let lineHeight = currentMaxY - currentMinY
+            let blockHeight = block.box.height
+            let overlapThreshold = min(lineHeight, blockHeight) * 0.4
+
+            let overlapTop = min(currentMaxY, block.box.maxY)
+            let overlapBottom = max(currentMinY, block.box.minY)
+            let overlap = max(0, overlapTop - overlapBottom)
+
+            if overlap >= overlapThreshold {
+                // Same line
+                currentLine.append(block)
+                currentMinY = min(currentMinY, block.box.minY)
+                currentMaxY = max(currentMaxY, block.box.maxY)
+            } else {
+                // New line
+                lines.append(currentLine)
+                currentLine = [block]
+                currentMinY = block.box.minY
+                currentMaxY = block.box.maxY
+            }
+        }
+        lines.append(currentLine)
+
+        // Sort each line left-to-right by minX, join with space
+        let reconstructed = lines.map { line in
+            line.sorted { $0.box.minX < $1.box.minX }
+                .map(\.text)
+                .joined(separator: " ")
+        }
+
+        return reconstructed.joined(separator: "\n")
+    }
+
     // MARK: - Field Parsing
+
+    /// Helper: extract first capture group from a regex match.
+    private func firstCapture(in text: String, pattern: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
+        let nsRange = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: nsRange),
+              match.numberOfRanges > 1,
+              let range = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[range]).trimmingCharacters(in: .whitespaces)
+    }
 
     private func parseLabelFields(rawText: String) -> LabelData {
         let lines = rawText.components(separatedBy: "\n")
@@ -376,48 +449,41 @@ class LabelReaderService {
 
         var data = LabelData(rawText: rawText)
 
-        // Carton ID: CTN-YYYY-NNNNNN or CTN followed by alphanumeric
+        // Carton ID: CTN-YYYY-NNNNNN or CTN/CARTON followed by alphanumeric
         if let match = rawText.range(of: #"CTN[-\s]?\d{4}[-\s]?\d{4,8}"#, options: .regularExpression) {
             data.cartonId = String(rawText[match]).trimmingCharacters(in: .whitespaces)
-        } else if let match = rawText.range(of: #"(?i)(?:carton|ctn)[\s:#]*([A-Z0-9\-]{4,})"#, options: .regularExpression) {
-            data.cartonId = String(rawText[match])
-                .replacingOccurrences(of: #"(?i)(?:carton|ctn)[\s:#]*"#, with: "", options: .regularExpression)
+        } else if let v = firstCapture(in: rawText, pattern: #"(?:CARTON|CTN)[\s:#]*([A-Z0-9\-]{4,})"#) {
+            data.cartonId = v
         }
 
-        // PO Number
-        if let match = rawText.range(of: #"(?i)PO[\s#:]*(\d{4,})"#, options: .regularExpression) {
-            let full = String(rawText[match])
-            data.poNumber = full.replacingOccurrences(of: #"(?i)PO[\s#:]*"#, with: "", options: .regularExpression)
+        // PO Number — handles "PO#", "PO:", "PO ", "P.O.", "PO NUMBER", "PURCHASE ORDER"
+        if let v = firstCapture(in: rawText, pattern: #"(?:P\.?O\.?|PURCHASE\s*ORDER)[\s#:]*(?:NO|NUM(?:BER)?)?[\s#:]*(\d{4,})"#) {
+            data.poNumber = v
         }
 
-        // ASN Number
-        if let match = rawText.range(of: #"(?i)ASN[\s#:]*([A-Z0-9\-]{4,})"#, options: .regularExpression) {
-            let full = String(rawText[match])
-            data.asnNumber = full.replacingOccurrences(of: #"(?i)ASN[\s#:]*"#, with: "", options: .regularExpression)
+        // ASN Number — handles "ASN#", "ASN:", "ASN ", "ASN NUMBER"
+        if let v = firstCapture(in: rawText, pattern: #"ASN[\s#:]*(?:NO|NUM(?:BER)?)?[\s#:]*([A-Z0-9\-]{4,})"#) {
+            data.asnNumber = v
         }
 
-        // SO Number
-        if let match = rawText.range(of: #"(?i)SO[\s#:]*(\d{4,})"#, options: .regularExpression) {
-            let full = String(rawText[match])
-            data.soNumber = full.replacingOccurrences(of: #"(?i)SO[\s#:]*"#, with: "", options: .regularExpression)
+        // SO Number — handles "SO#", "SO:", "SO ", "SO NUMBER", "SALES ORDER"
+        if let v = firstCapture(in: rawText, pattern: #"(?:SO|SALES\s*ORDER)[\s#:]*(?:NO|NUM(?:BER)?)?[\s#:]*(\d{4,})"#) {
+            data.soNumber = v
         }
 
-        // LOT / Batch number
-        if let match = rawText.range(of: #"(?i)(?:LOT|BATCH)[\s#:]*([A-Z0-9\-]{3,})"#, options: .regularExpression) {
-            let full = String(rawText[match])
-            data.lotNumber = full.replacingOccurrences(of: #"(?i)(?:LOT|BATCH)[\s#:]*"#, with: "", options: .regularExpression)
+        // LOT / Batch number — handles "LOT#", "LOT:", "LOT ", "LOT NUMBER", "BATCH"
+        if let v = firstCapture(in: rawText, pattern: #"(?:LOT|BATCH)[\s#:]*(?:NO|NUM(?:BER)?)?[\s#:]*([A-Z0-9\-]{3,})"#) {
+            data.lotNumber = v
         }
 
-        // Gross Weight
-        if let match = rawText.range(of: #"(?i)(?:GW|GROSS\s*(?:WT|WEIGHT))[\s:]*(\d+\.?\d*\s*(?:kg|lbs?|KG|LBS?))"#, options: .regularExpression) {
-            let full = String(rawText[match])
-            data.grossWeight = full.replacingOccurrences(of: #"(?i)(?:GW|GROSS\s*(?:WT|WEIGHT))[\s:]*"#, with: "", options: .regularExpression)
+        // Gross Weight — handles "GW", "GROSS WT", "GROSS WEIGHT" with optional unit
+        if let v = firstCapture(in: rawText, pattern: #"(?:GW|G\.?W\.?|GROSS\s*(?:WT|WEIGHT))[\s:]*(\d+\.?\d*\s*(?:kg|lbs?|KG|LBS?)?)"#) {
+            data.grossWeight = v
         }
 
-        // Net Weight
-        if let match = rawText.range(of: #"(?i)(?:NW|NET\s*(?:WT|WEIGHT))[\s:]*(\d+\.?\d*\s*(?:kg|lbs?|KG|LBS?))"#, options: .regularExpression) {
-            let full = String(rawText[match])
-            data.netWeight = full.replacingOccurrences(of: #"(?i)(?:NW|NET\s*(?:WT|WEIGHT))[\s:]*"#, with: "", options: .regularExpression)
+        // Net Weight — handles "NW", "NET WT", "NET WEIGHT" with optional unit
+        if let v = firstCapture(in: rawText, pattern: #"(?:NW|N\.?W\.?|NET\s*(?:WT|WEIGHT))[\s:]*(\d+\.?\d*\s*(?:kg|lbs?|KG|LBS?)?)"#) {
+            data.netWeight = v
         }
 
         // Carrier detection
@@ -429,38 +495,44 @@ class LabelReaderService {
             }
         }
 
-        // Tracking number (common patterns)
-        if let match = rawText.range(of: #"(?i)(?:TRACK|TRACKING)[\s#:]*([A-Z0-9]{10,30})"#, options: .regularExpression) {
-            let full = String(rawText[match])
-            data.trackingNumber = full.replacingOccurrences(of: #"(?i)(?:TRACK|TRACKING)[\s#:]*"#, with: "", options: .regularExpression)
+        // Tracking number — handles "TRACKING", "TRACKING NO", "TRACKING NUMBER", "TRACK#"
+        if let v = firstCapture(in: rawText, pattern: #"(?:TRACK(?:ING)?)[\s#:]*(?:NO|NUM(?:BER)?)?[\s#:]*([A-Z0-9]{10,30})"#) {
+            data.trackingNumber = v
         } else if let match = rawText.range(of: #"1Z[A-Z0-9]{16}"#, options: .regularExpression) {
             // UPS tracking
             data.trackingNumber = String(rawText[match])
         }
 
         // Dates (MM/DD/YYYY, YYYY-MM-DD, DD-MMM-YYYY)
-        if let match = rawText.range(of: #"(?i)(?:PACK|MFG|PROD)\s*(?:DATE)?[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})"#, options: .regularExpression) {
-            let full = String(rawText[match])
-            data.packDate = full.replacingOccurrences(of: #"(?i)(?:PACK|MFG|PROD)\s*(?:DATE)?[\s:]*"#, with: "", options: .regularExpression)
+        if let v = firstCapture(in: rawText, pattern: #"(?:PACK|MFG|PROD)\s*(?:DATE)?[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})"#) {
+            data.packDate = v
         }
 
         // Expiry date
-        if let match = rawText.range(of: #"(?i)(?:EXP|EXPIR|BEST\s*BY|USE\s*BY)[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})"#, options: .regularExpression) {
-            let full = String(rawText[match])
-            data.expiryDate = full.replacingOccurrences(of: #"(?i)(?:EXP|EXPIR|BEST\s*BY|USE\s*BY)[\s:]*"#, with: "", options: .regularExpression)
+        if let v = firstCapture(in: rawText, pattern: #"(?:EXP(?:IR[YE])?|BEST\s*BY|USE\s*BY)[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})"#) {
+            data.expiryDate = v
         }
 
-        // Destination
+        // Destination — handles "SHIP TO:", "SHIP TO ", "DELIVER TO", "DEST:", "DESTINATION "
         for line in lines {
             if line.localizedCaseInsensitiveContains("ship to") ||
                line.localizedCaseInsensitiveContains("deliver to") ||
                line.localizedCaseInsensitiveContains("dest") {
-                // Take the next non-empty part or the value after colon
+                // Try colon-separated first
                 if let colonRange = line.range(of: ":") {
                     let afterColon = String(line[colonRange.upperBound...]).trimmingCharacters(in: .whitespaces)
                     if !afterColon.isEmpty {
                         data.destination = afterColon
+                        break
                     }
+                }
+                // Fallback: strip the field name keyword and take the rest
+                let stripped = line
+                    .replacingOccurrences(of: #"(?i)(?:SHIP\s*TO|DELIVER\s*TO|DESTINATION|DEST)"#, with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespaces)
+                if !stripped.isEmpty {
+                    data.destination = stripped
+                    break
                 }
             }
         }
@@ -476,10 +548,10 @@ class LabelReaderService {
             data.handlingIcons = icons
         }
 
-        // SKU extraction
+        // SKU extraction — handles "SKU#", "SKU:", "SKU ", "ITEM#", "ITEM"
         var skuItems: [LabelData.SKUItem] = []
-        let skuPattern = #"(?i)SKU[\s#:]*([A-Z0-9\-]{3,})"#
-        let skuRegex = try? NSRegularExpression(pattern: skuPattern)
+        let skuPattern = #"(?:SKU|ITEM)[\s#:]*([A-Z0-9\-]{3,})"#
+        let skuRegex = try? NSRegularExpression(pattern: skuPattern, options: .caseInsensitive)
         let nsRange = NSRange(rawText.startIndex..., in: rawText)
         if let matches = skuRegex?.matches(in: rawText, range: nsRange) {
             for m in matches {
