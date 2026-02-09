@@ -1696,12 +1696,41 @@ class ARMeasurementViewModel: ObservableObject {
 
             print("[LabelReader] Label detected, starting lift animation")
 
+            // Refine world corners with raycast on main thread (more accurate than depth map)
+            let refinedCorners: [SIMD3<Float>]? = {
+                guard let quad = result.worldCorners, quad.count == 4 else { return result.worldCorners }
+                let displayTransform = frame.displayTransform(for: .portrait, viewportSize: viewSize)
+                let visionCorners = [
+                    result.quadrilateral.topLeft,
+                    result.quadrilateral.topRight,
+                    result.quadrilateral.bottomRight,
+                    result.quadrilateral.bottomLeft
+                ]
+                var corners: [SIMD3<Float>] = []
+                for vc in visionCorners {
+                    // Vision (.right) → normalized image coords → screen coords
+                    let imageNorm = CGPoint(x: CGFloat(vc.y), y: 1.0 - CGFloat(vc.x))
+                    let screenNorm = imageNorm.applying(displayTransform)
+                    let screenPoint = CGPoint(x: screenNorm.x * viewSize.width, y: screenNorm.y * viewSize.height)
+                    let hits = sessionManager.arView.raycast(from: screenPoint, allowing: .estimatedPlane, alignment: .any)
+                    if let hit = hits.first {
+                        let pos = hit.worldTransform.columns.3
+                        corners.append(SIMD3<Float>(pos.x, pos.y, pos.z))
+                    } else {
+                        print("[LabelReader] Raycast miss, using depth map corners")
+                        return result.worldCorners
+                    }
+                }
+                print("[LabelReader] World corners refined by raycast")
+                return corners
+            }()
+
             // Create lift animation
             let liftAnim = LabelLiftAnimation()
             let raycastPos = sessionManager.raycastWorldPosition(from: location)
             liftAnim.setup(
                 labelImage: result.correctedImage,
-                worldCorners: result.worldCorners,
+                worldCorners: refinedCorners,
                 surfaceNormal: result.surfaceNormal,
                 cameraTransform: frame.camera.transform,
                 fallbackPosition: raycastPos

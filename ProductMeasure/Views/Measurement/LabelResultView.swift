@@ -71,11 +71,8 @@ struct LabelResultView: View {
         .frame(width: cardWidth)
         .background(PMTheme.surfaceDark.opacity(0.92))
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(PMTheme.labelBlue.opacity(0.6), lineWidth: 1)
-        )
-        .shadow(color: PMTheme.labelBlue.opacity(0.3), radius: 16)
+        .shadow(color: .black.opacity(0.5), radius: 12, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
         .onAppear {
             withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                 scanlineOffset = 1.0

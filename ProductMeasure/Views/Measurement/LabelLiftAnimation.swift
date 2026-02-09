@@ -15,6 +15,7 @@ class LabelLiftAnimation {
 
     private var planeEntity: ModelEntity?
     private var glowBorderEntities: [ModelEntity] = []
+    private var scanEntities: [ModelEntity] = []
     private var animationTimer: Timer?
 
     // Animation parameters
@@ -151,68 +152,122 @@ class LabelLiftAnimation {
     }
 
     private func addGlowBorder() {
-        let borderWidth: Float = 0.001
-        let hw = labelWidth / 2
-        let hh = labelHeight / 2
-
-        let innerMaterial = UnlitMaterial(color: glowInnerColor)
-        let outerMaterial = UnlitMaterial(color: glowOuterColor)
-
-        // Edges in entity local space (XY rectangle, Z = face normal)
-        let edges: [(SIMD3<Float>, Float, Bool)] = [
-            (SIMD3(0,  hh, 0.001), labelWidth, true),   // top
-            (SIMD3(0, -hh, 0.001), labelWidth, true),   // bottom
-            (SIMD3(-hw, 0, 0.001), labelHeight, false),  // left
-            (SIMD3( hw, 0, 0.001), labelHeight, false),  // right
+        // Black drop shadow behind the label (two layers for soft falloff)
+        let layers: [(margin: Float, zOffset: Float, alpha: CGFloat)] = [
+            (0.002, -0.0004, 0.15),  // tight shadow
+            (0.005, -0.0008, 0.06),  // soft outer shadow
         ]
 
-        for (pos, length, isHorizontal) in edges {
-            let innerMesh: MeshResource
-            if isHorizontal {
-                innerMesh = MeshResource.generateBox(size: SIMD3(length, borderWidth, borderWidth))
-            } else {
-                innerMesh = MeshResource.generateBox(size: SIMD3(borderWidth, length, borderWidth))
-            }
-            let innerEdge = ModelEntity(mesh: innerMesh, materials: [innerMaterial])
-            innerEdge.position = pos
-            entity.addChild(innerEdge)
-            glowBorderEntities.append(innerEdge)
-
-            let outerWidth = borderWidth * 4
-            let outerMesh: MeshResource
-            if isHorizontal {
-                outerMesh = MeshResource.generateBox(size: SIMD3(length, outerWidth, outerWidth))
-            } else {
-                outerMesh = MeshResource.generateBox(size: SIMD3(outerWidth, length, outerWidth))
-            }
-            let outerEdge = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
-            outerEdge.position = pos
-            entity.addChild(outerEdge)
-            glowBorderEntities.append(outerEdge)
+        for layer in layers {
+            let mesh = MeshResource.generateBox(size: SIMD3(
+                labelWidth + layer.margin * 2,
+                labelHeight + layer.margin * 2,
+                0.0002
+            ))
+            var material = UnlitMaterial()
+            material.color = .init(tint: glowInnerColor.withAlphaComponent(layer.alpha))
+            material.blending = .transparent(opacity: .init(floatLiteral: Float(layer.alpha)))
+            let shadowEntity = ModelEntity(mesh: mesh, materials: [material])
+            shadowEntity.position = SIMD3(0, 0, layer.zOffset)  // behind the label
+            entity.addChild(shadowEntity)
+            glowBorderEntities.append(shadowEntity)
         }
     }
 
     // MARK: - Animation
 
-    /// Animate: rise up halfway to camera height → move to in front of camera → settle
+    /// Animate: scan overlay → reveal label → lift toward camera
     func animate(cameraTransform: simd_float4x4, completion: @escaping () -> Void) {
+        // Hide label and glow border during scan phase
+        planeEntity?.scale = .zero
+        for border in glowBorderEntities { border.scale = .zero }
+
+        // Create scan overlay (faint green rectangle covering label area)
+        var overlayMaterial = UnlitMaterial()
+        overlayMaterial.color = .init(tint: glowInnerColor.withAlphaComponent(0.08))
+        overlayMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.08))
+        let overlayMesh = MeshResource.generateBox(size: SIMD3(labelWidth, labelHeight, 0.0001))
+        let overlayEntity = ModelEntity(mesh: overlayMesh, materials: [overlayMaterial])
+        overlayEntity.position = SIMD3(0, 0, 0.0005)
+        entity.addChild(overlayEntity)
+        scanEntities.append(overlayEntity)
+
+        // Create scanline bar (bright green line sweeping top to bottom)
+        var scanMaterial = UnlitMaterial()
+        scanMaterial.color = .init(tint: glowInnerColor.withAlphaComponent(0.5))
+        scanMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.5))
+        let barHeight: Float = 0.002
+        let scanMesh = MeshResource.generateBox(size: SIMD3(labelWidth * 1.05, barHeight, 0.0001))
+        let scanLineEntity = ModelEntity(mesh: scanMesh, materials: [scanMaterial])
+        let hh = labelHeight / 2
+        scanLineEntity.position = SIMD3(0, hh, 0.001)
+        entity.addChild(scanLineEntity)
+        scanEntities.append(scanLineEntity)
+
+        // Scan phase: sweep scanline top → bottom
+        let scanDuration: Double = 0.5
+        let scanStart = Date()
+
+        animationTimer?.invalidate()
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+
+            let elapsed = Date().timeIntervalSince(scanStart)
+            let t = Float(min(elapsed / scanDuration, 1.0))
+
+            // Move scanline from top to bottom
+            scanLineEntity.position.y = hh - t * self.labelHeight
+
+            if t >= 1.0 {
+                timer.invalidate()
+                self.animationTimer = nil
+
+                // Remove scan entities
+                for e in self.scanEntities { e.removeFromParent() }
+                self.scanEntities.removeAll()
+
+                // Reveal label and glow border
+                self.planeEntity?.scale = .one
+                for border in self.glowBorderEntities { border.scale = .one }
+
+                // Start lift animation
+                self.startLiftAnimation(cameraTransform: cameraTransform, completion: completion)
+            }
+        }
+    }
+
+    /// Lift animation: rise → present → settle
+    private func startLiftAnimation(cameraTransform: simd_float4x4, completion: @escaping () -> Void) {
         let cameraPosition = SIMD3<Float>(
             cameraTransform.columns.3.x,
             cameraTransform.columns.3.y,
             cameraTransform.columns.3.z
         )
 
-        // Midpoint: rise up by quarter of the height difference between label and camera
-        let heightDiff = cameraPosition.y - labelCenter.y
-        let midPosition = SIMD3<Float>(labelCenter.x, labelCenter.y + heightDiff * 0.25, labelCenter.z)
+        // Midpoint: rise up 1cm from label surface
+        let midPosition = SIMD3<Float>(labelCenter.x, labelCenter.y + 0.01, labelCenter.z)
 
-        // Final position: 35cm from label toward camera, at least 25cm from camera
-        let toCamera = simd_normalize(cameraPosition - labelCenter)
-        var finalPosition = labelCenter + toCamera * 0.35
-        let distToCamera = simd_length(cameraPosition - finalPosition)
-        if distToCamera < 0.25 {
-            finalPosition = cameraPosition - toCamera * 0.25
-        }
+        // Camera forward axis
+        let camForward = -simd_normalize(SIMD3<Float>(
+            cameraTransform.columns.2.x,
+            cameraTransform.columns.2.y,
+            cameraTransform.columns.2.z
+        ))
+
+        // Compute distance and scale so label fills ~85% of screen
+        // iPhone portrait vertical FOV ≈ 60°, aspect ≈ width/height
+        let vertFOV: Float = 60.0 * .pi / 180.0
+        let screenAspect: Float = 9.0 / 19.5  // portrait iPhone
+        let fillFraction: Float = 0.85
+        let placeDist: Float = 0.30  // 30cm from camera
+
+        let visibleH = 2.0 * placeDist * tan(vertFOV / 2.0)
+        let visibleW = visibleH * screenAspect
+        let scaleForH = fillFraction * visibleH / labelHeight
+        let scaleForW = fillFraction * visibleW / labelWidth
+        let finalScale = min(scaleForH, scaleForW)
+
+        let finalPosition = cameraPosition + camForward * placeDist
 
         // Target orientation: face toward camera (face normal = +Z for this mesh)
         // with upright text (local +Y = screen up)
@@ -223,10 +278,8 @@ class LabelLiftAnimation {
 
         // Step 2: roll correction so text is upright on screen
         let currentUp = simd_act(tq1, SIMD3<Float>(0, 1, 0))
-        // In portrait mode, screen up = camera sensor's -X axis (sensor left)
         let sensorRight = SIMD3<Float>(cameraTransform.columns.0.x, cameraTransform.columns.0.y, cameraTransform.columns.0.z)
         let screenUp = -sensorRight
-        // Project screen up perpendicular to facingDir
         var desiredUp = screenUp - simd_dot(screenUp, facingDir) * facingDir
         if simd_length(desiredUp) < 0.001 {
             desiredUp = simd_normalize(simd_cross(facingDir, sensorRight))
@@ -242,7 +295,6 @@ class LabelLiftAnimation {
         let startPosition = entity.position
         let startOrientation = entity.orientation
         let startScale = entity.scale
-        let finalScale: Float = 1.8
 
         let duration = PMTheme.labelLiftDuration
         let startTime = Date()
@@ -270,7 +322,6 @@ class LabelLiftAnimation {
             if rawT <= 0.40 {
                 let riseT = Self.easeOutCubic(rawT / 0.40)
                 self.entity.position = simd_mix(startPosition, midPosition, SIMD3(repeating: riseT))
-                // Keep start orientation during rise (label stays flat)
                 self.entity.scale = startScale * (1.0 + (finalScale - 1.0) * riseT * 0.3)
 
             } else if rawT <= 0.85 {
@@ -318,4 +369,5 @@ class LabelLiftAnimation {
     private static func easeOutCubic(_ t: Float) -> Float {
         1.0 - pow(1.0 - t, 3)
     }
+
 }

@@ -356,6 +356,14 @@ class LabelReaderService {
         rectangle: VNRectangleObservation,
         frame: ARFrame
     ) -> [SIMD3<Float>]? {
+        let visionCorners = [
+            rectangle.topLeft,
+            rectangle.topRight,
+            rectangle.bottomRight,
+            rectangle.bottomLeft
+        ]
+
+        // Depth map unprojection with 5x5 median sampling
         guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
             return nil
         }
@@ -373,30 +381,19 @@ class LabelReaderService {
         let cx = intrinsics[2][0]
         let cy = intrinsics[2][1]
 
-        // Vision corners (0-1, bottom-left origin) with .right orientation
-        // To convert to landscape camera image coords:
-        // camX = visionY * imageWidth, camY = (1 - visionX) * imageHeight
-        let visionCorners = [
-            rectangle.topLeft,
-            rectangle.topRight,
-            rectangle.bottomRight,
-            rectangle.bottomLeft
-        ]
-
         CVPixelBufferLockBaseAddress(depthMap, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
         guard let depthBase = CVPixelBufferGetBaseAddress(depthMap) else { return nil }
         let depthBytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
         let depthPointer = depthBase.assumingMemoryBound(to: Float32.self)
+        let depthStride = depthBytesPerRow / MemoryLayout<Float32>.size
 
         var worldCorners: [SIMD3<Float>] = []
 
         for vc in visionCorners {
-            // Vision → camera image (landscape)
             let camX = Float(vc.y) * imageWidth
             let camY = (1.0 - Float(vc.x)) * imageHeight
 
-            // Camera image → depth map coords
             let depthX = Int(camX / imageWidth * Float(depthWidth))
             let depthY = Int(camY / imageHeight * Float(depthHeight))
 
@@ -404,23 +401,33 @@ class LabelReaderService {
                 return nil
             }
 
-            let depthIndex = depthY * (depthBytesPerRow / MemoryLayout<Float32>.size) + depthX
-            let depth = depthPointer[depthIndex]
-
+            // 5x5 median sampling
+            let patchRadius = 2
+            var samples: [Float] = []
+            for dy in -patchRadius...patchRadius {
+                for dx in -patchRadius...patchRadius {
+                    let sx = depthX + dx
+                    let sy = depthY + dy
+                    guard sx >= 0, sx < depthWidth, sy >= 0, sy < depthHeight else { continue }
+                    let d = depthPointer[sy * depthStride + sx]
+                    if d > 0, d < 10 { samples.append(d) }
+                }
+            }
+            samples.sort()
+            guard !samples.isEmpty else { return nil }
+            let depth = samples[samples.count / 2]
             guard depth > 0, depth < 10 else { return nil }
 
-            // Unproject to camera space
             let localX = (camX - cx) * depth / fx
             let localY = (camY - cy) * depth / fy
             let localZ = depth
 
-            // Camera space point (ARKit camera: right-handed, -Z forward)
             let cameraPoint = SIMD4<Float>(localX, -localY, -localZ, 1.0)
             let worldPoint = cameraTransform * cameraPoint
-
             worldCorners.append(SIMD3<Float>(worldPoint.x, worldPoint.y, worldPoint.z))
         }
 
+        print("[LabelReader] World corners from depth map (fallback)")
         return worldCorners
     }
 
