@@ -283,17 +283,24 @@ struct ExportSheet: View {
                 activityItems: [tempURL],
                 applicationActivities: nil
             )
+            activityVC.completionWithItemsHandler = { _, _, _, _ in
+                isExporting = false
+                dismiss()
+            }
 
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let rootViewController = windowScene.windows.first?.rootViewController {
-                rootViewController.present(activityVC, animated: true)
+                // Walk up to the topmost presented controller (the sheet)
+                var topVC = rootViewController
+                while let presented = topVC.presentedViewController {
+                    topVC = presented
+                }
+                topVC.present(activityVC, animated: true)
             }
         } catch {
             print("Export failed: \(error)")
+            isExporting = false
         }
-
-        isExporting = false
-        dismiss()
     }
 }
 
