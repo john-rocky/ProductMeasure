@@ -108,30 +108,23 @@ class LabelLiftAnimation {
         // After q1, local +X (plane's width axis) is at:
         let currentRight = simd_act(q1, SIMD3<Float>(1, 0, 0))
 
-        // Find the world corner edge direction closest to currentRight on the surface plane
-        let edgeCandidates = [
-            corners[1] - corners[0],
-            corners[0] - corners[1],
-            corners[3] - corners[0],
-            corners[0] - corners[3],
-        ]
-        var bestDir = currentRight
-        var bestDot: Float = -1
-        for edge in edgeCandidates {
-            var projected = edge - simd_dot(edge, normal) * normal
-            let len = simd_length(projected)
-            guard len > 0.001 else { continue }
-            projected = projected / len
-            let d = simd_dot(projected, currentRight)
-            if d > bestDot {
-                bestDot = d
-                bestDir = projected
+        // Roll correction — align local +X to label WIDTH direction only
+        // corners: [0]=TL, [1]=TR, [2]=BR, [3]=BL
+        // Width edge: TL→TR (horizontal). Height edge excluded to prevent diagonal scanlines.
+        var widthDir = corners[1] - corners[0]
+        widthDir = widthDir - simd_dot(widthDir, normal) * normal
+        let widthLen = simd_length(widthDir)
+        if widthLen > 0.001 {
+            widthDir = widthDir / widthLen
+            if simd_dot(widthDir, currentRight) < 0 {
+                widthDir = -widthDir  // Avoid mirror flip
             }
+        } else {
+            widthDir = currentRight  // Degenerate fallback
         }
 
-        // Compute roll around normal to align currentRight → bestDir
-        let rollDot = max(-1, min(1, simd_dot(currentRight, bestDir)))
-        let rollCross = simd_cross(currentRight, bestDir)
+        let rollDot = max(-1 as Float, min(1 as Float, simd_dot(currentRight, widthDir)))
+        let rollCross = simd_cross(currentRight, widthDir)
         let rollAngle = atan2(simd_dot(rollCross, normal), rollDot)
         let q2 = simd_quatf(angle: rollAngle, axis: normal)
 
@@ -321,11 +314,13 @@ class LabelLiftAnimation {
                 return
             }
 
-            // Lift: easeOutQuart for smooth deceleration
-            let t = Self.easeOutQuart(rawT)
-            self.entity.position = simd_mix(startPosition, finalPosition, SIMD3(repeating: t))
-            self.entity.orientation = simd_slerp(startOrientation, targetOrientation, t)
-            self.entity.scale = SIMD3<Float>(repeating: 1.0 + (finalScale - 1.0) * t)
+            // Position/rotation: easeOutQuad for smooth deceleration
+            let posT = Self.easeOutQuad(rawT)
+            self.entity.position = simd_mix(startPosition, finalPosition, SIMD3(repeating: posT))
+            self.entity.orientation = simd_slerp(startOrientation, targetOrientation, posT)
+
+            // Scale: linear to prevent compound rushing effect
+            self.entity.scale = SIMD3<Float>(repeating: 1.0 + (finalScale - 1.0) * rawT)
         }
     }
 
@@ -359,9 +354,8 @@ class LabelLiftAnimation {
         1.0 - pow(1.0 - t, 3)
     }
 
-    private static func easeOutQuart(_ t: Float) -> Float {
-        let u = 1.0 - t
-        return 1.0 - u * u * u * u
+    private static func easeOutQuad(_ t: Float) -> Float {
+        return 1.0 - (1.0 - t) * (1.0 - t)
     }
 
 }
