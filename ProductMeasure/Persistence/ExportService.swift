@@ -29,7 +29,7 @@ class ExportService {
 
             let label = measurement.labelData
             let cartonId = csvEscape(label?.cartonId)
-            let barcode = csvEscape(label?.barcodeValue)
+            let barcode = csvEscape(label?.barcodes?.map { $0.value }.joined(separator: "; "))
             let dest = csvEscape(label?.destination)
             let po = csvEscape(label?.poNumber)
             let asn = csvEscape(label?.asnNumber)

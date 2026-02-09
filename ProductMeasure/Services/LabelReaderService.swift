@@ -66,11 +66,15 @@ class LabelReaderService {
 
         var labelData = parseLabelFields(rawText: rawText)
 
-        // Merge barcode data
-        if let barcode = barcodeObservations.first {
-            labelData.barcodeValue = barcode.payloadStringValue
-            labelData.barcodeSymbology = barcode.symbology.rawValue
-                .replacingOccurrences(of: "VNBarcodeSymbology", with: "")
+        // Merge barcode data (all detected barcodes)
+        if !barcodeObservations.isEmpty {
+            labelData.barcodes = barcodeObservations.compactMap { obs in
+                guard let value = obs.payloadStringValue else { return nil }
+                let sym = obs.symbology.rawValue
+                    .replacingOccurrences(of: "VNBarcodeSymbology", with: "")
+                return LabelData.BarcodeItem(value: value, symbology: sym)
+            }
+            if labelData.barcodes?.isEmpty == true { labelData.barcodes = nil }
         }
 
         // Step 5: Compute world corners from depth map
