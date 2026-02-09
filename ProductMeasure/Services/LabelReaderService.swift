@@ -177,6 +177,19 @@ class LabelReaderService {
 
     // MARK: - Rectangle Detection
 
+    /// Compute area of a quadrilateral using the Shoelace formula.
+    private func quadArea(corners: [CGPoint]) -> CGFloat {
+        guard corners.count == 4 else { return 0 }
+        // Shoelace formula for polygon area
+        var area: CGFloat = 0
+        for i in 0..<4 {
+            let j = (i + 1) % 4
+            area += corners[i].x * corners[j].y
+            area -= corners[j].x * corners[i].y
+        }
+        return abs(area) / 2
+    }
+
     private func detectRectangle(
         pixelBuffer: CVPixelBuffer,
         tapPoint: CGPoint,
@@ -215,29 +228,53 @@ class LabelReaderService {
         let visionTapY = tapPoint.x / viewSize.width
         let visionTap = CGPoint(x: visionTapX, y: visionTapY)
 
-        // Find rectangle closest to tap point
+        let maxArea = CGFloat(AppConstants.labelMaxArea)
+        let areaWeight = CGFloat(AppConstants.labelAreaWeight)
+
+        // Find best rectangle using area-weighted distance score.
+        // score = distance - areaWeight * area
+        // Larger rectangles get a lower score (preferred), preventing
+        // inner section lines from being chosen over the full label.
         var bestRect: VNRectangleObservation?
-        var bestDistance: CGFloat = .greatestFiniteMagnitude
+        var bestScore: CGFloat = .greatestFiniteMagnitude
 
         for rect in results {
+            let corners = [rect.topLeft, rect.topRight, rect.bottomRight, rect.bottomLeft]
+            let area = quadArea(corners: corners)
+
+            // Skip rectangles that are too large (e.g. cardboard top surface)
+            guard area < maxArea else { continue }
+
             let center = CGPoint(
-                x: (rect.topLeft.x + rect.topRight.x + rect.bottomLeft.x + rect.bottomRight.x) / 4,
-                y: (rect.topLeft.y + rect.topRight.y + rect.bottomLeft.y + rect.bottomRight.y) / 4
+                x: (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4,
+                y: (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4
             )
             let dx = center.x - visionTap.x
             let dy = center.y - visionTap.y
             let dist = sqrt(dx * dx + dy * dy)
 
-            if dist < bestDistance {
-                bestDistance = dist
+            let score = dist - areaWeight * area
+
+            if score < bestScore {
+                bestScore = score
                 bestRect = rect
             }
         }
 
-        // Only accept if tap was reasonably close (within 0.3 in normalized coords)
-        if bestDistance > 0.3 {
-            print("[LabelReader] Closest rectangle too far from tap: \(bestDistance)")
-            return nil
+        // Distance threshold check using raw distance (not weighted score)
+        if let rect = bestRect {
+            let corners = [rect.topLeft, rect.topRight, rect.bottomRight, rect.bottomLeft]
+            let center = CGPoint(
+                x: (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4,
+                y: (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4
+            )
+            let dx = center.x - visionTap.x
+            let dy = center.y - visionTap.y
+            let rawDist = sqrt(dx * dx + dy * dy)
+            if rawDist > 0.3 {
+                print("[LabelReader] Best rectangle too far from tap: \(rawDist)")
+                return nil
+            }
         }
 
         return bestRect

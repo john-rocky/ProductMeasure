@@ -40,6 +40,8 @@ enum AppConstants {
     static let labelMinSize: Float = 0.1
     static let labelLiftDuration: Double = 1.2
     static let labelTypingStagger: Double = 0.12
+    static let labelMaxArea: Float = 0.55
+    static let labelAreaWeight: Float = 0.5
 }
 
 enum MeasurementUnit: String, CaseIterable, Codable {
