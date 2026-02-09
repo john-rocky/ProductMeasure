@@ -190,7 +190,7 @@ class LabelLiftAnimation {
 
     // MARK: - Animation
 
-    /// Animate: scan (0.5s) → reveal + lift simultaneously (2.0s)
+    /// Animate: scan (0.5s) → reveal at surface + fly to camera (2.0s)
     func animate(cameraTransform: simd_float4x4, completion: @escaping () -> Void) {
         // Hide label, show only scanline on real label position
         planeEntity?.scale = .zero
@@ -234,7 +234,7 @@ class LabelLiftAnimation {
         }
     }
 
-    /// Combined reveal + lift: label fades in while lifting toward camera
+    /// Reveal label at surface position, then fly to camera
     private func startRevealAndLift(cameraTransform: simd_float4x4, completion: @escaping () -> Void) {
         let cameraPosition = SIMD3<Float>(
             cameraTransform.columns.3.x,
@@ -286,9 +286,10 @@ class LabelLiftAnimation {
         let startOrientation = entity.orientation
 
         let duration = PMTheme.labelLiftDuration
-        let revealDuration: Double = 0.3  // fade-in over first 0.3s of lift
+        let revealDuration: Double = 0.3  // fade-in over first 0.3s
         let startTime = Date()
 
+        // Instantly show label at surface (reveal starts from scale 0)
         animationTimer?.invalidate()
         animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
