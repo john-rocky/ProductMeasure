@@ -483,9 +483,21 @@ class LabelReaderService {
 
     // MARK: - Table Field Parsing
 
+    /// Fields that can span multiple continuation lines (e.g. multi-line addresses).
+    private enum MultiLineField {
+        case destination
+        case contents
+        case handling
+        case putaway
+    }
+
     /// Parses fields from a detected two-column table layout.
     /// Left column = field names, right column = values.
+    /// Supports continuation lines: if a row has value text but no field name,
+    /// it is appended to the previous multi-line-capable field.
     private func parseTableFields(lines: [ReconstructedLine], columnBoundary: CGFloat, into data: inout LabelData) {
+        var lastField: MultiLineField? = nil
+
         for line in lines {
             guard !line.blocks.isEmpty else { continue }
 
@@ -503,16 +515,45 @@ class LabelReaderService {
             let fieldName = leftParts.joined(separator: " ").trimmingCharacters(in: .whitespaces)
             let value = rightParts.joined(separator: " ").trimmingCharacters(in: .whitespaces)
 
-            // Skip lines with no clear field/value separation
-            guard !fieldName.isEmpty, !value.isEmpty else { continue }
+            if !fieldName.isEmpty && !value.isEmpty {
+                // Normal row: field name + value
+                lastField = mapFieldToLabelData(fieldName: fieldName, value: value, data: &data)
+            } else if fieldName.isEmpty && !value.isEmpty, let field = lastField {
+                // Continuation row: value only, append to previous multi-line field
+                appendContinuation(value, to: field, data: &data)
+            } else if !fieldName.isEmpty && value.isEmpty {
+                // Section header or label-only row — reset continuation
+                lastField = nil
+            }
+        }
+    }
 
-            mapFieldToLabelData(fieldName: fieldName, value: value, data: &data)
+    /// Appends continuation text to the appropriate LabelData property for a multi-line field.
+    private func appendContinuation(_ text: String, to field: MultiLineField, data: inout LabelData) {
+        switch field {
+        case .destination:
+            if let existing = data.destination {
+                data.destination = existing + ", " + text
+            }
+        case .contents:
+            if let existing = data.contents {
+                data.contents = existing + ", " + text
+            }
+        case .handling:
+            if let existing = data.handling {
+                data.handling = existing + ", " + text
+            }
+        case .putaway:
+            if let existing = data.putaway {
+                data.putaway = existing + ", " + text
+            }
         }
     }
 
     /// Maps a field name and value to the appropriate LabelData property.
-    /// Uses flexible keyword matching for robustness.
-    private func mapFieldToLabelData(fieldName: String, value: String, data: inout LabelData) {
+    /// Returns the `MultiLineField` case if the field supports continuation lines, nil otherwise.
+    @discardableResult
+    private func mapFieldToLabelData(fieldName: String, value: String, data: inout LabelData) -> MultiLineField? {
         let name = fieldName.uppercased()
 
         // Combined fields like "PO / ASN"
@@ -524,7 +565,7 @@ class LabelReaderService {
             } else {
                 data.poNumber = value
             }
-            return
+            return nil
         }
 
         // Combined "GROSS / NET" weight
@@ -536,29 +577,39 @@ class LabelReaderService {
             } else {
                 data.grossWeight = value
             }
-            return
+            return nil
         }
 
         if name.contains("CARTON") || name.contains("CTN") {
             if data.cartonId == nil { data.cartonId = value }
+            return nil
         } else if name.contains("PO") || name.contains("PURCHASE") {
             if data.poNumber == nil { data.poNumber = value }
+            return nil
         } else if name.contains("ASN") {
             if data.asnNumber == nil { data.asnNumber = value }
+            return nil
         } else if name.contains("SO") && (name.contains("SALES") || name == "SO" || name.contains("SO#") || name.contains("SO ")) {
             if data.soNumber == nil { data.soNumber = value }
+            return nil
         } else if name.contains("LOT") || name.contains("BATCH") {
             if data.lotNumber == nil { data.lotNumber = value }
+            return nil
         } else if name.contains("DEST") || name.contains("SHIP") {
             if data.destination == nil { data.destination = value }
+            return .destination
         } else if name.contains("TRACK") {
             if data.trackingNumber == nil { data.trackingNumber = value }
+            return nil
         } else if name.contains("CARRIER") {
             if data.carrier == nil { data.carrier = value }
+            return nil
         } else if name.contains("GROSS") {
             if data.grossWeight == nil { data.grossWeight = value }
+            return nil
         } else if name.contains("NET") && name.contains("W") {
             if data.netWeight == nil { data.netWeight = value }
+            return nil
         } else if name.contains("WEIGHT") || name == "WT" {
             // Generic weight — try to determine gross vs net
             if name.contains("NET") {
@@ -566,23 +617,33 @@ class LabelReaderService {
             } else {
                 if data.grossWeight == nil { data.grossWeight = value }
             }
+            return nil
         } else if name.contains("PACK") && name.contains("DATE") || name.contains("MFG") {
             if data.packDate == nil { data.packDate = value }
+            return nil
         } else if name.contains("EXP") || name.contains("BEST BY") || name.contains("USE BY") {
             if data.expiryDate == nil { data.expiryDate = value }
+            return nil
         } else if name.contains("CONTENT") {
             if data.contents == nil { data.contents = value }
+            return .contents
         } else if name.contains("DIMENSION") || name.contains("DIMS") || name.contains("DIM ") || name == "DIM" {
             if data.dimensions == nil { data.dimensions = value }
+            return nil
         } else if name.contains("PUTAWAY") || name.contains("PUT AWAY") || name.contains("LOCATION") {
             if data.putaway == nil { data.putaway = value }
+            return .putaway
         } else if name.contains("HANDLING") {
             if data.handling == nil { data.handling = value }
+            return .handling
         } else if name.contains("SKU") || name.contains("ITEM") {
             let item = LabelData.SKUItem(sku: value)
             if data.skuList == nil { data.skuList = [] }
             data.skuList?.append(item)
+            return nil
         }
+
+        return nil
     }
 
     /// Copies non-nil fields from an inline-parsed result into the table-parsed result,
@@ -618,6 +679,29 @@ class LabelReaderService {
               match.numberOfRanges > 1,
               let range = Range(match.range(at: 1), in: text) else { return nil }
         return String(text[range]).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Checks if a line starts with a recognized field keyword.
+    /// Used to stop multi-line continuation collection.
+    private func isFieldKeywordLine(_ line: String) -> Bool {
+        let upper = line.uppercased()
+        let keywords = [
+            "CARTON", "CTN", "PO", "PURCHASE ORDER", "ASN",
+            "SO#", "SO ", "SALES ORDER",
+            "LOT", "BATCH", "DEST", "SHIP", "DELIVER",
+            "TRACK", "CARRIER", "GROSS", "NET",
+            "WEIGHT", "WT", "PACK", "MFG",
+            "EXP", "BEST BY", "USE BY",
+            "CONTENT", "DIMENSION", "DIMS", "DIM",
+            "PUTAWAY", "PUT AWAY", "LOCATION",
+            "HANDLING", "SKU", "ITEM"
+        ]
+        for keyword in keywords {
+            if upper.hasPrefix(keyword) { return true }
+            // Also match "KEYWORD:" or "KEYWORD #" patterns
+            if upper.contains(keyword + ":") || upper.contains(keyword + "#") { return true }
+        }
+        return false
     }
 
     private func parseLabelFields(rawText: String) -> LabelData {
@@ -703,26 +787,40 @@ class LabelReaderService {
         }
 
         // Destination — handles "SHIP TO:", "SHIP TO ", "DELIVER TO", "DEST:", "DESTINATION "
-        for line in lines {
+        // Supports multi-line addresses by collecting continuation lines.
+        for (index, line) in lines.enumerated() {
             if line.localizedCaseInsensitiveContains("ship to") ||
                line.localizedCaseInsensitiveContains("deliver to") ||
                line.localizedCaseInsensitiveContains("dest") {
+                var firstLineValue: String? = nil
                 // Try colon-separated first
                 if let colonRange = line.range(of: ":") {
                     let afterColon = String(line[colonRange.upperBound...]).trimmingCharacters(in: .whitespaces)
                     if !afterColon.isEmpty {
-                        data.destination = afterColon
-                        break
+                        firstLineValue = afterColon
                     }
                 }
                 // Fallback: strip the field name keyword and take the rest
-                let stripped = line
-                    .replacingOccurrences(of: #"(?i)(?:SHIP\s*TO|DELIVER\s*TO|DESTINATION|DEST)"#, with: "", options: .regularExpression)
-                    .trimmingCharacters(in: .whitespaces)
-                if !stripped.isEmpty {
-                    data.destination = stripped
-                    break
+                if firstLineValue == nil {
+                    let stripped = line
+                        .replacingOccurrences(of: #"(?i)(?:SHIP\s*TO|DELIVER\s*TO|DESTINATION|DEST)"#, with: "", options: .regularExpression)
+                        .trimmingCharacters(in: .whitespaces)
+                    if !stripped.isEmpty {
+                        firstLineValue = stripped
+                    }
                 }
+
+                guard let baseValue = firstLineValue else { continue }
+
+                // Collect continuation lines
+                var parts = [baseValue]
+                for nextIdx in (index + 1)..<lines.count {
+                    let nextLine = lines[nextIdx].trimmingCharacters(in: .whitespaces)
+                    if nextLine.isEmpty || isFieldKeywordLine(nextLine) { break }
+                    parts.append(nextLine)
+                }
+                data.destination = parts.joined(separator: ", ")
+                break
             }
         }
 
