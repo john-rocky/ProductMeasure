@@ -11,7 +11,7 @@ class ExportService {
     // MARK: - CSV Export
 
     func exportToCSV(measurements: [ProductMeasurement], unit: MeasurementUnit) -> Data {
-        var csv = "ID,Date,Length (\(unit.rawValue)),Width (\(unit.rawValue)),Height (\(unit.rawValue)),Volume (\(unit.volumeUnit())),Quality,Mode,Notes,Carton ID,Barcode,Destination,PO#,ASN,LOT,Pack Date,Weight(Gross),Weight(Net),Carrier,Tracking#,Handling\n"
+        var csv = "ID,Date,Length (\(unit.rawValue)),Width (\(unit.rawValue)),Height (\(unit.rawValue)),Volume (\(unit.volumeUnit())),Quality,Mode,Notes,Carton ID,Barcode,Destination,PO#,ASN,LOT,Pack Date,Weight(Gross),Weight(Net),Carrier,Tracking#,Handling,Contents,Dimensions,Putaway,Handling(Text)\n"
 
         let dateFormatter = ISO8601DateFormatter()
 
@@ -40,8 +40,12 @@ class ExportService {
             let carrier = csvEscape(label?.carrier)
             let tracking = csvEscape(label?.trackingNumber)
             let handling = csvEscape(label?.handlingIcons?.map(\.rawValue).joined(separator: "; "))
+            let contents = csvEscape(label?.contents)
+            let dims = csvEscape(label?.dimensions)
+            let putaway = csvEscape(label?.putaway)
+            let handlingText = csvEscape(label?.handling)
 
-            csv += "\(id),\(date),\(String(format: "%.2f", length)),\(String(format: "%.2f", width)),\(String(format: "%.2f", height)),\(String(format: "%.2f", volume)),\(quality),\(mode),\"\(notes)\",\(cartonId),\(barcode),\(dest),\(po),\(asn),\(lot),\(packDate),\(gw),\(nw),\(carrier),\(tracking),\(handling)\n"
+            csv += "\(id),\(date),\(String(format: "%.2f", length)),\(String(format: "%.2f", width)),\(String(format: "%.2f", height)),\(String(format: "%.2f", volume)),\(quality),\(mode),\"\(notes)\",\(cartonId),\(barcode),\(dest),\(po),\(asn),\(lot),\(packDate),\(gw),\(nw),\(carrier),\(tracking),\(handling),\(contents),\(dims),\(putaway),\(handlingText)\n"
         }
 
         return csv.data(using: .utf8) ?? Data()
@@ -66,7 +70,7 @@ class ExportService {
         labelData: LabelData?,
         unit: MeasurementUnit
     ) -> String {
-        let header = "Date,Length (\(unit.rawValue)),Width (\(unit.rawValue)),Height (\(unit.rawValue)),Volume (\(unit.volumeUnit())),Vol.Weight (kg),Size Class,Quality,Mode,Carton ID,Barcode,Destination,PO#,ASN,LOT,Pack Date,Weight(Gross),Weight(Net),Carrier,Tracking#,Handling"
+        let header = "Date,Length (\(unit.rawValue)),Width (\(unit.rawValue)),Height (\(unit.rawValue)),Volume (\(unit.volumeUnit())),Vol.Weight (kg),Size Class,Quality,Mode,Carton ID,Barcode,Destination,PO#,ASN,LOT,Pack Date,Weight(Gross),Weight(Net),Carrier,Tracking#,Handling,Contents,Dimensions,Putaway,Handling(Text)"
 
         let dateFormatter = ISO8601DateFormatter()
         let date = dateFormatter.string(from: Date())
@@ -92,8 +96,12 @@ class ExportService {
         let carrier = csvEscape(label?.carrier)
         let tracking = csvEscape(label?.trackingNumber)
         let handling = csvEscape(label?.handlingIcons?.map(\.rawValue).joined(separator: "; "))
+        let contents = csvEscape(label?.contents)
+        let dims = csvEscape(label?.dimensions)
+        let putaway = csvEscape(label?.putaway)
+        let handlingText = csvEscape(label?.handling)
 
-        let row = "\(date),\(l),\(w),\(h),\(vol),\(volWeight),\(sizeClass),\(qualityStr),\(modeStr),\(cartonId),\(barcode),\(dest),\(po),\(asn),\(lot),\(packDate),\(gw),\(nw),\(carrier),\(tracking),\(handling)"
+        let row = "\(date),\(l),\(w),\(h),\(vol),\(volWeight),\(sizeClass),\(qualityStr),\(modeStr),\(cartonId),\(barcode),\(dest),\(po),\(asn),\(lot),\(packDate),\(gw),\(nw),\(carrier),\(tracking),\(handling),\(contents),\(dims),\(putaway),\(handlingText)"
 
         return header + "\n" + row
     }

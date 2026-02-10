@@ -123,7 +123,7 @@ struct LabelResultView: View {
             Text(label)
                 .font(PMTheme.mono(10, weight: .semibold))
                 .foregroundColor(PMTheme.textDimmed)
-                .frame(width: 50, alignment: .leading)
+                .frame(width: 65, alignment: .leading)
 
             Text(value)
                 .font(PMTheme.mono(12, weight: .medium))

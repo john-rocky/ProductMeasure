@@ -21,6 +21,10 @@ struct LabelData: Codable {
     var trackingNumber: String?
     var handlingIcons: [HandlingIcon]?
     var expiryDate: String?
+    var contents: String?
+    var dimensions: String?
+    var putaway: String?
+    var handling: String?
     var rawText: String
 
     var textLineBounds: [CGRect]?  // Per-line bounding boxes (Vision normalized, bottom-left origin)
@@ -41,6 +45,8 @@ struct LabelData: Codable {
         case fragile = "FRAGILE"
         case thisSideUp = "THIS SIDE UP"
         case keepDry = "KEEP DRY"
+        case doNotDrop = "DO NOT DROP"
+        case lithiumBattery = "LITHIUM BATTERY"
     }
 
     // Backward-compatible decoding: migrates old barcodeValue/barcodeSymbology
@@ -61,6 +67,10 @@ struct LabelData: Codable {
         trackingNumber = try container.decodeIfPresent(String.self, forKey: .trackingNumber)
         handlingIcons = try container.decodeIfPresent([HandlingIcon].self, forKey: .handlingIcons)
         expiryDate = try container.decodeIfPresent(String.self, forKey: .expiryDate)
+        contents = try container.decodeIfPresent(String.self, forKey: .contents)
+        dimensions = try container.decodeIfPresent(String.self, forKey: .dimensions)
+        putaway = try container.decodeIfPresent(String.self, forKey: .putaway)
+        handling = try container.decodeIfPresent(String.self, forKey: .handling)
         rawText = try container.decode(String.self, forKey: .rawText)
         textLineBounds = try container.decodeIfPresent([CGRect].self, forKey: .textLineBounds)
 
@@ -75,7 +85,8 @@ struct LabelData: Codable {
     private enum CodingKeys: String, CodingKey {
         case cartonId, barcodes, destination, poNumber, asnNumber, soNumber
         case skuList, lotNumber, packDate, grossWeight, netWeight
-        case carrier, trackingNumber, handlingIcons, expiryDate, rawText
+        case carrier, trackingNumber, handlingIcons, expiryDate
+        case contents, dimensions, putaway, handling, rawText
         case textLineBounds
         case barcodeValue, barcodeSymbology  // legacy keys for decoding only
     }
@@ -97,6 +108,10 @@ struct LabelData: Codable {
         try container.encodeIfPresent(trackingNumber, forKey: .trackingNumber)
         try container.encodeIfPresent(handlingIcons, forKey: .handlingIcons)
         try container.encodeIfPresent(expiryDate, forKey: .expiryDate)
+        try container.encodeIfPresent(contents, forKey: .contents)
+        try container.encodeIfPresent(dimensions, forKey: .dimensions)
+        try container.encodeIfPresent(putaway, forKey: .putaway)
+        try container.encodeIfPresent(handling, forKey: .handling)
         try container.encode(rawText, forKey: .rawText)
         try container.encodeIfPresent(textLineBounds, forKey: .textLineBounds)
     }
@@ -109,7 +124,9 @@ struct LabelData: Codable {
         packDate: String? = nil, grossWeight: String? = nil,
         netWeight: String? = nil, carrier: String? = nil,
         trackingNumber: String? = nil, handlingIcons: [HandlingIcon]? = nil,
-        expiryDate: String? = nil, rawText: String,
+        expiryDate: String? = nil, contents: String? = nil,
+        dimensions: String? = nil, putaway: String? = nil,
+        handling: String? = nil, rawText: String,
         textLineBounds: [CGRect]? = nil
     ) {
         self.cartonId = cartonId
@@ -127,6 +144,10 @@ struct LabelData: Codable {
         self.trackingNumber = trackingNumber
         self.handlingIcons = handlingIcons
         self.expiryDate = expiryDate
+        self.contents = contents
+        self.dimensions = dimensions
+        self.putaway = putaway
+        self.handling = handling
         self.rawText = rawText
         self.textLineBounds = textLineBounds
     }
@@ -144,17 +165,22 @@ struct LabelData: Codable {
             }
         }
         if let v = destination { fields.append(("mappin.and.ellipse", "DEST", v)) }
+        if let v = putaway { fields.append(("square.grid.3x3", "PUTAWAY", v)) }
         if let v = poNumber { fields.append(("doc.text", "PO#", v)) }
         if let v = asnNumber { fields.append(("doc.plaintext", "ASN", v)) }
         if let v = lotNumber { fields.append(("number.circle", "LOT", v)) }
+        if let v = contents { fields.append(("shippingbox", "CONTENTS", v)) }
         if let v = packDate { fields.append(("calendar", "DATE", v)) }
         if let v = grossWeight { fields.append(("scalemass", "GW", v)) }
         if let v = netWeight { fields.append(("scalemass.fill", "NW", v)) }
+        if let v = dimensions { fields.append(("ruler", "DIMS", v)) }
         if let v = carrier { fields.append(("truck.box", "CARRIER", v)) }
         if let v = trackingNumber { fields.append(("number", "TRACK#", v)) }
         if let v = expiryDate { fields.append(("clock.badge.exclamationmark", "EXPIRY", v)) }
 
-        if let icons = handlingIcons, !icons.isEmpty {
+        if let v = handling {
+            fields.append(("exclamationmark.triangle", "HANDLING", v))
+        } else if let icons = handlingIcons, !icons.isEmpty {
             fields.append(("exclamationmark.triangle", "HANDLING", icons.map(\.rawValue).joined(separator: ", ")))
         }
 
@@ -174,6 +200,7 @@ struct LabelData: Codable {
         asnNumber != nil || soNumber != nil || lotNumber != nil ||
         packDate != nil || grossWeight != nil || netWeight != nil ||
         carrier != nil || trackingNumber != nil || expiryDate != nil ||
-        handlingIcons != nil || skuList != nil
+        handlingIcons != nil || skuList != nil ||
+        contents != nil || dimensions != nil || putaway != nil || handling != nil
     }
 }

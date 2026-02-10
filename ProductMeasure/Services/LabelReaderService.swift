@@ -131,9 +131,20 @@ class LabelReaderService {
         // Step 4: Parse fields from OCR text and barcodes
         // Reconstruct lines using spatial position so that field names and
         // values at the same height are merged into one line (e.g. "PO#  12345").
-        let rawText = reconstructLines(from: textObservations)
+        let structuredLines = reconstructLinesStructured(from: textObservations)
+        let rawText = structuredLines.map(\.joinedText).joined(separator: "\n")
 
-        var labelData = parseLabelFields(rawText: rawText)
+        var labelData: LabelData
+        if let boundary = detectColumnBoundary(lines: structuredLines) {
+            // Table layout detected — use column-based parsing + regex fallback
+            labelData = LabelData(rawText: rawText)
+            parseTableFields(lines: structuredLines, columnBoundary: boundary, into: &labelData)
+            let inlineData = parseLabelFields(rawText: rawText)
+            mergeInlineParsed(from: inlineData, into: &labelData)
+        } else {
+            // Non-table layout — regex-only parsing
+            labelData = parseLabelFields(rawText: rawText)
+        }
 
         // Capture text line bounding boxes for scan effect
         let lineBounds = textObservations.map { $0.boundingBox }
@@ -370,28 +381,33 @@ class LabelReaderService {
 
     // MARK: - Spatial Line Reconstruction
 
-    /// Groups text observations that share the same visual line (by Y overlap),
-    /// sorts each group left-to-right, and joins with spaces.
-    /// This handles labels where field name and value are on the same row
-    /// but recognized as separate observations (e.g. "PO#" and "12345").
-    private func reconstructLines(from observations: [VNRecognizedTextObservation]) -> String {
-        struct TextBlock {
-            let text: String
-            let box: CGRect  // Vision normalized (bottom-left origin)
-        }
+    /// A single text block with its bounding box.
+    private struct TextBlock {
+        let text: String
+        let box: CGRect  // Vision normalized (bottom-left origin)
+    }
 
+    /// A reconstructed line of text blocks sorted left-to-right.
+    private struct ReconstructedLine {
+        let blocks: [TextBlock]
+        var joinedText: String { blocks.map(\.text).joined(separator: " ") }
+    }
+
+    /// Groups text observations that share the same visual line (by Y overlap),
+    /// sorts each group left-to-right, and preserves bounding boxes per block.
+    private func reconstructLinesStructured(from observations: [VNRecognizedTextObservation]) -> [ReconstructedLine] {
         let blocks: [TextBlock] = observations.compactMap { obs in
             guard let text = obs.topCandidates(1).first?.string else { return nil }
             return TextBlock(text: text, box: obs.boundingBox)
         }
 
-        guard !blocks.isEmpty else { return "" }
+        guard !blocks.isEmpty else { return [] }
 
         // Sort by midY descending (top of image first, since Vision Y=0 is bottom)
         let sorted = blocks.sorted { $0.box.midY > $1.box.midY }
 
         // Group blocks whose Y ranges overlap significantly
-        var lines: [[TextBlock]] = []
+        var groups: [[TextBlock]] = []
         var currentLine: [TextBlock] = [sorted[0]]
         var currentMinY = sorted[0].box.minY
         var currentMaxY = sorted[0].box.maxY
@@ -407,28 +423,189 @@ class LabelReaderService {
             let overlap = max(0, overlapTop - overlapBottom)
 
             if overlap >= overlapThreshold {
-                // Same line
                 currentLine.append(block)
                 currentMinY = min(currentMinY, block.box.minY)
                 currentMaxY = max(currentMaxY, block.box.maxY)
             } else {
-                // New line
-                lines.append(currentLine)
+                groups.append(currentLine)
                 currentLine = [block]
                 currentMinY = block.box.minY
                 currentMaxY = block.box.maxY
             }
         }
-        lines.append(currentLine)
+        groups.append(currentLine)
 
-        // Sort each line left-to-right by minX, join with space
-        let reconstructed = lines.map { line in
-            line.sorted { $0.box.minX < $1.box.minX }
-                .map(\.text)
-                .joined(separator: " ")
+        // Sort each line left-to-right by minX
+        return groups.map { group in
+            ReconstructedLine(blocks: group.sorted { $0.box.minX < $1.box.minX })
+        }
+    }
+
+    /// Backward-compatible flat string reconstruction.
+    private func reconstructLines(from observations: [VNRecognizedTextObservation]) -> String {
+        reconstructLinesStructured(from: observations)
+            .map(\.joinedText)
+            .joined(separator: "\n")
+    }
+
+    // MARK: - Table Layout Detection
+
+    /// Detects a two-column table layout by finding a consistent vertical gap
+    /// between the first and second text blocks across multiple lines.
+    /// Returns the X boundary (in Vision normalized coords) if a table is detected.
+    private func detectColumnBoundary(lines: [ReconstructedLine]) -> CGFloat? {
+        // Collect gap midpoints from lines with 2+ blocks
+        var gapMidpoints: [CGFloat] = []
+        for line in lines {
+            guard line.blocks.count >= 2 else { continue }
+            let left = line.blocks[0]
+            let right = line.blocks[1]
+            // Only consider lines where there's a meaningful gap
+            let gap = right.box.minX - left.box.maxX
+            guard gap > 0.02 else { continue }
+            let midX = (left.box.maxX + right.box.minX) / 2.0
+            gapMidpoints.append(midX)
         }
 
-        return reconstructed.joined(separator: "\n")
+        guard gapMidpoints.count >= 3 else { return nil }
+
+        // Compute median gap midpoint
+        let sorted = gapMidpoints.sorted()
+        let median = sorted[sorted.count / 2]
+
+        // Check that enough gap midpoints cluster around the median (within 8%)
+        let tolerance: CGFloat = 0.08
+        let consistent = gapMidpoints.filter { abs($0 - median) < tolerance }
+        guard consistent.count >= 3 else { return nil }
+
+        return median
+    }
+
+    // MARK: - Table Field Parsing
+
+    /// Parses fields from a detected two-column table layout.
+    /// Left column = field names, right column = values.
+    private func parseTableFields(lines: [ReconstructedLine], columnBoundary: CGFloat, into data: inout LabelData) {
+        for line in lines {
+            guard !line.blocks.isEmpty else { continue }
+
+            // Classify blocks into left/right columns
+            var leftParts: [String] = []
+            var rightParts: [String] = []
+            for block in line.blocks {
+                if block.box.midX < columnBoundary {
+                    leftParts.append(block.text)
+                } else {
+                    rightParts.append(block.text)
+                }
+            }
+
+            let fieldName = leftParts.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            let value = rightParts.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+
+            // Skip lines with no clear field/value separation
+            guard !fieldName.isEmpty, !value.isEmpty else { continue }
+
+            mapFieldToLabelData(fieldName: fieldName, value: value, data: &data)
+        }
+    }
+
+    /// Maps a field name and value to the appropriate LabelData property.
+    /// Uses flexible keyword matching for robustness.
+    private func mapFieldToLabelData(fieldName: String, value: String, data: inout LabelData) {
+        let name = fieldName.uppercased()
+
+        // Combined fields like "PO / ASN"
+        if name.contains("PO") && name.contains("ASN") {
+            let parts = value.components(separatedBy: "/").map { $0.trimmingCharacters(in: .whitespaces) }
+            if parts.count >= 2 {
+                data.poNumber = parts[0]
+                data.asnNumber = parts[1]
+            } else {
+                data.poNumber = value
+            }
+            return
+        }
+
+        // Combined "GROSS / NET" weight
+        if name.contains("GROSS") && name.contains("NET") {
+            let parts = value.components(separatedBy: "/").map { $0.trimmingCharacters(in: .whitespaces) }
+            if parts.count >= 2 {
+                data.grossWeight = parts[0]
+                data.netWeight = parts[1]
+            } else {
+                data.grossWeight = value
+            }
+            return
+        }
+
+        if name.contains("CARTON") || name.contains("CTN") {
+            if data.cartonId == nil { data.cartonId = value }
+        } else if name.contains("PO") || name.contains("PURCHASE") {
+            if data.poNumber == nil { data.poNumber = value }
+        } else if name.contains("ASN") {
+            if data.asnNumber == nil { data.asnNumber = value }
+        } else if name.contains("SO") && (name.contains("SALES") || name == "SO" || name.contains("SO#") || name.contains("SO ")) {
+            if data.soNumber == nil { data.soNumber = value }
+        } else if name.contains("LOT") || name.contains("BATCH") {
+            if data.lotNumber == nil { data.lotNumber = value }
+        } else if name.contains("DEST") || name.contains("SHIP") {
+            if data.destination == nil { data.destination = value }
+        } else if name.contains("TRACK") {
+            if data.trackingNumber == nil { data.trackingNumber = value }
+        } else if name.contains("CARRIER") {
+            if data.carrier == nil { data.carrier = value }
+        } else if name.contains("GROSS") {
+            if data.grossWeight == nil { data.grossWeight = value }
+        } else if name.contains("NET") && name.contains("W") {
+            if data.netWeight == nil { data.netWeight = value }
+        } else if name.contains("WEIGHT") || name == "WT" {
+            // Generic weight — try to determine gross vs net
+            if name.contains("NET") {
+                if data.netWeight == nil { data.netWeight = value }
+            } else {
+                if data.grossWeight == nil { data.grossWeight = value }
+            }
+        } else if name.contains("PACK") && name.contains("DATE") || name.contains("MFG") {
+            if data.packDate == nil { data.packDate = value }
+        } else if name.contains("EXP") || name.contains("BEST BY") || name.contains("USE BY") {
+            if data.expiryDate == nil { data.expiryDate = value }
+        } else if name.contains("CONTENT") {
+            if data.contents == nil { data.contents = value }
+        } else if name.contains("DIMENSION") || name.contains("DIMS") || name.contains("DIM ") || name == "DIM" {
+            if data.dimensions == nil { data.dimensions = value }
+        } else if name.contains("PUTAWAY") || name.contains("PUT AWAY") || name.contains("LOCATION") {
+            if data.putaway == nil { data.putaway = value }
+        } else if name.contains("HANDLING") {
+            if data.handling == nil { data.handling = value }
+        } else if name.contains("SKU") || name.contains("ITEM") {
+            let item = LabelData.SKUItem(sku: value)
+            if data.skuList == nil { data.skuList = [] }
+            data.skuList?.append(item)
+        }
+    }
+
+    /// Copies non-nil fields from an inline-parsed result into the table-parsed result,
+    /// filling gaps where table parsing didn't find a match.
+    private func mergeInlineParsed(from source: LabelData, into target: inout LabelData) {
+        if target.cartonId == nil { target.cartonId = source.cartonId }
+        if target.poNumber == nil { target.poNumber = source.poNumber }
+        if target.asnNumber == nil { target.asnNumber = source.asnNumber }
+        if target.soNumber == nil { target.soNumber = source.soNumber }
+        if target.lotNumber == nil { target.lotNumber = source.lotNumber }
+        if target.destination == nil { target.destination = source.destination }
+        if target.trackingNumber == nil { target.trackingNumber = source.trackingNumber }
+        if target.carrier == nil { target.carrier = source.carrier }
+        if target.grossWeight == nil { target.grossWeight = source.grossWeight }
+        if target.netWeight == nil { target.netWeight = source.netWeight }
+        if target.packDate == nil { target.packDate = source.packDate }
+        if target.expiryDate == nil { target.expiryDate = source.expiryDate }
+        if target.handlingIcons == nil { target.handlingIcons = source.handlingIcons }
+        if target.skuList == nil { target.skuList = source.skuList }
+        if target.contents == nil { target.contents = source.contents }
+        if target.dimensions == nil { target.dimensions = source.dimensions }
+        if target.putaway == nil { target.putaway = source.putaway }
+        if target.handling == nil { target.handling = source.handling }
     }
 
     // MARK: - Field Parsing
@@ -457,7 +634,7 @@ class LabelReaderService {
         }
 
         // PO Number — handles "PO#", "PO:", "PO ", "P.O.", "PO NUMBER", "PURCHASE ORDER"
-        if let v = firstCapture(in: rawText, pattern: #"(?:P\.?O\.?|PURCHASE\s*ORDER)[\s#:]*(?:NO|NUM(?:BER)?)?[\s#:]*(\d{4,})"#) {
+        if let v = firstCapture(in: rawText, pattern: #"(?:P\.?O\.?|PURCHASE\s*ORDER)[\s#:]*(?:NO|NUM(?:BER)?)?[\s#:]*([A-Z0-9][\w\-]{3,})"#) {
             data.poNumber = v
         }
 
@@ -486,6 +663,18 @@ class LabelReaderService {
             data.netWeight = v
         }
 
+        // Standalone WEIGHT fallback (when no GROSS/NET prefix)
+        if data.grossWeight == nil && data.netWeight == nil {
+            if let v = firstCapture(in: rawText, pattern: #"WEIGHT[\s:]*(\d+\.?\d*\s*(?:kg|lbs?|KG|LBS?)?)"#) {
+                data.grossWeight = v
+            }
+        }
+
+        // Putaway / Location
+        if let v = firstCapture(in: rawText, pattern: #"(?:PUTAWAY|PUT\s*AWAY|LOCATION)[\s:]+(.+?)(?:\n|$)"#) {
+            data.putaway = v.trimmingCharacters(in: .whitespaces)
+        }
+
         // Carrier detection
         let carriers = ["UPS", "FEDEX", "DHL", "USPS", "TNT", "MAERSK"]
         for carrier in carriers {
@@ -496,7 +685,7 @@ class LabelReaderService {
         }
 
         // Tracking number — handles "TRACKING", "TRACKING NO", "TRACKING NUMBER", "TRACK#"
-        if let v = firstCapture(in: rawText, pattern: #"(?:TRACK(?:ING)?)[\s#:]*(?:NO|NUM(?:BER)?)?[\s#:]*([A-Z0-9]{10,30})"#) {
+        if let v = firstCapture(in: rawText, pattern: #"(?:TRACK(?:ING)?)[\s#:]*(?:NO|NUM(?:BER)?)?[\s#:]*([A-Z0-9][\w\-]{8,30})"#) {
             data.trackingNumber = v
         } else if let match = rawText.range(of: #"1Z[A-Z0-9]{16}"#, options: .regularExpression) {
             // UPS tracking
@@ -504,12 +693,12 @@ class LabelReaderService {
         }
 
         // Dates (MM/DD/YYYY, YYYY-MM-DD, DD-MMM-YYYY)
-        if let v = firstCapture(in: rawText, pattern: #"(?:PACK|MFG|PROD)\s*(?:DATE)?[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})"#) {
+        if let v = firstCapture(in: rawText, pattern: #"(?:PACK|MFG|PROD)\s*(?:DATE)?[\s:]*(\d{1,4}[/\-]\d{1,2}[/\-]\d{1,4})"#) {
             data.packDate = v
         }
 
         // Expiry date
-        if let v = firstCapture(in: rawText, pattern: #"(?:EXP(?:IR[YE])?|BEST\s*BY|USE\s*BY)[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})"#) {
+        if let v = firstCapture(in: rawText, pattern: #"(?:EXP(?:IR[YE])?|BEST\s*BY|USE\s*BY)[\s:]*(\d{1,4}[/\-]\d{1,2}[/\-]\d{1,4})"#) {
             data.expiryDate = v
         }
 
