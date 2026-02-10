@@ -171,6 +171,30 @@ struct ARMeasurementView: View {
                     .transition(.opacity)
                 }
 
+                // Floating reset button during scan animations
+                if viewModel.isReadingLabel || viewModel.showBarcodeScanEffect {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                viewModel.resetLabelScan()
+                            }) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .frame(width: 36, height: 36)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.white.opacity(0.3), lineWidth: 1))
+                            }
+                            .padding(.trailing, 20)
+                            .padding(.top, 60)
+                        }
+                        Spacer()
+                    }
+                    .transition(.opacity)
+                }
+
                 // Label result overlay
                 if viewModel.showLabelResult, let labelData = viewModel.currentLabelData {
                     ZStack {
@@ -188,6 +212,9 @@ struct ARMeasurementView: View {
                                 if !viewModel.isWorkflowActive {
                                     selectionMode = .tap
                                 }
+                            },
+                            onRescan: {
+                                viewModel.resetLabelScan()
                             },
                             dismissButtonLabel: viewModel.isWorkflowActive ? "CONTINUE" : "DONE"
                         )
@@ -1966,6 +1993,39 @@ class ARMeasurementViewModel: ObservableObject {
     }
 
     // MARK: - Workflow Methods
+
+    func resetLabelScan() {
+        // Cancel barcode scan effect
+        showBarcodeScanEffect = false
+
+        // Dismiss label result
+        showLabelResult = false
+
+        // Dismiss lift animation immediately
+        if let liftAnim = labelLiftAnimation {
+            liftAnim.dismiss { [weak self] in
+                guard let self = self else { return }
+                if let anchor = self.labelLiftAnchor {
+                    self.sessionManager.removeAnchor(anchor)
+                }
+                self.labelLiftAnchor = nil
+                self.labelLiftAnimation = nil
+            }
+        }
+
+        // Reset all label state
+        currentLabelData = nil
+        correctedLabelImageSize = .zero
+        labelLineRevealed = []
+        labelReadingComplete = false
+        isReadingLabel = false
+        isProcessing = false
+
+        // Stay in label mode (ready for next scan)
+        if isWorkflowActive {
+            workflowStep = .awaitingLabelScan
+        }
+    }
 
     func skipLabelScan() {
         workflowStep = .awaitingSecondTap

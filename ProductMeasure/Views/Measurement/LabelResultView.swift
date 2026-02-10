@@ -11,6 +11,7 @@ struct LabelResultView: View {
     let lineRevealed: [Bool]
     let isComplete: Bool
     let onDismiss: () -> Void
+    var onRescan: (() -> Void)?
     var dismissButtonLabel: String = "DONE"
 
     @State private var scanlineOffset: CGFloat = 0
@@ -165,17 +166,38 @@ struct LabelResultView: View {
         .clipped()
     }
 
-    // MARK: - Done Button
+    // MARK: - Action Buttons
 
     private var doneButton: some View {
-        Button(action: onDismiss) {
-            Text(dismissButtonLabel)
-                .font(PMTheme.mono(13, weight: .bold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(PMTheme.labelBlue.opacity(0.8))
-                .clipShape(Capsule())
+        HStack(spacing: 10) {
+            // Rescan button
+            if let onRescan = onRescan {
+                Button(action: onRescan) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("RESCAN")
+                            .font(PMTheme.mono(12, weight: .bold))
+                    }
+                    .foregroundColor(PMTheme.labelBlue)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(PMTheme.labelBlue.opacity(0.15))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(PMTheme.labelBlue.opacity(0.4), lineWidth: 1))
+                }
+            }
+
+            // Done / Continue button
+            Button(action: onDismiss) {
+                Text(dismissButtonLabel)
+                    .font(PMTheme.mono(13, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(PMTheme.labelBlue.opacity(0.8))
+                    .clipShape(Capsule())
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
