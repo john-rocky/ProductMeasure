@@ -72,7 +72,7 @@ class LabelReaderService {
         // Barcode detection warmup
         barcodeQueue.async {
             let req = VNDetectBarcodesRequest()
-            req.symbologies = [.qr, .ean13, .code128, .code39, .dataMatrix, .itf14]
+            req.symbologies = allSymbologies
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             try? handler.perform([req])
             print("[LabelReader] Barcode detection warmed up (\(String(format: "%.1f", CFAbsoluteTimeGetCurrent() - start))s)")
@@ -122,11 +122,25 @@ class LabelReaderService {
             return nil
         }
 
-        // Step 3: Run OCR and barcode detection concurrently
+        // Step 3: Run OCR and barcode detection concurrently.
+        // Barcode detection runs on the raw camera frame (not the corrected image)
+        // because CIPerspectiveCorrection resampling degrades sharp bar edges.
+        // Falls back to corrected-image detection if the frame yields nothing.
         async let ocrResult = recognizeText(image: correctedImage)
-        async let barcodeResult = detectBarcodes(image: correctedImage)
+        async let frameBarcodeResult = detectBarcodesOnFrame(
+            pixelBuffer: pixelBuffer,
+            labelRect: rectangle
+        )
 
-        let (textObservations, barcodeObservations) = try await (ocrResult, barcodeResult)
+        let (textObservations, frameBarcodes) = try await (ocrResult, frameBarcodeResult)
+
+        let barcodeObservations: [VNBarcodeObservation]
+        if !frameBarcodes.isEmpty {
+            barcodeObservations = frameBarcodes
+        } else {
+            // Fallback: try on the corrected image
+            barcodeObservations = try await detectBarcodes(image: correctedImage)
+        }
 
         // Step 4: Parse fields from OCR text and barcodes
         // Reconstruct lines using spatial position so that field names and
@@ -356,13 +370,59 @@ class LabelReaderService {
 
     // MARK: - Barcode Detection
 
+    /// All barcode symbologies to detect.
+    private static let allSymbologies: [VNBarcodeSymbology] = [
+        .qr, .ean13, .ean8, .code128, .code39, .code93,
+        .dataMatrix, .itf14, .pdf417, .aztec, .upce
+    ]
+
+    /// Detect barcodes on the raw camera frame (pixelBuffer) for maximum quality.
+    /// Returns only barcodes whose center falls inside the label rectangle.
+    private func detectBarcodesOnFrame(
+        pixelBuffer: CVPixelBuffer,
+        labelRect: VNRectangleObservation
+    ) async throws -> [VNBarcodeObservation] {
+        let request = VNDetectBarcodesRequest()
+        request.symbologies = Self.allSymbologies
+
+        let handler = VNImageRequestHandler(
+            cvPixelBuffer: pixelBuffer,
+            orientation: .right,
+            options: [:]
+        )
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Self.barcodeQueue.async {
+                do {
+                    try handler.perform([request])
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+
+        guard let results = request.results, !results.isEmpty else { return [] }
+
+        // Build bounding path from the label quadrilateral for containment test
+        let labelPath = CGMutablePath()
+        labelPath.move(to: labelRect.topLeft)
+        labelPath.addLine(to: labelRect.topRight)
+        labelPath.addLine(to: labelRect.bottomRight)
+        labelPath.addLine(to: labelRect.bottomLeft)
+        labelPath.closeSubpath()
+
+        return results.filter { obs in
+            let center = CGPoint(x: obs.boundingBox.midX, y: obs.boundingBox.midY)
+            return labelPath.contains(center)
+        }
+    }
+
+    /// Fallback: detect barcodes on the perspective-corrected label image.
     private func detectBarcodes(image: UIImage) async throws -> [VNBarcodeObservation] {
         guard let cgImage = image.cgImage else { return [] }
 
         let request = VNDetectBarcodesRequest()
-        request.symbologies = [
-            .qr, .ean13, .code128, .code39, .dataMatrix, .itf14
-        ]
+        request.symbologies = Self.allSymbologies
 
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
