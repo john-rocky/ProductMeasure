@@ -11,6 +11,7 @@ import SwiftUI
 struct BarcodeScanEffectView: View {
     let labelData: LabelData
     let labelImageSize: CGSize
+    let labelImage: UIImage?
     let onComplete: () -> Void
 
     // MARK: - Animation State
@@ -37,6 +38,15 @@ struct BarcodeScanEffectView: View {
             let labelRect = labelDisplayRect(in: geometry.size)
 
             ZStack {
+                // 2D label image behind highlights
+                if let uiImage = labelImage {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .frame(width: labelRect.width, height: labelRect.height)
+                        .position(x: labelRect.midX, y: labelRect.midY)
+                        .opacity(overallOpacity)
+                }
+
                 // Text line highlights
                 textLineHighlights(labelRect: labelRect)
                     .opacity(overallOpacity)
@@ -366,6 +376,7 @@ struct BarcodeScanEffectView: View {
                 ]
             ),
             labelImageSize: CGSize(width: 400, height: 300),
+            labelImage: nil,
             onComplete: {}
         )
     }

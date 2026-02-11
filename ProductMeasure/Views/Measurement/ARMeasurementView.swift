@@ -164,6 +164,7 @@ struct ARMeasurementView: View {
                     BarcodeScanEffectView(
                         labelData: labelData,
                         labelImageSize: viewModel.correctedLabelImageSize,
+                        labelImage: viewModel.correctedLabelImage,
                         onComplete: { viewModel.barcodeScanEffectCompleted() }
                     )
                     .ignoresSafeArea()
@@ -785,6 +786,7 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var showBarcodeScanEffect = false
     @Published var currentLabelData: LabelData?
     @Published var correctedLabelImageSize: CGSize = .zero
+    @Published var correctedLabelImage: UIImage?
     @Published var labelLineRevealed: [Bool] = []
     @Published var labelReadingComplete = false
     var pendingLabelData: LabelData?
@@ -1911,9 +1913,11 @@ class ARMeasurementViewModel: ObservableObject {
             liftAnim.animate(cameraTransform: cameraTransform) { [weak self] in
                 guard let self = self else { return }
 
-                // Lift complete - start barcode scan effect
+                // Lift complete - hide 3D, show 2D image, start barcode scan effect
                 self.currentLabelData = result.labelData
                 self.correctedLabelImageSize = result.correctedImage.size
+                self.correctedLabelImage = result.correctedImage
+                self.labelLiftAnimation?.setVisible(false)
                 self.isProcessing = false
                 self.showBarcodeScanEffect = true
             }
@@ -1926,6 +1930,8 @@ class ARMeasurementViewModel: ObservableObject {
 
     func barcodeScanEffectCompleted() {
         showBarcodeScanEffect = false
+        correctedLabelImage = nil
+        labelLiftAnimation?.setVisible(true)
 
         // Show result overlay
         let fields = currentLabelData?.displayFields ?? []
@@ -1964,6 +1970,7 @@ class ARMeasurementViewModel: ObservableObject {
 
     func dismissLabelResult() {
         showLabelResult = false
+        correctedLabelImage = nil
 
         // Store label data for next measurement
         pendingLabelData = currentLabelData
@@ -2015,6 +2022,7 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Reset all label state
         currentLabelData = nil
+        correctedLabelImage = nil
         correctedLabelImageSize = .zero
         labelLineRevealed = []
         labelReadingComplete = false

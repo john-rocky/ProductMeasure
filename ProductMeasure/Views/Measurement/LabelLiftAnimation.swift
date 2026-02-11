@@ -212,6 +212,13 @@ class LabelLiftAnimation {
         }
     }
 
+    // MARK: - Visibility
+
+    /// Hide or show the 3D entity (used for seamless 3D→2D handoff)
+    func setVisible(_ visible: Bool) {
+        entity.isEnabled = visible
+    }
+
     // MARK: - Animation
 
     /// Animate: scan (0.5s) → reveal at surface + fly to camera (2.0s)
