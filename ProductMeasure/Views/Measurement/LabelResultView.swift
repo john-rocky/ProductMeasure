@@ -29,19 +29,55 @@ struct LabelResultView: View {
 
             // Field lines
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 0) {
                     let fields = labelData.displayFields
+                    let primaryFields = labelData.primaryDisplayFields
+                    let secondaryFields = labelData.secondaryDisplayFields
+                    let primaryCount = primaryFields.count
 
-                    ForEach(0..<fields.count, id: \.self) { index in
-                        if index < lineRevealed.count, lineRevealed[index] {
-                            fieldLine(
-                                icon: fields[index].icon,
-                                label: fields[index].label,
-                                value: fields[index].value,
-                                isLast: index == revealedCount - 1
-                            )
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    // Primary section (large)
+                    if !primaryFields.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(0..<primaryCount, id: \.self) { index in
+                                if index < lineRevealed.count, lineRevealed[index] {
+                                    primaryFieldLine(
+                                        icon: fields[index].icon,
+                                        label: fields[index].label,
+                                        value: fields[index].value,
+                                        isLast: index == revealedCount - 1
+                                    )
+                                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                                }
+                            }
                         }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                    }
+
+                    // Separator between primary and secondary
+                    if !primaryFields.isEmpty, !secondaryFields.isEmpty {
+                        Divider()
+                            .background(PMTheme.labelBlue.opacity(0.3))
+                    }
+
+                    // Secondary section (current size)
+                    if !secondaryFields.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(0..<secondaryFields.count, id: \.self) { i in
+                                let globalIndex = primaryCount + i
+                                if globalIndex < lineRevealed.count, lineRevealed[globalIndex] {
+                                    fieldLine(
+                                        icon: fields[globalIndex].icon,
+                                        label: fields[globalIndex].label,
+                                        value: fields[globalIndex].value,
+                                        isLast: globalIndex == revealedCount - 1
+                                    )
+                                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
                     }
 
                     // Raw text fallback if no structured OCR fields matched
@@ -51,11 +87,11 @@ struct LabelResultView: View {
                             .font(PMTheme.mono(11))
                             .foregroundColor(PMTheme.textPrimary)
                             .lineLimit(10)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
             }
             .frame(maxHeight: 300)
 
@@ -136,6 +172,38 @@ struct LabelResultView: View {
                 Rectangle()
                     .fill(PMTheme.labelBlue)
                     .frame(width: 6, height: 14)
+                    .opacity(cursorVisible ? 1.0 : 0.0)
+            }
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Primary Field Line (large)
+
+    @ViewBuilder
+    private func primaryFieldLine(icon: String, label: String, value: String, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(PMTheme.labelBlue)
+                .frame(width: 18)
+
+            Text(label)
+                .font(PMTheme.mono(11, weight: .semibold))
+                .foregroundColor(PMTheme.textDimmed)
+                .frame(width: 75, alignment: .leading)
+
+            Text(value)
+                .font(PMTheme.mono(18, weight: .bold))
+                .foregroundColor(PMTheme.textPrimary)
+                .lineLimit(2)
+
+            // Blinking cursor on the last revealed line
+            if isLast && !isComplete {
+                Rectangle()
+                    .fill(PMTheme.labelBlue)
+                    .frame(width: 6, height: 18)
                     .opacity(cursorVisible ? 1.0 : 0.0)
             }
 

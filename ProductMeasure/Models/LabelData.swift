@@ -152,6 +152,24 @@ struct LabelData: Codable {
         self.textLineBounds = textLineBounds
     }
 
+    /// Labels considered primary (shown large at top)
+    private static let primaryLabels: Set<String> = ["CTN ID", "BARCODE", "DEST"]
+
+    /// Whether a label is primary (matches exact name or "BARCODE N" pattern)
+    private static func isPrimary(_ label: String) -> Bool {
+        primaryLabels.contains(label) || label.hasPrefix("BARCODE ")
+    }
+
+    /// Primary display fields (CTN ID, BARCODE(s), DEST)
+    var primaryDisplayFields: [(icon: String, label: String, value: String)] {
+        displayFields.filter { Self.isPrimary($0.label) }
+    }
+
+    /// Secondary display fields (everything except primary)
+    var secondaryDisplayFields: [(icon: String, label: String, value: String)] {
+        displayFields.filter { !Self.isPrimary($0.label) }
+    }
+
     /// Returns non-nil fields as display pairs (label, value)
     var displayFields: [(icon: String, label: String, value: String)] {
         var fields: [(String, String, String)] = []
