@@ -256,9 +256,7 @@ struct ARMeasurementView: View {
                             pointCount: result.quality.pointCount,
                             labelData: viewModel.pendingLabelData,
                             lineRevealed: viewModel.consoleLineRevealed,
-                            isComplete: viewModel.consoleReadingComplete,
-                            onExportCSV: { viewModel.showCSVExport() },
-                            onClose: { viewModel.closeWorkflow() }
+                            isComplete: viewModel.consoleReadingComplete
                         )
                         .padding(.horizontal, 20)
                         .padding(.top, 16)

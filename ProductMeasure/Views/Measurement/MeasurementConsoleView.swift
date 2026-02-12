@@ -18,8 +18,6 @@ struct MeasurementConsoleView: View {
     let labelData: LabelData?
     let lineRevealed: [Bool]
     let isComplete: Bool
-    let onExportCSV: () -> Void
-    let onClose: () -> Void
 
     @State private var scanlineOffset: CGFloat = 0
     @State private var cursorVisible = true
@@ -55,12 +53,6 @@ struct MeasurementConsoleView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            headerView
-
-            Divider()
-                .background(PMTheme.green.opacity(0.3))
-
             // Content lines
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -95,14 +87,8 @@ struct MeasurementConsoleView: View {
             if !isComplete {
                 scanlineView
             }
-
-            // Buttons
-            if isComplete {
-                buttonRow
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
         }
-        .background(Color.clear)
+        .background(Color.black.opacity(0.70))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
@@ -118,28 +104,6 @@ struct MeasurementConsoleView: View {
                 cursorVisible.toggle()
             }
         }
-    }
-
-    // MARK: - Header
-
-    private var headerView: some View {
-        HStack {
-            Image(systemName: "terminal")
-                .foregroundColor(PMTheme.green)
-
-            Text("MEASUREMENT CONSOLE")
-                .font(PMTheme.mono(PMTheme.consoleHeaderFontSize, weight: .bold))
-                .foregroundColor(PMTheme.green)
-
-            Spacer()
-
-            Text(isComplete ? "COMPLETE" : "LOADING...")
-                .font(PMTheme.mono(10, weight: .medium))
-                .foregroundColor(isComplete ? PMTheme.green : PMTheme.green.opacity(0.7))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color.clear)
     }
 
     // MARK: - Section Header
@@ -218,35 +182,6 @@ struct MeasurementConsoleView: View {
         .clipped()
     }
 
-    // MARK: - Buttons
-
-    private var buttonRow: some View {
-        HStack(spacing: 12) {
-            Button(action: onClose) {
-                Text("CLOSE")
-                    .font(PMTheme.mono(12, weight: .bold))
-                    .foregroundColor(PMTheme.green)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .overlay(Capsule().stroke(PMTheme.green.opacity(0.5), lineWidth: 1))
-            }
-
-            Button(action: onExportCSV) {
-                HStack(spacing: 4) {
-                    Image(systemName: "doc.text")
-                        .font(.system(size: 11))
-                    Text("EXPORT CSV")
-                        .font(PMTheme.mono(12, weight: .bold))
-                }
-                .foregroundColor(PMTheme.green)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .overlay(Capsule().stroke(PMTheme.green, lineWidth: 1))
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
 }
 
 // MARK: - Supporting Types
