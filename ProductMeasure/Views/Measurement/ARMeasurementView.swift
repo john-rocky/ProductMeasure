@@ -2231,7 +2231,10 @@ class ARMeasurementViewModel: ObservableObject {
                 length: result.length,
                 width: result.width,
                 unit: unit,
-                boxId: nextBoxId
+                boxId: nextBoxId,
+                qualityLabel: result.quality.overallQuality.rawValue.capitalized,
+                pointCount: result.quality.pointCount,
+                labelData: pendingLabelData
             )
         }
 

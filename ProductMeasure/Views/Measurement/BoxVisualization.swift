@@ -44,6 +44,11 @@ class BoxVisualization {
     private var storedWidth: Float = 0
     private var storedUnit: MeasurementUnit = .centimeters
 
+    // Stored console data for billboard
+    private var storedQualityLabel: String = ""
+    private var storedPointCount: Int = 0
+    private var storedLabelData: LabelData?
+
     private(set) var boundingBox: BoundingBox3D
 
     /// Floor Y position (default 0)
@@ -85,7 +90,9 @@ class BoxVisualization {
     // Dimension label styling
     private let billboardIdFontSize: CGFloat = 0.014
     private let billboardBodyFontSize: CGFloat = 0.010
+    private let billboardSectionFontSize: CGFloat = 0.007
     private let dimensionLabelTextColor: UIColor = PMTheme.uiBillboardText
+    private let dimensionLabelDimColor: UIColor = UIColor(white: 1.0, alpha: 0.50)
     private let dimensionLabelBackgroundColor: UIColor = PMTheme.uiBillboardBg
     private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
     private let billboardTopBorderColor: UIColor = PMTheme.uiBillboardTopBorder
@@ -116,12 +123,16 @@ class BoxVisualization {
     }
 
     /// Set dimensions and create/update labels on the wireframe
-    func setDimensions(height: Float, length: Float, width: Float, unit: MeasurementUnit, boxId: Int = 0) {
+    func setDimensions(height: Float, length: Float, width: Float, unit: MeasurementUnit, boxId: Int = 0,
+                       qualityLabel: String = "", pointCount: Int = 0, labelData: LabelData? = nil) {
         self.boxId = boxId
         storedHeight = height
         storedLength = length
         storedWidth = width
         storedUnit = unit
+        storedQualityLabel = qualityLabel
+        storedPointCount = pointCount
+        storedLabelData = labelData
         createDimensionLabels()
     }
 
@@ -708,63 +719,126 @@ class BoxVisualization {
         let accentBarWidth: Float = 0.002
         let padding: Float = 0.007
         let innerPadding: Float = 0.004
+        let lineGap: Float = 0.002
+        let sectionGap: Float = 0.003
 
-        // -- Header: Box ID --
-        let idText = String(format: "#%03d", boxId)
-        let idMesh = MeshResource.generateText(
-            idText,
-            extrusionDepth: 0.001,
-            font: .monospacedDigitSystemFont(ofSize: billboardIdFontSize, weight: .bold),
-            containerFrame: .zero,
-            alignment: .left,
-            lineBreakMode: .byTruncatingTail
-        )
-        let idMaterial = UnlitMaterial(color: billboardAccentColor)
-        let idEntity = ModelEntity(mesh: idMesh, materials: [idMaterial])
-        let idWidth = idMesh.bounds.extents.x
-        let idHeight = idMesh.bounds.extents.y
+        // -- Line style enum --
+        enum LineStyle {
+            case idHeader
+            case sectionHeader
+            case dataLine
+        }
 
-        // -- Body lines (vertical layout) --
+        // -- Build all billboard lines --
+        var lineDescriptors: [(text: String, style: LineStyle)] = []
+
+        // Box ID
+        lineDescriptors.append((String(format: "#%03d", boxId), .idHeader))
+
+        // DIMENSIONS section
+        lineDescriptors.append(("── DIMENSIONS ──", .sectionHeader))
+
         let wVal = formatDimensionValue(storedWidth)
         let hVal = formatDimensionValue(storedHeight)
         let lVal = formatDimensionValue(storedLength)
         let unit = storedUnit.rawValue
 
-        let bodyLines = [
-            "W  \(wVal) \(unit)",
-            "H  \(hVal) \(unit)",
-            "L  \(lVal) \(unit)"
-        ]
+        lineDescriptors.append(("WIDTH   \(wVal) \(unit)", .dataLine))
+        lineDescriptors.append(("HEIGHT  \(hVal) \(unit)", .dataLine))
+        lineDescriptors.append(("LENGTH  \(lVal) \(unit)", .dataLine))
 
-        let bodyMaterial = UnlitMaterial(color: dimensionLabelTextColor)
-        var bodyEntities: [ModelEntity] = []
-        var maxBodyWidth: Float = 0
-        var bodyLineHeight: Float = 0
+        // Volume (computed from bounding box)
+        let volValue = storedUnit.convertVolume(cubicMeters: boundingBox.volume)
+        let volStr: String
+        if volValue >= 1000 {
+            volStr = String(format: "%.0f %@", volValue, storedUnit.volumeUnit())
+        } else if volValue >= 100 {
+            volStr = String(format: "%.1f %@", volValue, storedUnit.volumeUnit())
+        } else {
+            volStr = String(format: "%.2f %@", volValue, storedUnit.volumeUnit())
+        }
+        lineDescriptors.append(("VOLUME  \(volStr)", .dataLine))
 
-        for line in bodyLines {
+        // Volumetric weight
+        let volWt = storedUnit.formatVolumetricWeight(cubicMeters: boundingBox.volume)
+        lineDescriptors.append(("VOL.WT  \(volWt)", .dataLine))
+
+        // Size class
+        let sizeClass = SizeClass.classify(volumeCubicMeters: boundingBox.volume).rawValue
+        lineDescriptors.append(("SIZE    \(sizeClass)", .dataLine))
+
+        // LABEL DATA section (if present)
+        if let labelData = storedLabelData, !labelData.displayFields.isEmpty {
+            lineDescriptors.append(("── LABEL DATA ──", .sectionHeader))
+            for field in labelData.displayFields {
+                let paddedLabel = field.label.padding(toLength: 8, withPad: " ", startingAt: 0)
+                let value = field.value.count > 24 ? String(field.value.prefix(24)) : field.value
+                lineDescriptors.append(("\(paddedLabel)\(value)", .dataLine))
+            }
+        }
+
+        // QUALITY section
+        if !storedQualityLabel.isEmpty {
+            lineDescriptors.append(("── QUALITY ──", .sectionHeader))
+            lineDescriptors.append(("QUALITY \(storedQualityLabel)", .dataLine))
+            lineDescriptors.append(("POINTS  \(storedPointCount)", .dataLine))
+        }
+
+        // -- Create text entities --
+        var textItems: [(entity: ModelEntity, height: Float, style: LineStyle)] = []
+        var maxTextWidth: Float = 0
+
+        for desc in lineDescriptors {
+            let fontSize: CGFloat
+            let fontWeight: UIFont.Weight
+            let color: UIColor
+
+            switch desc.style {
+            case .idHeader:
+                fontSize = billboardIdFontSize
+                fontWeight = .bold
+                color = billboardAccentColor
+            case .sectionHeader:
+                fontSize = billboardSectionFontSize
+                fontWeight = .bold
+                color = billboardAccentColor.withAlphaComponent(0.6)
+            case .dataLine:
+                fontSize = billboardBodyFontSize
+                fontWeight = .medium
+                color = dimensionLabelTextColor
+            }
+
             let mesh = MeshResource.generateText(
-                line,
+                desc.text,
                 extrusionDepth: 0.001,
-                font: .monospacedDigitSystemFont(ofSize: billboardBodyFontSize, weight: .medium),
+                font: .monospacedSystemFont(ofSize: fontSize, weight: fontWeight),
                 containerFrame: .zero,
                 alignment: .left,
                 lineBreakMode: .byTruncatingTail
             )
-            let entity = ModelEntity(mesh: mesh, materials: [bodyMaterial])
-            bodyEntities.append(entity)
-            maxBodyWidth = max(maxBodyWidth, mesh.bounds.extents.x)
-            bodyLineHeight = mesh.bounds.extents.y
+            let material = UnlitMaterial(color: color)
+            let entity = ModelEntity(mesh: mesh, materials: [material])
+            textItems.append((entity, mesh.bounds.extents.y, desc.style))
+            maxTextWidth = max(maxTextWidth, mesh.bounds.extents.x)
         }
 
-        // -- Layout --
-        let lineGap: Float = 0.003
-        let gap: Float = 0.004
-        let bodyTotalHeight = bodyLineHeight * Float(bodyLines.count) + lineGap * Float(bodyLines.count - 1)
-        let contentWidth = max(idWidth, maxBodyWidth)
-        let contentHeight = idHeight + gap + bodyTotalHeight
+        // -- Calculate total content height --
+        var totalContentHeight: Float = 0
+        for (i, item) in textItems.enumerated() {
+            totalContentHeight += item.height
+            if i < textItems.count - 1 {
+                totalContentHeight += lineGap
+                if textItems[i + 1].style == .sectionHeader {
+                    totalContentHeight += sectionGap
+                }
+            }
+        }
+
+        // -- Layout dimensions --
+        let contentWidth = maxTextWidth
         let totalWidth = accentBarWidth + innerPadding + contentWidth + padding * 2
-        let totalHeight = contentHeight + padding * 2
-        let cornerRadius = min(totalHeight, totalWidth) * 0.12
+        let totalHeight = totalContentHeight + padding * 2
+        let cornerRadius = min(totalHeight, totalWidth) * 0.08
 
         // -- Background (dark glass) --
         let backgroundMesh = MeshResource.generateBox(
@@ -776,7 +850,7 @@ class BoxVisualization {
         let backgroundEntity = ModelEntity(mesh: backgroundMesh, materials: [backgroundMaterial])
 
         // -- Accent bar (left edge stripe) --
-        let accentHeight = contentHeight + padding
+        let accentHeight = totalContentHeight + padding
         let accentMesh = MeshResource.generateBox(
             size: [accentBarWidth, accentHeight, 0.0015],
             cornerRadius: accentBarWidth * 0.4
@@ -784,7 +858,7 @@ class BoxVisualization {
         let accentMaterial = UnlitMaterial(color: billboardAccentColor)
         let accentEntity = ModelEntity(mesh: accentMesh, materials: [accentMaterial])
 
-        // -- Top border line (thin cyan line at top edge) --
+        // -- Top border line --
         let topBorderMesh = MeshResource.generateBox(
             size: [totalWidth * 0.9, 0.0005, 0.0012]
         )
@@ -800,20 +874,25 @@ class BoxVisualization {
         backgroundEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.001)
         accentEntity.position = SIMD3<Float>(accentX, totalHeight / 2, 0.0)
         topBorderEntity.position = SIMD3<Float>(0, totalHeight - 0.0003, 0.0005)
-        idEntity.position = SIMD3<Float>(textLeftX, padding + bodyTotalHeight + gap, 0)
 
-        // Position body lines from top to bottom
-        for (i, entity) in bodyEntities.enumerated() {
-            let lineY = padding + bodyTotalHeight - bodyLineHeight - Float(i) * (bodyLineHeight + lineGap)
-            entity.position = SIMD3<Float>(textLeftX, lineY, 0)
+        // Position text lines top-to-bottom
+        var cursor = padding + totalContentHeight
+        for (i, item) in textItems.enumerated() {
+            cursor -= item.height
+            item.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+            if i < textItems.count - 1 {
+                cursor -= lineGap
+                if textItems[i + 1].style == .sectionHeader {
+                    cursor -= sectionGap
+                }
+            }
         }
 
         containerEntity.addChild(backgroundEntity)
         containerEntity.addChild(accentEntity)
         containerEntity.addChild(topBorderEntity)
-        containerEntity.addChild(idEntity)
-        for entity in bodyEntities {
-            containerEntity.addChild(entity)
+        for item in textItems {
+            containerEntity.addChild(item.entity)
         }
 
         return containerEntity
