@@ -93,7 +93,7 @@ struct LabelResultView: View {
                     }
                 }
             }
-            .frame(maxHeight: 300)
+            .frame(maxHeight: 240)
 
             // Scanline effect
             if !isComplete {
@@ -107,10 +107,15 @@ struct LabelResultView: View {
             }
         }
         .frame(width: cardWidth)
-        .background(PMTheme.surfaceDark.opacity(0.92))
+        .background(.ultraThinMaterial)
+        .background(PMTheme.surfaceDark.opacity(0.45))
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.5), radius: 12, x: 0, y: 4)
-        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(PMTheme.labelBlue.opacity(0.3), lineWidth: 0.5)
+        )
+        .shadow(color: PMTheme.labelBlue.opacity(0.15), radius: 12, x: 0, y: 0)
+        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         .onAppear {
             withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                 scanlineOffset = 1.0
@@ -144,7 +149,7 @@ struct LabelResultView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(PMTheme.surfaceDark)
+        .background(PMTheme.surfaceDark.opacity(0.3))
     }
 
     // MARK: - Field Line

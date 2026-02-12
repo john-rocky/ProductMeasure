@@ -196,14 +196,10 @@ struct ARMeasurementView: View {
                     .transition(.opacity)
                 }
 
-                // Label result overlay
+                // Label result overlay (bottom-anchored)
                 if viewModel.showLabelResult, let labelData = viewModel.currentLabelData {
-                    ZStack {
-                        // Dim background
-                        Color.black.opacity(0.3)
-                            .ignoresSafeArea()
-                            .allowsHitTesting(false)
-
+                    VStack {
+                        Spacer()
                         LabelResultView(
                             labelData: labelData,
                             lineRevealed: viewModel.labelLineRevealed,
@@ -219,8 +215,10 @@ struct ARMeasurementView: View {
                             },
                             dismissButtonLabel: viewModel.isWorkflowActive ? "CONTINUE" : "DONE"
                         )
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 16)
                     }
-                    .transition(.opacity)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 // Dimension callout overlay
@@ -241,25 +239,30 @@ struct ARMeasurementView: View {
                     .allowsHitTesting(false)
                 }
 
-                // Measurement console overlay
+                // Measurement console overlay (bottom-anchored)
                 if viewModel.showConsole, let result = viewModel.currentMeasurement {
                     let unit = measurementUnit
-                    MeasurementConsoleView(
-                        width: formatValue(result.width, unit: unit),
-                        height: formatValue(result.height, unit: unit),
-                        length: formatValue(result.length, unit: unit),
-                        volume: String(format: "%.2f %@", unit.convertVolume(cubicMeters: result.boundingBox.volume), unit.volumeUnit()),
-                        volumetricWeight: unit.formatVolumetricWeight(cubicMeters: result.boundingBox.volume),
-                        sizeClass: SizeClass.classify(volumeCubicMeters: result.boundingBox.volume).rawValue,
-                        qualityLabel: result.quality.overallQuality.rawValue.capitalized,
-                        pointCount: result.quality.pointCount,
-                        labelData: viewModel.pendingLabelData,
-                        lineRevealed: viewModel.consoleLineRevealed,
-                        isComplete: viewModel.consoleReadingComplete,
-                        onExportCSV: { viewModel.showCSVExport() },
-                        onClose: { viewModel.closeWorkflow() }
-                    )
-                    .transition(.opacity)
+                    VStack {
+                        Spacer()
+                        MeasurementConsoleView(
+                            width: formatValue(result.width, unit: unit),
+                            height: formatValue(result.height, unit: unit),
+                            length: formatValue(result.length, unit: unit),
+                            volume: String(format: "%.2f %@", unit.convertVolume(cubicMeters: result.boundingBox.volume), unit.volumeUnit()),
+                            volumetricWeight: unit.formatVolumetricWeight(cubicMeters: result.boundingBox.volume),
+                            sizeClass: SizeClass.classify(volumeCubicMeters: result.boundingBox.volume).rawValue,
+                            qualityLabel: result.quality.overallQuality.rawValue.capitalized,
+                            pointCount: result.quality.pointCount,
+                            labelData: viewModel.pendingLabelData,
+                            lineRevealed: viewModel.consoleLineRevealed,
+                            isComplete: viewModel.consoleReadingComplete,
+                            onExportCSV: { viewModel.showCSVExport() },
+                            onClose: { viewModel.closeWorkflow() }
+                        )
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 16)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 // CSV display overlay

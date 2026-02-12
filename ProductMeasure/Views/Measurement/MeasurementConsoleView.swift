@@ -54,68 +54,63 @@ struct MeasurementConsoleView: View {
     }
 
     var body: some View {
-        ZStack {
-            // Dim background
-            Color.black.opacity(0.7)
-                .ignoresSafeArea()
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            headerView
 
-            VStack(alignment: .leading, spacing: 0) {
-                // Header
-                headerView
+            Divider()
+                .background(PMTheme.cyan.opacity(0.3))
 
-                Divider()
-                    .background(PMTheme.cyan.opacity(0.3))
+            // Content lines
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    let lines = allLines
 
-                // Content lines
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        let lines = allLines
+                    ForEach(0..<lines.count, id: \.self) { index in
+                        let line = lines[index]
 
-                        ForEach(0..<lines.count, id: \.self) { index in
-                            let line = lines[index]
-
-                            if index < lineRevealed.count, lineRevealed[index] {
-                                // Section header
-                                if line.section != (index > 0 ? lines[index - 1].section : nil) {
-                                    sectionHeader(line.section)
-                                        .transition(.opacity)
-                                }
-
-                                consoleLine(
-                                    icon: line.icon,
-                                    label: line.label,
-                                    value: line.value,
-                                    isLast: index == revealedCount - 1
-                                )
-                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                        if index < lineRevealed.count, lineRevealed[index] {
+                            // Section header
+                            if line.section != (index > 0 ? lines[index - 1].section : nil) {
+                                sectionHeader(line.section)
+                                    .transition(.opacity)
                             }
+
+                            consoleLine(
+                                icon: line.icon,
+                                label: line.label,
+                                value: line.value,
+                                isLast: index == revealedCount - 1
+                            )
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
                 }
-                .frame(maxHeight: 400)
-
-                // Scanline
-                if !isComplete {
-                    scanlineView
-                }
-
-                // Buttons
-                if isComplete {
-                    buttonRow
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
             }
-            .frame(width: 340)
-            .background(PMTheme.surfaceDark.opacity(0.95))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.5), radius: 12, x: 0, y: 4)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(PMTheme.cyan.opacity(0.3), lineWidth: 0.5)
-            )
+            .frame(maxHeight: 300)
+
+            // Scanline
+            if !isComplete {
+                scanlineView
+            }
+
+            // Buttons
+            if isComplete {
+                buttonRow
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
+        .background(.ultraThinMaterial)
+        .background(PMTheme.surfaceDark.opacity(0.45))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(PMTheme.cyan.opacity(0.3), lineWidth: 0.5)
+        )
+        .shadow(color: PMTheme.cyan.opacity(0.15), radius: 12, x: 0, y: 0)
+        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         .onAppear {
             withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                 scanlineOffset = 1.0
@@ -145,7 +140,7 @@ struct MeasurementConsoleView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(PMTheme.surfaceDark)
+        .background(PMTheme.surfaceDark.opacity(0.3))
     }
 
     // MARK: - Section Header
