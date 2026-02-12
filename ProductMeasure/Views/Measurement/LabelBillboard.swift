@@ -63,6 +63,14 @@ class LabelBillboard {
     private let bodyFontSize: CGFloat = 0.010
     private let sectionFontSize: CGFloat = 0.007
 
+    // Labels to emphasize as check items (rendered with accent color + bold weight)
+    private static let highlightLabels: Set<String> = ["CTN ID", "BARCODE", "DEST", "SIZE"]
+
+    /// Returns true if a label (or BARCODE N variant) should be highlighted
+    private static func isHighlightLabel(_ label: String) -> Bool {
+        highlightLabels.contains(label) || label.hasPrefix("BARCODE ")
+    }
+
     init(labelData: LabelData, worldPosition: SIMD3<Float>, surfaceNormal: SIMD3<Float>) {
         self.labelData = labelData
         self.entity = Entity()
@@ -107,6 +115,10 @@ class LabelBillboard {
         struct DataLine { let label: String; let value: String }
         struct Section { let title: String; let lines: [DataLine] }
 
+        // Highlight colors for check items (brighter accent)
+        let highlightLabelColor = accentColor.withAlphaComponent(0.85)
+        let highlightValueColor = accentColor
+
         let primaryFields = labelData.primaryDisplayFields
         let secondaryFields = labelData.secondaryDisplayFields
 
@@ -146,8 +158,12 @@ class LabelBillboard {
             let fontSize = section.title == "PRIMARY" ? primaryFontSize : bodyFontSize
             var lines: [(label: (entity: ModelEntity, size: SIMD3<Float>), value: (entity: ModelEntity, size: SIMD3<Float>))] = []
             for dl in section.lines {
-                let l = textMesh(dl.label, size: fontSize, weight: .semibold, color: labelColor)
-                let v = textMesh(dl.value, size: fontSize, weight: .medium, color: valueColor)
+                let isHighlight = Self.isHighlightLabel(dl.label)
+                let lColor = isHighlight ? highlightLabelColor : labelColor
+                let vColor = isHighlight ? highlightValueColor : valueColor
+                let vWeight: UIFont.Weight = isHighlight ? .bold : .medium
+                let l = textMesh(dl.label, size: fontSize, weight: .semibold, color: lColor)
+                let v = textMesh(dl.value, size: fontSize, weight: vWeight, color: vColor)
                 maxLabelWidth = max(maxLabelWidth, l.size.x)
                 lines.append((l, v))
             }
@@ -425,6 +441,10 @@ class LabelBillboard {
         let dimSectionTextColor = dimAccent.withAlphaComponent(0.70)
         let dimSeparatorColor = dimAccent.withAlphaComponent(0.25)
 
+        // Highlight colors for check items (brighter accent)
+        let dimHighlightLabelColor = dimAccent.withAlphaComponent(0.85)
+        let dimHighlightValueColor = dimAccent
+
         // Text mesh helper
         func textMesh(_ text: String, size: CGFloat, weight: UIFont.Weight, color: UIColor) -> (entity: ModelEntity, size: SIMD3<Float>) {
             let mesh = MeshResource.generateText(
@@ -474,8 +494,12 @@ class LabelBillboard {
         var dimMaxLabelWidth: Float = 0
 
         for dl in dimLines {
-            let l = textMesh(dl.label, size: primaryFontSize, weight: .semibold, color: dimLabelColor)
-            let v = textMesh(dl.value, size: primaryFontSize, weight: .medium, color: dimValueColor)
+            let isHighlight = Self.isHighlightLabel(dl.label)
+            let lColor = isHighlight ? dimHighlightLabelColor : dimLabelColor
+            let vColor = isHighlight ? dimHighlightValueColor : dimValueColor
+            let vWeight: UIFont.Weight = isHighlight ? .bold : .medium
+            let l = textMesh(dl.label, size: primaryFontSize, weight: .semibold, color: lColor)
+            let v = textMesh(dl.value, size: primaryFontSize, weight: vWeight, color: vColor)
             dimMaxLabelWidth = max(dimMaxLabelWidth, l.size.x)
             dimLinePairs.append((l, v))
         }
