@@ -54,47 +54,49 @@ struct ARMeasurementView: View {
                 // Overlay UI (on top)
                 GeometryReader { geometry in
                     VStack {
-                        // Top bar with status and clear button
-                        HStack {
-                            StatusBar(
-                                trackingMessage: viewModel.trackingMessage,
-                                isProcessing: viewModel.isProcessing
-                            )
+                        // Top bar with status and clear button (hidden when console is showing)
+                        if !viewModel.showConsole {
+                            HStack {
+                                StatusBar(
+                                    trackingMessage: viewModel.trackingMessage,
+                                    isProcessing: viewModel.isProcessing
+                                )
 
-                            Spacer()
+                                Spacer()
 
-                            // Clear all button (visible when completed boxes exist)
-                            if viewModel.completedBoxCount > 0 && !viewModel.isWorkflowActive {
-                                Button(action: {
-                                    viewModel.clearAllMeasurements()
-                                }) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "trash")
-                                        Text("\(viewModel.completedBoxCount)")
-                                            .font(PMTheme.mono(11))
+                                // Clear all button (visible when completed boxes exist)
+                                if viewModel.completedBoxCount > 0 && !viewModel.isWorkflowActive {
+                                    Button(action: {
+                                        viewModel.clearAllMeasurements()
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "trash")
+                                            Text("\(viewModel.completedBoxCount)")
+                                                .font(PMTheme.mono(11))
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(PMTheme.red.opacity(0.8))
+                                        .clipShape(Capsule())
                                     }
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(PMTheme.red.opacity(0.8))
-                                    .clipShape(Capsule())
+                                }
+
+                                // Selection mode toggle (hidden during workflow)
+                                if !viewModel.isWorkflowActive {
+                                    SelectionModeToggle(selectionMode: $selectionMode)
                                 }
                             }
 
-                            // Selection mode toggle (hidden during workflow)
-                            if !viewModel.isWorkflowActive {
-                                SelectionModeToggle(selectionMode: $selectionMode)
+                            // Workflow step indicator
+                            if viewModel.isWorkflowActive {
+                                WorkflowStepIndicator(
+                                    currentStep: viewModel.workflowStep,
+                                    onSkipLabel: viewModel.workflowStep == .awaitingLabelScan ? {
+                                        viewModel.skipLabelScan()
+                                    } : nil
+                                )
                             }
-                        }
-
-                        // Workflow step indicator
-                        if viewModel.isWorkflowActive {
-                            WorkflowStepIndicator(
-                                currentStep: viewModel.workflowStep,
-                                onSkipLabel: viewModel.workflowStep == .awaitingLabelScan ? {
-                                    viewModel.skipLabelScan()
-                                } : nil
-                            )
                         }
 
                         Spacer()
@@ -239,11 +241,10 @@ struct ARMeasurementView: View {
                     .allowsHitTesting(false)
                 }
 
-                // Measurement console overlay (bottom-anchored)
+                // Measurement console overlay (top-anchored)
                 if viewModel.showConsole, let result = viewModel.currentMeasurement {
                     let unit = measurementUnit
                     VStack {
-                        Spacer()
                         MeasurementConsoleView(
                             width: formatValue(result.width, unit: unit),
                             height: formatValue(result.height, unit: unit),
@@ -260,9 +261,10 @@ struct ARMeasurementView: View {
                             onClose: { viewModel.closeWorkflow() }
                         )
                         .padding(.horizontal, 20)
-                        .padding(.bottom, 16)
+                        .padding(.top, 16)
+                        Spacer()
                     }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
                 // CSV display overlay

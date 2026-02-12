@@ -59,7 +59,7 @@ struct MeasurementConsoleView: View {
             headerView
 
             Divider()
-                .background(PMTheme.cyan.opacity(0.3))
+                .background(PMTheme.green.opacity(0.3))
 
             // Content lines
             ScrollView {
@@ -102,14 +102,13 @@ struct MeasurementConsoleView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        .background(.ultraThinMaterial)
-        .background(PMTheme.surfaceDark.opacity(0.45))
+        .background(Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(PMTheme.cyan.opacity(0.3), lineWidth: 0.5)
+                .strokeBorder(PMTheme.green.opacity(0.3), lineWidth: 0.5)
         )
-        .shadow(color: PMTheme.cyan.opacity(0.15), radius: 12, x: 0, y: 0)
+        .shadow(color: PMTheme.green.opacity(0.15), radius: 12, x: 0, y: 0)
         .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         .onAppear {
             withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
@@ -126,21 +125,21 @@ struct MeasurementConsoleView: View {
     private var headerView: some View {
         HStack {
             Image(systemName: "terminal")
-                .foregroundColor(PMTheme.cyan)
+                .foregroundColor(PMTheme.green)
 
             Text("MEASUREMENT CONSOLE")
                 .font(PMTheme.mono(PMTheme.consoleHeaderFontSize, weight: .bold))
-                .foregroundColor(PMTheme.cyan)
+                .foregroundColor(PMTheme.green)
 
             Spacer()
 
             Text(isComplete ? "COMPLETE" : "LOADING...")
                 .font(PMTheme.mono(10, weight: .medium))
-                .foregroundColor(isComplete ? PMTheme.green : PMTheme.cyan.opacity(0.7))
+                .foregroundColor(isComplete ? PMTheme.green : PMTheme.green.opacity(0.7))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(PMTheme.surfaceDark.opacity(0.3))
+        .background(Color.clear)
     }
 
     // MARK: - Section Header
@@ -149,15 +148,15 @@ struct MeasurementConsoleView: View {
     private func sectionHeader(_ section: ConsoleSection) -> some View {
         HStack(spacing: 6) {
             Rectangle()
-                .fill(PMTheme.cyan.opacity(0.3))
+                .fill(PMTheme.green.opacity(0.3))
                 .frame(width: 12, height: 1)
 
             Text(section.title)
                 .font(PMTheme.mono(PMTheme.consoleSectionFontSize, weight: .bold))
-                .foregroundColor(PMTheme.cyan.opacity(0.6))
+                .foregroundColor(PMTheme.green.opacity(0.6))
 
             Rectangle()
-                .fill(PMTheme.cyan.opacity(0.3))
+                .fill(PMTheme.green.opacity(0.3))
                 .frame(height: 1)
         }
         .padding(.top, 8)
@@ -171,22 +170,22 @@ struct MeasurementConsoleView: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 11))
-                .foregroundColor(PMTheme.cyan)
+                .foregroundColor(PMTheme.green)
                 .frame(width: 16)
 
             Text(label)
                 .font(PMTheme.mono(10, weight: .semibold))
-                .foregroundColor(PMTheme.textDimmed)
+                .foregroundColor(PMTheme.green.opacity(0.6))
                 .frame(width: 60, alignment: .leading)
 
             Text(value)
                 .font(PMTheme.mono(PMTheme.consoleFieldFontSize, weight: .medium))
-                .foregroundColor(PMTheme.textPrimary)
+                .foregroundColor(PMTheme.green)
                 .lineLimit(2)
 
             if isLast && !isComplete {
                 Rectangle()
-                    .fill(PMTheme.cyan)
+                    .fill(PMTheme.green)
                     .frame(width: 6, height: 14)
                     .opacity(cursorVisible ? 1.0 : 0.0)
             }
@@ -204,9 +203,9 @@ struct MeasurementConsoleView: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            PMTheme.cyan.opacity(0),
-                            PMTheme.cyan.opacity(0.15),
-                            PMTheme.cyan.opacity(0)
+                            PMTheme.green.opacity(0),
+                            PMTheme.green.opacity(0.15),
+                            PMTheme.green.opacity(0)
                         ],
                         startPoint: .leading,
                         endPoint: .trailing
@@ -226,11 +225,10 @@ struct MeasurementConsoleView: View {
             Button(action: onClose) {
                 Text("CLOSE")
                     .font(PMTheme.mono(12, weight: .bold))
-                    .foregroundColor(PMTheme.textSecondary)
+                    .foregroundColor(PMTheme.green)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .background(PMTheme.surfaceElevated)
-                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(PMTheme.green.opacity(0.5), lineWidth: 1))
             }
 
             Button(action: onExportCSV) {
@@ -240,11 +238,10 @@ struct MeasurementConsoleView: View {
                     Text("EXPORT CSV")
                         .font(PMTheme.mono(12, weight: .bold))
                 }
-                .foregroundColor(.black)
+                .foregroundColor(PMTheme.green)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(PMTheme.cyan)
-                .clipShape(Capsule())
+                .overlay(Capsule().stroke(PMTheme.green, lineWidth: 1))
             }
         }
         .padding(.horizontal, 16)
