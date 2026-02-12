@@ -1337,10 +1337,10 @@ class ARMeasurementViewModel: ObservableObject {
                             // Hide 3D billboard initially
                             self.boxVisualization?.setDimensionBillboardVisible(false)
 
-                            // Compute target screen position — use label billboard if available
+                            // Compute target screen position — use label billboard top if available
                             let billboardWorldPos: SIMD3<Float>
                             if self.showLabelBillboard, let lb = self.labelBillboard {
-                                billboardWorldPos = lb.getWorldPosition()
+                                billboardWorldPos = lb.getTopWorldPosition()
                             } else {
                                 billboardWorldPos = adjustedBox.center + SIMD3<Float>(0, adjustedBox.extents.y + 0.03, 0)
                             }
@@ -1352,19 +1352,8 @@ class ARMeasurementViewModel: ObservableObject {
                                 self.calloutTargetScreenPosition = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
                             }
 
-                            // Animate 2D card toward billboard position
-                            withAnimation(.easeInOut(duration: PMTheme.calloutTransitionDuration)) {
-                                self.calloutTransitionProgress = 1.0
-                            }
-
-                            // Wait for transition to complete
-                            try? await Task.sleep(nanoseconds: UInt64(PMTheme.calloutTransitionDuration * 1_000_000_000))
-
-                            // Phase 7: Complete
-                            self.showDimensionCallout = false
-
+                            // Start label billboard expansion concurrently with callout transition
                             if self.showLabelBillboard, let lb = self.labelBillboard {
-                                // Unified flow: expand label billboard with dimensions, hide box billboard permanently
                                 self.boxVisualization?.setDimensionBillboardVisible(false)
 
                                 let qualityLabel = adjustedResult.quality.overallQuality.rawValue
@@ -1387,8 +1376,21 @@ class ARMeasurementViewModel: ObservableObject {
                                         self.workflowStep = .showingResult
                                     }
                                 }
-                            } else {
-                                // Normal flow: show box billboard
+                            }
+
+                            // Animate 2D card toward billboard position
+                            withAnimation(.easeInOut(duration: PMTheme.calloutTransitionDuration)) {
+                                self.calloutTransitionProgress = 1.0
+                            }
+
+                            // Wait for transition to complete
+                            try? await Task.sleep(nanoseconds: UInt64(PMTheme.calloutTransitionDuration * 1_000_000_000))
+
+                            // Phase 7: Complete
+                            self.showDimensionCallout = false
+
+                            if !self.showLabelBillboard {
+                                // Normal flow (no label): show box billboard
                                 self.boxVisualization?.setDimensionBillboardVisible(true, forceShow: true)
                                 self.animationPhase = .complete
                                 self.isProcessing = false
