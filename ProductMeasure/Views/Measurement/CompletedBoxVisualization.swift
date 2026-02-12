@@ -55,7 +55,7 @@ class CompletedBoxVisualization {
     private let labelTextColor: UIColor = PMTheme.uiBillboardText
     private let labelBackgroundColor: UIColor = PMTheme.uiBillboardBg
     private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
-    private let billboardTopBorderColor: UIColor = PMTheme.uiBillboardTopBorder
+    private let billboardBorderColor: UIColor = PMTheme.uiBillboardAccent
 
     // MARK: - Initialization
 
@@ -236,7 +236,7 @@ class CompletedBoxVisualization {
         let padding: Float = 0.007
         let innerPadding: Float = 0.004
 
-        // -- Header --
+        // -- Header: Box ID --
         let idText = String(format: "#%03d", boxId)
         let idMesh = MeshResource.generateText(
             idText,
@@ -251,33 +251,49 @@ class CompletedBoxVisualization {
         let idWidth = idMesh.bounds.extents.x
         let idHeight = idMesh.bounds.extents.y
 
-        // -- Body --
-        let lVal = formatDimension(length)
+        // -- Body lines (vertical layout, matching 2D callout) --
         let wVal = formatDimension(width)
         let hVal = formatDimension(height)
-        let bodyText = "L: \(lVal)  W: \(wVal)  H: \(hVal) \(unit.rawValue)"
-        let bodyMesh = MeshResource.generateText(
-            bodyText,
-            extrusionDepth: 0.001,
-            font: .monospacedDigitSystemFont(ofSize: billboardBodyFontSize, weight: .medium),
-            containerFrame: .zero,
-            alignment: .left,
-            lineBreakMode: .byWordWrapping
-        )
+        let lVal = formatDimension(length)
+        let unitStr = unit.rawValue
+
+        let bodyLines = [
+            "W  \(wVal) \(unitStr)",
+            "H  \(hVal) \(unitStr)",
+            "L  \(lVal) \(unitStr)"
+        ]
+
         let bodyMaterial = UnlitMaterial(color: labelTextColor)
-        let bodyEntity = ModelEntity(mesh: bodyMesh, materials: [bodyMaterial])
-        let bodyWidth = bodyMesh.bounds.extents.x
-        let bodyHeight = bodyMesh.bounds.extents.y
+        var bodyEntities: [ModelEntity] = []
+        var maxBodyWidth: Float = 0
+        var bodyLineHeight: Float = 0
+
+        for line in bodyLines {
+            let mesh = MeshResource.generateText(
+                line,
+                extrusionDepth: 0.001,
+                font: .monospacedDigitSystemFont(ofSize: billboardBodyFontSize, weight: .medium),
+                containerFrame: .zero,
+                alignment: .left,
+                lineBreakMode: .byTruncatingTail
+            )
+            let ent = ModelEntity(mesh: mesh, materials: [bodyMaterial])
+            bodyEntities.append(ent)
+            maxBodyWidth = max(maxBodyWidth, mesh.bounds.extents.x)
+            bodyLineHeight = mesh.bounds.extents.y
+        }
 
         // -- Layout --
+        let lineGap: Float = 0.003
         let gap: Float = 0.004
-        let contentWidth = max(idWidth, bodyWidth)
-        let contentHeight = idHeight + gap + bodyHeight
+        let bodyTotalHeight = bodyLineHeight * Float(bodyLines.count) + lineGap * Float(bodyLines.count - 1)
+        let contentWidth = max(idWidth, maxBodyWidth)
+        let contentHeight = idHeight + gap + bodyTotalHeight
         let totalWidth = accentBarWidth + innerPadding + contentWidth + padding * 2
         let totalHeight = contentHeight + padding * 2
         let cornerRadius = min(totalHeight, totalWidth) * 0.12
 
-        // -- Background --
+        // -- Background (dark glass) --
         let backgroundMesh = MeshResource.generateBox(
             size: [totalWidth, totalHeight, 0.001],
             cornerRadius: cornerRadius
@@ -294,7 +310,7 @@ class CompletedBoxVisualization {
         backgroundEntity.components[CollisionComponent.self] = CollisionComponent(shapes: [collisionShape])
         billboardBackgroundEntity = backgroundEntity
 
-        // -- Accent bar --
+        // -- Accent bar (left edge stripe) --
         let accentHeight = contentHeight + padding
         let accentMesh = MeshResource.generateBox(
             size: [accentBarWidth, accentHeight, 0.0015],
@@ -303,30 +319,39 @@ class CompletedBoxVisualization {
         let accentMaterial = UnlitMaterial(color: billboardAccentColor)
         let accentEntity = ModelEntity(mesh: accentMesh, materials: [accentMaterial])
 
-        // -- Top border line --
-        let topBorderMesh = MeshResource.generateBox(
-            size: [totalWidth * 0.9, 0.0005, 0.0012]
+        // -- Border frame (thin outline around card, matching 2D callout) --
+        let borderWidth: Float = 0.0005
+        let borderMesh = MeshResource.generateBox(
+            size: [totalWidth + borderWidth * 2, totalHeight + borderWidth * 2, 0.0008],
+            cornerRadius: cornerRadius
         )
-        var topBorderMaterial = UnlitMaterial(color: billboardTopBorderColor)
-        topBorderMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.40))
-        let topBorderEntity = ModelEntity(mesh: topBorderMesh, materials: [topBorderMaterial])
+        var borderMaterial = UnlitMaterial(color: billboardBorderColor)
+        borderMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.25))
+        let borderEntity = ModelEntity(mesh: borderMesh, materials: [borderMaterial])
 
         // -- Position everything --
         let leftEdge = -totalWidth / 2
         let accentX = leftEdge + padding / 2 + accentBarWidth / 2
         let textLeftX = leftEdge + padding + accentBarWidth + innerPadding
 
+        borderEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.0015)
         backgroundEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.001)
         accentEntity.position = SIMD3<Float>(accentX, totalHeight / 2, 0.0)
-        topBorderEntity.position = SIMD3<Float>(0, totalHeight - 0.0003, 0.0005)
-        idEntity.position = SIMD3<Float>(textLeftX, padding + bodyHeight + gap, 0)
-        bodyEntity.position = SIMD3<Float>(textLeftX, padding, 0)
+        idEntity.position = SIMD3<Float>(textLeftX, padding + bodyTotalHeight + gap, 0)
 
+        // Position body lines from top to bottom
+        for (i, ent) in bodyEntities.enumerated() {
+            let lineY = padding + bodyTotalHeight - bodyLineHeight - Float(i) * (bodyLineHeight + lineGap)
+            ent.position = SIMD3<Float>(textLeftX, lineY, 0)
+        }
+
+        containerEntity.addChild(borderEntity)
         containerEntity.addChild(backgroundEntity)
         containerEntity.addChild(accentEntity)
-        containerEntity.addChild(topBorderEntity)
         containerEntity.addChild(idEntity)
-        containerEntity.addChild(bodyEntity)
+        for ent in bodyEntities {
+            containerEntity.addChild(ent)
+        }
 
         // Initially hidden
         containerEntity.isEnabled = false

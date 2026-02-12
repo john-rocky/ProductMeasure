@@ -88,7 +88,7 @@ class BoxVisualization {
     private let dimensionLabelTextColor: UIColor = PMTheme.uiBillboardText
     private let dimensionLabelBackgroundColor: UIColor = PMTheme.uiBillboardBg
     private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
-    private let billboardTopBorderColor: UIColor = PMTheme.uiBillboardTopBorder
+    private let billboardBorderColor: UIColor = PMTheme.uiBillboardAccent
 
     // Rotation handle
     private let rotationArcThickness: Float = 0.001
@@ -784,13 +784,15 @@ class BoxVisualization {
         let accentMaterial = UnlitMaterial(color: billboardAccentColor)
         let accentEntity = ModelEntity(mesh: accentMesh, materials: [accentMaterial])
 
-        // -- Top border line (thin cyan line at top edge) --
-        let topBorderMesh = MeshResource.generateBox(
-            size: [totalWidth * 0.9, 0.0005, 0.0012]
+        // -- Border frame (thin outline around card, matching 2D callout) --
+        let borderWidth: Float = 0.0005
+        let borderMesh = MeshResource.generateBox(
+            size: [totalWidth + borderWidth * 2, totalHeight + borderWidth * 2, 0.0008],
+            cornerRadius: cornerRadius
         )
-        var topBorderMaterial = UnlitMaterial(color: billboardTopBorderColor)
-        topBorderMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.40))
-        let topBorderEntity = ModelEntity(mesh: topBorderMesh, materials: [topBorderMaterial])
+        var borderMaterial = UnlitMaterial(color: billboardBorderColor)
+        borderMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.25))
+        let borderEntity = ModelEntity(mesh: borderMesh, materials: [borderMaterial])
 
         // -- Position everything --
         let leftEdge = -totalWidth / 2
@@ -799,7 +801,7 @@ class BoxVisualization {
 
         backgroundEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.001)
         accentEntity.position = SIMD3<Float>(accentX, totalHeight / 2, 0.0)
-        topBorderEntity.position = SIMD3<Float>(0, totalHeight - 0.0003, 0.0005)
+        borderEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.0015)
         idEntity.position = SIMD3<Float>(textLeftX, padding + bodyTotalHeight + gap, 0)
 
         // Position body lines from top to bottom
@@ -808,9 +810,9 @@ class BoxVisualization {
             entity.position = SIMD3<Float>(textLeftX, lineY, 0)
         }
 
+        containerEntity.addChild(borderEntity)
         containerEntity.addChild(backgroundEntity)
         containerEntity.addChild(accentEntity)
-        containerEntity.addChild(topBorderEntity)
         containerEntity.addChild(idEntity)
         for entity in bodyEntities {
             containerEntity.addChild(entity)

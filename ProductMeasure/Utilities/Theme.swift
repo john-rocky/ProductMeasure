@@ -91,7 +91,6 @@ enum PMTheme {
     static let uiBillboardBg     = UIColor(red: 13/255, green: 18/255, blue: 31/255, alpha: 0.85)
     static let uiBillboardAccent = UIColor(hex: 0x39FF14)
     static let uiBillboardText   = UIColor(white: 1.0, alpha: 0.95)
-    static let uiBillboardTopBorder = UIColor(hex: 0x39FF14).withAlphaComponent(0.40)
 
     // MARK: Completion Pulse
 
