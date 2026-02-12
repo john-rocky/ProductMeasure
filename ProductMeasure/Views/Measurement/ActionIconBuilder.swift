@@ -59,10 +59,24 @@ enum ActionIconBuilder {
         ActionIconConfig(type: .done, sfSymbol: "checkmark", color: PMTheme.uiGreen),
     ]
 
-    /// Actions for label billboard: Rescan, Done
+    /// Actions for label billboard: Rescan only (Done removed — next tap advances workflow)
     static let labelBillboardActions: [ActionIconConfig] = [
         ActionIconConfig(type: .labelRescan, sfSymbol: "arrow.counterclockwise", color: UIColor(hex: 0x00BFFF)),
-        ActionIconConfig(type: .labelDone, sfSymbol: "checkmark", color: PMTheme.uiGreen),
+    ]
+
+    /// Actions for unified label billboard (after dimensions absorbed): same as normal box actions
+    static let labelUnifiedActions: [ActionIconConfig] = [
+        ActionIconConfig(type: .discard, sfSymbol: "xmark", color: PMTheme.uiRed),
+        ActionIconConfig(type: .refine, sfSymbol: "arrow.triangle.2.circlepath", color: PMTheme.uiCyan),
+        ActionIconConfig(type: .edit, sfSymbol: "pencil", color: PMTheme.uiAmber),
+        ActionIconConfig(type: .save, sfSymbol: "checkmark", color: PMTheme.uiGreen),
+    ]
+
+    /// Actions for unified label billboard when refinement limit reached
+    static let labelUnifiedNoRefineActions: [ActionIconConfig] = [
+        ActionIconConfig(type: .discard, sfSymbol: "xmark", color: PMTheme.uiRed),
+        ActionIconConfig(type: .edit, sfSymbol: "pencil", color: PMTheme.uiAmber),
+        ActionIconConfig(type: .save, sfSymbol: "checkmark", color: PMTheme.uiGreen),
     ]
 
     /// Actions for completed box: Re-edit, Delete

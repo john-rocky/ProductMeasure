@@ -889,10 +889,14 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Active box billboard is always visible (excluded from prominence logic)
         // But hide during callout transition when 2D card is showing
+        // Also hide permanently when unified label billboard is active
         if let boxViz = boxVisualization {
             let inCalloutPhase = animationPhase == .dimensionCallout || animationPhase == .calloutTransition
-            if !inCalloutPhase {
+            let unifiedLabelActive = showLabelBillboard && (labelBillboard?.isUnified == true)
+            if !inCalloutPhase && !unifiedLabelActive {
                 boxViz.setDimensionBillboardVisible(true, forceShow: true)
+            } else if unifiedLabelActive {
+                boxViz.setDimensionBillboardVisible(false)
             }
             boxViz.updateLabelOrientations(cameraPosition: cameraPosition)
         }
@@ -1333,8 +1337,13 @@ class ARMeasurementViewModel: ObservableObject {
                             // Hide 3D billboard initially
                             self.boxVisualization?.setDimensionBillboardVisible(false)
 
-                            // Compute target screen position from billboard 3D position
-                            let billboardWorldPos = adjustedBox.center + SIMD3<Float>(0, adjustedBox.extents.y + 0.03, 0)
+                            // Compute target screen position — use label billboard if available
+                            let billboardWorldPos: SIMD3<Float>
+                            if self.showLabelBillboard, let lb = self.labelBillboard {
+                                billboardWorldPos = lb.getWorldPosition()
+                            } else {
+                                billboardWorldPos = adjustedBox.center + SIMD3<Float>(0, adjustedBox.extents.y + 0.03, 0)
+                            }
                             if let screenPos = self.sessionManager.projectToScreen(worldPosition: billboardWorldPos) {
                                 self.calloutTargetScreenPosition = screenPos
                             } else {
@@ -1353,13 +1362,40 @@ class ARMeasurementViewModel: ObservableObject {
 
                             // Phase 7: Complete
                             self.showDimensionCallout = false
-                            self.boxVisualization?.setDimensionBillboardVisible(true, forceShow: true)
-                            self.animationPhase = .complete
-                            self.isProcessing = false
 
-                            // Advance workflow to showingResult if in guided flow
-                            if self.workflowStep == .awaitingSecondTap {
-                                self.workflowStep = .showingResult
+                            if self.showLabelBillboard, let lb = self.labelBillboard {
+                                // Unified flow: expand label billboard with dimensions, hide box billboard permanently
+                                self.boxVisualization?.setDimensionBillboardVisible(false)
+
+                                let qualityLabel = adjustedResult.quality.overallQuality.rawValue
+                                let pointCount = adjustedResult.quality.pointCount
+                                lb.expandWithDimensions(
+                                    height: adjustedResult.height,
+                                    length: adjustedResult.length,
+                                    width: adjustedResult.width,
+                                    unit: self.currentUnit,
+                                    boxId: self.nextBoxId,
+                                    volume: adjustedBox.volume,
+                                    qualityLabel: qualityLabel,
+                                    pointCount: pointCount
+                                ) { [weak self] in
+                                    guard let self = self else { return }
+                                    self.animationPhase = .complete
+                                    self.isProcessing = false
+
+                                    if self.workflowStep == .awaitingSecondTap {
+                                        self.workflowStep = .showingResult
+                                    }
+                                }
+                            } else {
+                                // Normal flow: show box billboard
+                                self.boxVisualization?.setDimensionBillboardVisible(true, forceShow: true)
+                                self.animationPhase = .complete
+                                self.isProcessing = false
+
+                                if self.workflowStep == .awaitingSecondTap {
+                                    self.workflowStep = .showingResult
+                                }
                             }
                         }
                     }
@@ -1500,6 +1536,19 @@ class ARMeasurementViewModel: ObservableObject {
         consoleReadingComplete = false
         csvString = ""
 
+        // Clean up label billboard if present
+        if showLabelBillboard {
+            showLabelBillboard = false
+            labelBillboard?.entity.isEnabled = false
+            if let anchor = labelBillboardAnchor {
+                sessionManager.removeAnchor(anchor)
+            }
+            labelBillboardAnchor = nil
+            labelBillboard = nil
+        }
+        currentLabelData = nil
+        pendingLabelData = nil
+
         print("[ViewModel] clearActiveBoxOnly completed. Completed boxes preserved: \(completedBoxAnchors.count)")
     }
 
@@ -1519,6 +1568,9 @@ class ARMeasurementViewModel: ObservableObject {
         isEditing = true
         boxVisualization?.isInteractive = true
         boxVisualization?.updateActionMode(.editing)
+        if labelBillboard?.isUnified == true {
+            labelBillboard?.updateActionIcons(ActionIconBuilder.activeEditActions)
+        }
     }
 
     func stopEditing() {
@@ -1526,6 +1578,12 @@ class ARMeasurementViewModel: ObservableObject {
         isDragging = false
         boxVisualization?.isInteractive = false
         boxVisualization?.updateActionMode(.normal)
+        if labelBillboard?.isUnified == true {
+            let actions = refinementCount >= AppConstants.maxRefinementRounds
+                ? ActionIconBuilder.labelUnifiedNoRefineActions
+                : ActionIconBuilder.labelUnifiedActions
+            labelBillboard?.updateActionIcons(actions)
+        }
     }
 
     func handleFaceDrag(handleType: HandleType, screenDelta: CGPoint, mode: MeasurementMode) {
@@ -1748,6 +1806,9 @@ class ARMeasurementViewModel: ObservableObject {
 
         isRefining = true
         boxVisualization?.updateActionMode(.refining)
+        if labelBillboard?.isUnified == true {
+            labelBillboard?.updateActionIcons(ActionIconBuilder.activeRefiningActions)
+        }
         print("[Refine] Entered refinement mode (round \(refinementCount + 1))")
     }
 
@@ -1756,6 +1817,12 @@ class ARMeasurementViewModel: ObservableObject {
         let mode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
             ? .normalNoRefine : .normal
         boxVisualization?.updateActionMode(mode)
+        if labelBillboard?.isUnified == true {
+            let actions = refinementCount >= AppConstants.maxRefinementRounds
+                ? ActionIconBuilder.labelUnifiedNoRefineActions
+                : ActionIconBuilder.labelUnifiedActions
+            labelBillboard?.updateActionIcons(actions)
+        }
         print("[Refine] Cancelled refinement mode")
     }
 
@@ -1991,8 +2058,13 @@ class ARMeasurementViewModel: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self = self, self.showLabelBillboard else { return }
             billboard.setVisible(true)
-            billboard.startRevealAnimation {
-                // Reveal complete
+            billboard.startRevealAnimation { [weak self] in
+                guard let self = self else { return }
+                // Store label data and advance workflow — no Done button needed
+                self.pendingLabelData = self.currentLabelData
+                if self.workflowStep == .showingLabelResult {
+                    self.workflowStep = .awaitingSecondTap
+                }
             }
         }
     }
