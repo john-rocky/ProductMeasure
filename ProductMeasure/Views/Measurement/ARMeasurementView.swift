@@ -2012,6 +2012,7 @@ class ARMeasurementViewModel: ObservableObject {
     func barcodeScanEffectCompleted() {
         showBarcodeScanEffect = false
         correctedLabelImage = nil
+        isReadingLabel = false
 
         // Advance workflow to showingLabelResult
         if workflowStep == .awaitingLabelScan {
