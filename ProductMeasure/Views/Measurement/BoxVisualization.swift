@@ -20,10 +20,12 @@ class BoxVisualization {
     private var floorDistanceEntity: Entity?         // Floor distance indicator
     private var floorDistanceLabel: Entity?
 
-    // Single billboard label floating above the box (shows all dimensions)
-    private var dimensionBillboardEntity: Entity?
+    // Size billboard (above box): dimensions, volume, weight, quality
+    private var sizeBillboardEntity: Entity?
+    // Label billboard (left of box): CTN ID, BARCODE, DEST, etc.
+    private var labelBillboardEntity: Entity?
 
-    // Action icon row (below billboard)
+    // Action icon row (below size billboard)
     private var actionIconRow: Entity?
 
     /// Current action mode
@@ -87,15 +89,23 @@ class BoxVisualization {
     private let handleRadius: Float = 0.004
     private let handleCollisionRadius: Float = 0.015
 
-    // Dimension label styling
-    private let billboardIdFontSize: CGFloat = 0.014
-    private let billboardBodyFontSize: CGFloat = 0.010
-    private let billboardSectionFontSize: CGFloat = 0.007
+    // Billboard common styling
     private let dimensionLabelTextColor: UIColor = PMTheme.uiBillboardText
-    private let dimensionLabelDimColor: UIColor = UIColor(white: 1.0, alpha: 0.50)
     private let dimensionLabelBackgroundColor: UIColor = PMTheme.uiBillboardBg
     private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
     private let billboardTopBorderColor: UIColor = PMTheme.uiBillboardTopBorder
+
+    // Size panel font sizes
+    private let sizePanelIdFontSize: CGFloat = 0.014
+    private let sizePanelDimensionFontSize: CGFloat = 0.018
+    private let sizePanelSecondaryFontSize: CGFloat = 0.009
+    private let sizePanelBadgeFontSize: CGFloat = 0.010
+
+    // Label panel font sizes
+    private let labelPanelTitleFontSize: CGFloat = 0.008
+    private let labelPanelPrimaryValueFontSize: CGFloat = 0.014
+    private let labelPanelPrimaryLabelFontSize: CGFloat = 0.008
+    private let labelPanelSecondaryFontSize: CGFloat = 0.009
 
     // Rotation handle
     private let rotationArcThickness: Float = 0.001
@@ -144,23 +154,44 @@ class BoxVisualization {
         createDimensionLabels()
     }
 
-    /// Update billboard orientation to face the camera
+    /// Update billboard orientations to face the camera; reposition label panel to left side
     func updateLabelOrientations(cameraPosition: SIMD3<Float>) {
-        guard let billboard = dimensionBillboardEntity else { return }
+        // Orient size billboard to face camera (Y-axis rotation only)
+        if let sizePanel = sizeBillboardEntity {
+            let pos = sizePanel.position(relativeTo: nil)
+            let toCamera = cameraPosition - pos
+            let horizontal = SIMD3<Float>(toCamera.x, 0, toCamera.z)
+            if simd_length(horizontal) > 0.01 {
+                let angle = atan2(horizontal.x, horizontal.z)
+                sizePanel.orientation = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
+            }
+        }
 
-        let billboardPos = billboard.position(relativeTo: nil)
-        let toCamera = cameraPosition - billboardPos
-        let toCameraHorizontal = SIMD3<Float>(toCamera.x, 0, toCamera.z)
+        // Orient + reposition label billboard to stay on the left from camera's perspective
+        if let labelPanel = labelBillboardEntity {
+            let boxCenter = boundingBox.center
+            let toCamera = cameraPosition - boxCenter
+            let forward = SIMD3<Float>(toCamera.x, 0, toCamera.z)
+            let forwardLen = simd_length(forward)
+            if forwardLen > 0.01 {
+                let fwd = forward / forwardLen
+                // Perpendicular left direction
+                let leftDir = SIMD3<Float>(-fwd.z, 0, fwd.x)
+                let offset = max(boundingBox.extents.x, boundingBox.extents.z) + 0.04
+                let labelY = boxCenter.y + boundingBox.extents.y * 0.3
+                labelPanel.position = boxCenter + leftDir * offset + SIMD3<Float>(0, labelY - boxCenter.y, 0)
 
-        if simd_length(toCameraHorizontal) > 0.01 {
-            let angle = atan2(toCameraHorizontal.x, toCameraHorizontal.z)
-            billboard.orientation = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
+                // Face camera
+                let angle = atan2(fwd.x, fwd.z)
+                labelPanel.orientation = simd_quatf(angle: angle, axis: SIMD3<Float>(0, 1, 0))
+            }
         }
     }
 
-    /// Show or hide the dimension billboard
+    /// Show or hide the dimension billboards
     func setDimensionBillboardVisible(_ visible: Bool, forceShow: Bool = false) {
-        dimensionBillboardEntity?.isEnabled = forceShow || visible
+        sizeBillboardEntity?.isEnabled = forceShow || visible
+        labelBillboardEntity?.isEnabled = forceShow || visible
     }
 
     /// Update the action icon row to match the current mode
@@ -169,7 +200,7 @@ class BoxVisualization {
         actionIconRow?.removeFromParent()
         actionIconRow = nil
 
-        guard let billboard = dimensionBillboardEntity else { return }
+        guard let sizePanel = sizeBillboardEntity else { return }
 
         let actions: [ActionIconConfig]
         switch mode {
@@ -185,7 +216,7 @@ class BoxVisualization {
 
         let row = ActionIconBuilder.createActionRow(actions: actions)
         row.position = SIMD3<Float>(0, -0.005, 0)
-        billboard.addChild(row)
+        sizePanel.addChild(row)
         actionIconRow = row
     }
 
@@ -280,7 +311,8 @@ class BoxVisualization {
         floorDistanceEntity = nil
         floorDistanceLabel = nil
         labelEntities.removeAll()
-        dimensionBillboardEntity = nil
+        sizeBillboardEntity = nil
+        labelBillboardEntity = nil
         actionIconRow = nil
     }
 
@@ -691,48 +723,55 @@ class BoxVisualization {
         return simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
     }
 
-    // MARK: - Dimension Billboard (floating above box)
+    // MARK: - Dimension Billboards (size panel above box, label panel to the left)
 
     private func createDimensionLabels() {
-        dimensionBillboardEntity?.removeFromParent()
+        sizeBillboardEntity?.removeFromParent()
+        labelBillboardEntity?.removeFromParent()
         actionIconRow = nil
 
-        let billboardPos = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y + 0.03, 0)
-        dimensionBillboardEntity = createDimensionBillboard(at: billboardPos)
-        entity.addChild(dimensionBillboardEntity!)
+        // Size panel above box
+        let sizePos = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y + 0.03, 0)
+        sizeBillboardEntity = createSizeBillboard(at: sizePos)
+        entity.addChild(sizeBillboardEntity!)
+
+        // Label panel (only if label data exists)
+        if let ld = storedLabelData, !ld.displayFields.isEmpty {
+            let labelPos = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y * 0.3, 0)
+            labelBillboardEntity = createLabelBillboard(at: labelPos)
+            entity.addChild(labelBillboardEntity!)
+            labelBillboardEntity?.isEnabled = true
+        }
 
         updateActionMode(currentActionMode)
-        dimensionBillboardEntity?.isEnabled = true
+        sizeBillboardEntity?.isEnabled = true
     }
 
     private func updateDimensionLabelPositions() {
         guard storedHeight > 0 else { return }
-        if let billboard = dimensionBillboardEntity {
-            billboard.position = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y + 0.03, 0)
-        }
+        sizeBillboardEntity?.position = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y + 0.03, 0)
+        // Label panel position is updated per-frame in updateLabelOrientations
     }
 
-    private func createDimensionBillboard(at position: SIMD3<Float>) -> Entity {
+    // MARK: - Size Billboard (dimensions, volume, weight, quality)
+
+    private func createSizeBillboard(at position: SIMD3<Float>) -> Entity {
         let containerEntity = Entity()
         containerEntity.position = position
 
-        // Layout constants
         let accentBarWidth: Float = 0.002
         let padding: Float = 0.008
         let innerPadding: Float = 0.005
         let lineGap: Float = 0.004
         let sectionTopGap: Float = 0.006
-        let labelValueGap: Float = 0.005
         let separatorThick: Float = 0.0004
         let separatorMargin: Float = 0.001
 
-        // Cyber colors
         let labelColor = billboardAccentColor.withAlphaComponent(0.55)
         let valueColor = dimensionLabelTextColor
         let sectionTextColor = billboardAccentColor.withAlphaComponent(0.70)
         let separatorColor = billboardAccentColor.withAlphaComponent(0.25)
 
-        // -- Text mesh helpers --
         func textMesh(_ text: String, size: CGFloat, weight: UIFont.Weight, color: UIColor) -> (entity: ModelEntity, size: SIMD3<Float>) {
             let mesh = MeshResource.generateText(
                 text, extrusionDepth: 0.001,
@@ -742,95 +781,257 @@ class BoxVisualization {
             return (ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: color)]), mesh.bounds.extents)
         }
 
-        // -- Build section data --
-        struct DataLine { let label: String; let value: String }
-        struct Section { let title: String; let lines: [DataLine] }
+        // ID header
+        let idResult = textMesh(String(format: "#%03d", boxId), size: sizePanelIdFontSize, weight: .bold, color: billboardAccentColor)
 
+        // Main dimension line (big)
         let wVal = formatDimensionValue(storedWidth)
         let hVal = formatDimensionValue(storedHeight)
         let lVal = formatDimensionValue(storedLength)
         let unit = storedUnit.rawValue
+        let dimLine = textMesh("\(wVal) × \(hVal) × \(lVal) \(unit)", size: sizePanelDimensionFontSize, weight: .bold, color: valueColor)
 
+        // Volume + weight line
         let volValue = storedUnit.convertVolume(cubicMeters: boundingBox.volume)
         let volStr: String
         if volValue >= 1000 { volStr = String(format: "%.0f %@", volValue, storedUnit.volumeUnit()) }
         else if volValue >= 100 { volStr = String(format: "%.1f %@", volValue, storedUnit.volumeUnit()) }
         else { volStr = String(format: "%.2f %@", volValue, storedUnit.volumeUnit()) }
+        let volWtStr = storedUnit.formatVolumetricWeight(cubicMeters: boundingBox.volume)
+        let volLine = textMesh("VOL \(volStr)   WT \(volWtStr)", size: sizePanelSecondaryFontSize, weight: .medium, color: valueColor)
 
-        var sections: [Section] = [
-            Section(title: "DIMENSIONS", lines: [
-                DataLine(label: "WIDTH", value: "\(wVal) \(unit)"),
-                DataLine(label: "HEIGHT", value: "\(hVal) \(unit)"),
-                DataLine(label: "LENGTH", value: "\(lVal) \(unit)"),
-                DataLine(label: "VOLUME", value: volStr),
-                DataLine(label: "VOL.WT", value: storedUnit.formatVolumetricWeight(cubicMeters: boundingBox.volume)),
-                DataLine(label: "SIZE", value: SizeClass.classify(volumeCubicMeters: boundingBox.volume).rawValue),
-            ])
-        ]
-        if let ld = storedLabelData, !ld.displayFields.isEmpty {
-            sections.append(Section(title: "LABEL DATA", lines: ld.displayFields.map {
-                DataLine(label: $0.label, value: $0.value.count > 24 ? String($0.value.prefix(24)) : $0.value)
-            }))
-        }
+        // Size class + quality line
+        let sizeClass = SizeClass.classify(volumeCubicMeters: boundingBox.volume).rawValue
+        var classQualStr = "■ \(sizeClass)"
         if !storedQualityLabel.isEmpty {
-            sections.append(Section(title: "QUALITY", lines: [
-                DataLine(label: "QUALITY", value: storedQualityLabel),
-                DataLine(label: "POINTS", value: "\(storedPointCount)"),
-            ]))
+            classQualStr += "   QUALITY \(storedQualityLabel)"
         }
+        let classLine = textMesh(classQualStr, size: sizePanelBadgeFontSize, weight: .semibold, color: sectionTextColor)
 
-        // -- Pre-generate all text entities --
-        let idResult = textMesh(String(format: "#%03d", boxId), size: billboardIdFontSize, weight: .bold, color: billboardAccentColor)
+        // Points line
+        let ptsLine = textMesh("PTS \(storedPointCount)", size: sizePanelSecondaryFontSize, weight: .medium, color: labelColor)
 
-        var sectionHeaders: [(entity: ModelEntity, size: SIMD3<Float>)] = []
-        var sectionLines: [[(label: (entity: ModelEntity, size: SIMD3<Float>), value: (entity: ModelEntity, size: SIMD3<Float>))]] = []
-        var maxLabelWidth: Float = 0
-        var maxContentWidth: Float = idResult.size.x
+        // Calculate layout
+        let allTexts = [idResult, dimLine, volLine, classLine, ptsLine]
+        let maxContentWidth = allTexts.map { $0.size.x }.max() ?? 0
 
-        for section in sections {
-            let header = textMesh(section.title, size: billboardSectionFontSize, weight: .bold, color: sectionTextColor)
-            sectionHeaders.append(header)
-            maxContentWidth = max(maxContentWidth, header.size.x)
+        let totalContentHeight: Float = idResult.size.y + sectionTopGap + separatorThick + separatorMargin
+            + dimLine.size.y + lineGap + volLine.size.y + lineGap + classLine.size.y + lineGap + ptsLine.size.y
 
-            var lines: [(label: (entity: ModelEntity, size: SIMD3<Float>), value: (entity: ModelEntity, size: SIMD3<Float>))] = []
-            for dl in section.lines {
-                let l = textMesh(dl.label, size: billboardBodyFontSize, weight: .semibold, color: labelColor)
-                let v = textMesh(dl.value, size: billboardBodyFontSize, weight: .medium, color: valueColor)
-                maxLabelWidth = max(maxLabelWidth, l.size.x)
-                lines.append((l, v))
-            }
-            sectionLines.append(lines)
-        }
-
-        // Recalculate max width with label+gap+value
-        for sl in sectionLines {
-            for pair in sl {
-                maxContentWidth = max(maxContentWidth, maxLabelWidth + labelValueGap + pair.value.size.x)
-            }
-        }
-
-        // -- Calculate total content height --
-        var totalContentHeight: Float = idResult.size.y
-        for (si, sl) in sectionLines.enumerated() {
-            totalContentHeight += sectionTopGap
-            totalContentHeight += separatorThick + separatorMargin
-            totalContentHeight += sectionHeaders[si].size.y
-            for pair in sl {
-                totalContentHeight += lineGap
-                totalContentHeight += max(pair.label.size.y, pair.value.size.y)
-            }
-        }
-
-        // -- Layout dimensions --
         let totalWidth = accentBarWidth + innerPadding + maxContentWidth + padding * 2
         let totalHeight = totalContentHeight + padding * 2
         let cornerRadius = min(totalHeight, totalWidth) * 0.06
 
-        // -- Structural entities --
         let leftEdge = -totalWidth / 2
         let accentX = leftEdge + padding / 2 + accentBarWidth / 2
         let textLeftX = leftEdge + padding + accentBarWidth + innerPadding
-        let valueLeftX = textLeftX + maxLabelWidth + labelValueGap
+
+        // Structural elements (same cyberpunk style)
+        addBillboardStructure(to: containerEntity, totalWidth: totalWidth, totalHeight: totalHeight,
+                              cornerRadius: cornerRadius, accentX: accentX,
+                              accentH: totalContentHeight + padding)
+
+        // Position text top-to-bottom
+        var cursor = padding + totalContentHeight
+
+        // ID
+        cursor -= idResult.size.y
+        idResult.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+        containerEntity.addChild(idResult.entity)
+
+        // Separator
+        cursor -= sectionTopGap
+        let sepW = maxContentWidth
+        let sepMesh = MeshResource.generateBox(size: [sepW, separatorThick, 0.0012])
+        var sepMat = UnlitMaterial(color: separatorColor)
+        sepMat.blending = .transparent(opacity: .init(floatLiteral: 0.25))
+        let sepEntity = ModelEntity(mesh: sepMesh, materials: [sepMat])
+        sepEntity.position = SIMD3<Float>(textLeftX + sepW / 2, cursor, 0.0005)
+        containerEntity.addChild(sepEntity)
+        cursor -= separatorThick + separatorMargin
+
+        // Main dimension line
+        cursor -= dimLine.size.y
+        dimLine.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+        containerEntity.addChild(dimLine.entity)
+
+        // Volume + weight
+        cursor -= lineGap + volLine.size.y
+        volLine.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+        containerEntity.addChild(volLine.entity)
+
+        // Size class + quality
+        cursor -= lineGap + classLine.size.y
+        classLine.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+        containerEntity.addChild(classLine.entity)
+
+        // Points
+        cursor -= lineGap + ptsLine.size.y
+        ptsLine.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+        containerEntity.addChild(ptsLine.entity)
+
+        return containerEntity
+    }
+
+    // MARK: - Label Billboard (CTN ID, BARCODE, DEST, etc.)
+
+    private func createLabelBillboard(at position: SIMD3<Float>) -> Entity {
+        let containerEntity = Entity()
+        containerEntity.position = position
+
+        guard let ld = storedLabelData else { return containerEntity }
+
+        let accentBarWidth: Float = 0.002
+        let padding: Float = 0.008
+        let innerPadding: Float = 0.005
+        let lineGap: Float = 0.003
+        let sectionTopGap: Float = 0.005
+        let separatorThick: Float = 0.0004
+        let separatorMargin: Float = 0.001
+
+        let labelColor = billboardAccentColor.withAlphaComponent(0.55)
+        let valueColor = dimensionLabelTextColor
+        let sectionTextColor = billboardAccentColor.withAlphaComponent(0.70)
+        let separatorColor = billboardAccentColor.withAlphaComponent(0.25)
+
+        func textMesh(_ text: String, size: CGFloat, weight: UIFont.Weight, color: UIColor) -> (entity: ModelEntity, size: SIMD3<Float>) {
+            let mesh = MeshResource.generateText(
+                text, extrusionDepth: 0.001,
+                font: .monospacedSystemFont(ofSize: size, weight: weight),
+                containerFrame: .zero, alignment: .left, lineBreakMode: .byTruncatingTail
+            )
+            return (ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: color)]), mesh.bounds.extents)
+        }
+
+        // Title
+        let title = textMesh("LABEL DATA", size: labelPanelTitleFontSize, weight: .bold, color: sectionTextColor)
+
+        // Build primary fields (CTN ID, BARCODE, DEST) with large values
+        struct PrimaryField {
+            let label: (entity: ModelEntity, size: SIMD3<Float>)
+            let value: (entity: ModelEntity, size: SIMD3<Float>)
+        }
+        var primaryFields: [PrimaryField] = []
+        for field in ld.primaryDisplayFields {
+            let truncVal = field.value.count > 20 ? String(field.value.prefix(20)) : field.value
+            let l = textMesh(field.label, size: labelPanelPrimaryLabelFontSize, weight: .semibold, color: labelColor)
+            let v = textMesh(truncVal, size: labelPanelPrimaryValueFontSize, weight: .bold, color: valueColor)
+            primaryFields.append(PrimaryField(label: l, value: v))
+        }
+
+        // Build secondary fields (compact key-value)
+        struct SecondaryField {
+            let label: (entity: ModelEntity, size: SIMD3<Float>)
+            let value: (entity: ModelEntity, size: SIMD3<Float>)
+        }
+        var secondaryFields: [SecondaryField] = []
+        var maxSecLabel: Float = 0
+        for field in ld.secondaryDisplayFields {
+            let truncVal = field.value.count > 20 ? String(field.value.prefix(20)) : field.value
+            let l = textMesh(field.label, size: labelPanelSecondaryFontSize, weight: .semibold, color: labelColor)
+            let v = textMesh(truncVal, size: labelPanelSecondaryFontSize, weight: .medium, color: valueColor)
+            maxSecLabel = max(maxSecLabel, l.size.x)
+            secondaryFields.append(SecondaryField(label: l, value: v))
+        }
+
+        // Calculate max content width
+        var maxContentWidth: Float = title.size.x
+        for pf in primaryFields {
+            maxContentWidth = max(maxContentWidth, pf.label.size.x)
+            maxContentWidth = max(maxContentWidth, pf.value.size.x)
+        }
+        let secLabelValueGap: Float = 0.005
+        for sf in secondaryFields {
+            maxContentWidth = max(maxContentWidth, maxSecLabel + secLabelValueGap + sf.value.size.x)
+        }
+
+        // Calculate total content height
+        var totalContentHeight: Float = title.size.y
+        for pf in primaryFields {
+            totalContentHeight += sectionTopGap + separatorThick + separatorMargin
+            totalContentHeight += pf.label.size.y + lineGap + pf.value.size.y
+        }
+        if !secondaryFields.isEmpty {
+            totalContentHeight += sectionTopGap + separatorThick + separatorMargin
+            for sf in secondaryFields {
+                totalContentHeight += lineGap + max(sf.label.size.y, sf.value.size.y)
+            }
+        }
+
+        let totalWidth = accentBarWidth + innerPadding + maxContentWidth + padding * 2
+        let totalHeight = totalContentHeight + padding * 2
+        let cornerRadius = min(totalHeight, totalWidth) * 0.06
+
+        let leftEdge = -totalWidth / 2
+        let accentX = leftEdge + padding / 2 + accentBarWidth / 2
+        let textLeftX = leftEdge + padding + accentBarWidth + innerPadding
+
+        // Structural elements
+        addBillboardStructure(to: containerEntity, totalWidth: totalWidth, totalHeight: totalHeight,
+                              cornerRadius: cornerRadius, accentX: accentX,
+                              accentH: totalContentHeight + padding)
+
+        // Position text
+        var cursor = padding + totalContentHeight
+
+        // Title
+        cursor -= title.size.y
+        title.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+        containerEntity.addChild(title.entity)
+
+        // Primary fields (each with separator, label, big value)
+        for pf in primaryFields {
+            cursor -= sectionTopGap
+            let sepW = maxContentWidth
+            let sepMesh = MeshResource.generateBox(size: [sepW, separatorThick, 0.0012])
+            var sepMat = UnlitMaterial(color: separatorColor)
+            sepMat.blending = .transparent(opacity: .init(floatLiteral: 0.25))
+            let sepEntity = ModelEntity(mesh: sepMesh, materials: [sepMat])
+            sepEntity.position = SIMD3<Float>(textLeftX + sepW / 2, cursor, 0.0005)
+            containerEntity.addChild(sepEntity)
+            cursor -= separatorThick + separatorMargin
+
+            cursor -= pf.label.size.y
+            pf.label.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+            containerEntity.addChild(pf.label.entity)
+
+            cursor -= lineGap + pf.value.size.y
+            pf.value.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+            containerEntity.addChild(pf.value.entity)
+        }
+
+        // Secondary fields (compact)
+        if !secondaryFields.isEmpty {
+            cursor -= sectionTopGap
+            let sepW = maxContentWidth
+            let sepMesh = MeshResource.generateBox(size: [sepW, separatorThick, 0.0012])
+            var sepMat = UnlitMaterial(color: separatorColor)
+            sepMat.blending = .transparent(opacity: .init(floatLiteral: 0.25))
+            let sepEntity = ModelEntity(mesh: sepMesh, materials: [sepMat])
+            sepEntity.position = SIMD3<Float>(textLeftX + sepW / 2, cursor, 0.0005)
+            containerEntity.addChild(sepEntity)
+            cursor -= separatorThick + separatorMargin
+
+            let secValueX = textLeftX + maxSecLabel + secLabelValueGap
+            for sf in secondaryFields {
+                let h = max(sf.label.size.y, sf.value.size.y)
+                cursor -= lineGap + h
+                sf.label.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+                sf.value.entity.position = SIMD3<Float>(secValueX, cursor, 0)
+                containerEntity.addChild(sf.label.entity)
+                containerEntity.addChild(sf.value.entity)
+            }
+        }
+
+        return containerEntity
+    }
+
+    // MARK: - Billboard Shared Structure
+
+    /// Adds glow, background, accent bar, and borders to a billboard container
+    private func addBillboardStructure(to container: Entity, totalWidth: Float, totalHeight: Float,
+                                       cornerRadius: Float, accentX: Float, accentH: Float) {
+        let accentBarWidth: Float = 0.002
 
         // Outer glow
         let glowPad: Float = 0.003
@@ -851,7 +1052,6 @@ class BoxVisualization {
         bgEntity.position = SIMD3<Float>(0, totalHeight / 2, -0.001)
 
         // Accent bar + glow
-        let accentH = totalContentHeight + padding
         let accentMesh = MeshResource.generateBox(size: [accentBarWidth, accentH, 0.0015], cornerRadius: accentBarWidth * 0.4)
         let accentEntity = ModelEntity(mesh: accentMesh, materials: [UnlitMaterial(color: billboardAccentColor)])
         accentEntity.position = SIMD3<Float>(accentX, totalHeight / 2, 0.0)
@@ -876,54 +1076,12 @@ class BoxVisualization {
         let bottomBorder = makeBorder(opacity: 0.30)
         bottomBorder.position = SIMD3<Float>(0, 0.0003, 0.0005)
 
-        // Add structural entities
-        containerEntity.addChild(glowEntity)
-        containerEntity.addChild(bgEntity)
-        containerEntity.addChild(accentEntity)
-        containerEntity.addChild(accentGlowEntity)
-        containerEntity.addChild(topBorder)
-        containerEntity.addChild(bottomBorder)
-
-        // -- Position text top-to-bottom --
-        var cursor = padding + totalContentHeight
-
-        // ID header
-        cursor -= idResult.size.y
-        idResult.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
-        containerEntity.addChild(idResult.entity)
-
-        // Sections
-        for (si, sl) in sectionLines.enumerated() {
-            cursor -= sectionTopGap
-
-            // Separator line
-            let sepW = maxContentWidth
-            let sepMesh = MeshResource.generateBox(size: [sepW, separatorThick, 0.0012])
-            var sepMat = UnlitMaterial(color: separatorColor)
-            sepMat.blending = .transparent(opacity: .init(floatLiteral: 0.25))
-            let sepEntity = ModelEntity(mesh: sepMesh, materials: [sepMat])
-            sepEntity.position = SIMD3<Float>(textLeftX + sepW / 2, cursor, 0.0005)
-            containerEntity.addChild(sepEntity)
-            cursor -= separatorThick + separatorMargin
-
-            // Section header
-            cursor -= sectionHeaders[si].size.y
-            sectionHeaders[si].entity.position = SIMD3<Float>(textLeftX, cursor, 0)
-            containerEntity.addChild(sectionHeaders[si].entity)
-
-            // Data lines (label in dim green, value in bright white)
-            for pair in sl {
-                cursor -= lineGap
-                let h = max(pair.label.size.y, pair.value.size.y)
-                cursor -= h
-                pair.label.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
-                pair.value.entity.position = SIMD3<Float>(valueLeftX, cursor, 0)
-                containerEntity.addChild(pair.label.entity)
-                containerEntity.addChild(pair.value.entity)
-            }
-        }
-
-        return containerEntity
+        container.addChild(glowEntity)
+        container.addChild(bgEntity)
+        container.addChild(accentEntity)
+        container.addChild(accentGlowEntity)
+        container.addChild(topBorder)
+        container.addChild(bottomBorder)
     }
 
     private func formatDimensionValue(_ meters: Float) -> String {
@@ -937,15 +1095,4 @@ class BoxVisualization {
         }
     }
 
-    private func formatVolumeValue(_ cubicMeters: Float) -> String {
-        let value = storedUnit.convertVolume(cubicMeters: cubicMeters)
-        if value >= 1000 {
-            let formatted = NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
-            return "Vol: \(formatted) \(storedUnit.volumeUnit())"
-        } else if value >= 100 {
-            return String(format: "Vol: %.1f %@", value, storedUnit.volumeUnit())
-        } else {
-            return String(format: "Vol: %.2f %@", value, storedUnit.volumeUnit())
-        }
-    }
 }

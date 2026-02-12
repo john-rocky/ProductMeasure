@@ -1424,7 +1424,8 @@ class ARMeasurementViewModel: ObservableObject {
             quality: result.quality,
             axisMapping: result.axisMapping,
             pointCloud: result.pointCloud,
-            floorY: boxVisualization?.floorY
+            floorY: boxVisualization?.floorY,
+            labelData: pendingLabelData
         )
         nextBoxId += 1
 
