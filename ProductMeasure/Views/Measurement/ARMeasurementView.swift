@@ -197,7 +197,7 @@ struct ARMeasurementView: View {
                 }
 
                 // Label result overlay
-                if viewModel.showLabelResult, let labelData = viewModel.currentLabelData {
+                if viewModel.showLabelResult, !viewModel.showLabelBillboard, let labelData = viewModel.currentLabelData {
                     ZStack {
                         // Dim background
                         Color.black.opacity(0.3)
@@ -793,6 +793,9 @@ class ARMeasurementViewModel: ObservableObject {
     private let labelReaderService = LabelReaderService()
     private var labelLiftAnimation: LabelLiftAnimation?
     private var labelLiftAnchor: AnchorEntity?
+    private var labelBillboard: LabelBillboard?
+    private var labelBillboardAnchor: AnchorEntity?
+    @Published var showLabelBillboard = false
 
     // Guided workflow state
     @Published var workflowStep: WorkflowStep = .idle
@@ -892,6 +895,11 @@ class ARMeasurementViewModel: ObservableObject {
                 boxViz.setDimensionBillboardVisible(true, forceShow: true)
             }
             boxViz.updateLabelOrientations(cameraPosition: cameraPosition)
+        }
+
+        // Label billboard orientation tracking
+        if showLabelBillboard {
+            labelBillboard?.updateOrientation(cameraPosition: cameraPosition)
         }
 
         // Find the most prominent completed box for billboard visibility
@@ -1712,6 +1720,10 @@ class ARMeasurementViewModel: ObservableObject {
             deleteCompletedBox()
         case .refine:
             startRefinementMode()
+        case .labelDone:
+            dismissLabelResult()
+        case .labelRescan:
+            resetLabelScan()
         }
     }
 
@@ -1931,20 +1943,69 @@ class ARMeasurementViewModel: ObservableObject {
     func barcodeScanEffectCompleted() {
         showBarcodeScanEffect = false
         correctedLabelImage = nil
-        labelLiftAnimation?.setVisible(true)
-
-        // Show result overlay
-        let fields = currentLabelData?.displayFields ?? []
-        labelLineRevealed = Array(repeating: false, count: max(fields.count, 1))
-        showLabelResult = true
-        labelReadingComplete = false
 
         // Advance workflow to showingLabelResult
         if workflowStep == .awaitingLabelScan {
             workflowStep = .showingLabelResult
         }
 
-        // Stagger line reveals
+        // Try to create AR billboard above the real label
+        guard let labelData = currentLabelData,
+              let liftAnim = labelLiftAnimation else {
+            // Fallback to 2D overlay if we can't create billboard
+            showLabelResult2D()
+            return
+        }
+
+        // Show the lifted label again so it can transition back
+        liftAnim.setVisible(true)
+
+        // Create billboard at label's original position + offset above surface
+        let billboardPosition = liftAnim.originalCenter + liftAnim.originalSurfaceNormal * 0.06
+        let billboard = LabelBillboard(
+            labelData: labelData,
+            worldPosition: billboardPosition,
+            surfaceNormal: liftAnim.originalSurfaceNormal
+        )
+        labelBillboard = billboard
+
+        // Add billboard to AR scene (hidden initially, reveal starts after overlap)
+        let anchor = sessionManager.addEntityWithAnchor(billboard.entity)
+        labelBillboardAnchor = anchor
+        billboard.setVisible(false)
+
+        showLabelBillboard = true
+
+        // Phase A: Label shrinks back toward original position (0–0.8s)
+        liftAnim.transitionToOrigin { [weak self] in
+            guard let self = self else { return }
+            // Label transition complete — remove lift animation
+            if let liftAnchor = self.labelLiftAnchor {
+                self.sessionManager.removeAnchor(liftAnchor)
+            }
+            self.labelLiftAnchor = nil
+            self.labelLiftAnimation = nil
+        }
+
+        // Phase B: Billboard appears at 0.3s overlap (while label still shrinking)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self = self, self.showLabelBillboard else { return }
+            billboard.setVisible(true)
+            billboard.startRevealAnimation {
+                // Reveal complete
+            }
+        }
+    }
+
+    /// Fallback: show 2D SwiftUI overlay if billboard creation fails
+    private func showLabelResult2D() {
+        labelLiftAnimation?.setVisible(true)
+
+        let fields = currentLabelData?.displayFields ?? []
+        labelLineRevealed = Array(repeating: false, count: max(fields.count, 1))
+        showLabelResult = true
+        labelReadingComplete = false
+
         Task { [weak self] in
             guard let self = self else { return }
             let count = max(fields.count, 1)
@@ -1960,7 +2021,6 @@ class ARMeasurementViewModel: ObservableObject {
                 }
             }
 
-            // Brief pause then mark complete
             try? await Task.sleep(nanoseconds: 300_000_000)
             withAnimation(.easeOut(duration: 0.2)) {
                 self.labelReadingComplete = true
@@ -1975,7 +2035,20 @@ class ARMeasurementViewModel: ObservableObject {
         // Store label data for next measurement
         pendingLabelData = currentLabelData
 
-        // Dismiss lift animation
+        // Dismiss AR billboard if showing
+        if showLabelBillboard, let billboard = labelBillboard {
+            showLabelBillboard = false
+            billboard.dismiss { [weak self] in
+                guard let self = self else { return }
+                if let anchor = self.labelBillboardAnchor {
+                    self.sessionManager.removeAnchor(anchor)
+                }
+                self.labelBillboardAnchor = nil
+                self.labelBillboard = nil
+            }
+        }
+
+        // Dismiss lift animation (may already be nil if billboard was used)
         if let liftAnim = labelLiftAnimation {
             liftAnim.dismiss { [weak self] in
                 guard let self = self else { return }
@@ -2007,6 +2080,17 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Dismiss label result
         showLabelResult = false
+
+        // Dismiss AR billboard
+        if showLabelBillboard {
+            showLabelBillboard = false
+            labelBillboard?.entity.isEnabled = false
+            if let anchor = labelBillboardAnchor {
+                sessionManager.removeAnchor(anchor)
+            }
+            labelBillboardAnchor = nil
+            labelBillboard = nil
+        }
 
         // Dismiss lift animation immediately
         if let liftAnim = labelLiftAnimation {

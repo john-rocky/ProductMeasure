@@ -25,6 +25,11 @@ class LabelLiftAnimation {
     private var labelWidth: Float = 0.1
     private var labelHeight: Float = 0.1
 
+    /// Original label center in world space
+    var originalCenter: SIMD3<Float> { labelCenter }
+    /// Original label surface normal in world space
+    var originalSurfaceNormal: SIMD3<Float> { surfaceNormal }
+
     // Colors
     private let glowInnerColor = PMTheme.uiLabelBlue
     private let glowOuterColor = PMTheme.uiLabelBlueGlow
@@ -353,6 +358,39 @@ class LabelLiftAnimation {
 
             // Scale: linear to prevent compound rushing effect
             self.entity.scale = SIMD3<Float>(repeating: 1.0 + (finalScale - 1.0) * rawT)
+        }
+    }
+
+    /// Animate the lifted label back toward its original position and shrink to zero
+    func transitionToOrigin(completion: @escaping () -> Void) {
+        let duration = PMTheme.labelBillboardTransitionDuration
+        let startTime = Date()
+        let startPosition = entity.position
+        let startOrientation = entity.orientation
+        let startScale = entity.scale
+        let targetPosition = labelCenter + surfaceNormal * 0.06
+
+        // Target orientation: face outward along surface normal
+        let targetOrientation = simd_quatf(from: SIMD3<Float>(0, 0, 1), to: simd_normalize(surfaceNormal))
+
+        animationTimer?.invalidate()
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+
+            let elapsed = Date().timeIntervalSince(startTime)
+            let rawT = Float(min(elapsed / duration, 1.0))
+            let t = Self.easeOutCubic(rawT)
+
+            self.entity.position = simd_mix(startPosition, targetPosition, SIMD3(repeating: t))
+            self.entity.orientation = simd_slerp(startOrientation, targetOrientation, t)
+            self.entity.scale = startScale * (1.0 - t)
+
+            if rawT >= 1.0 {
+                timer.invalidate()
+                self.animationTimer = nil
+                self.entity.isEnabled = false
+                completion()
+            }
         }
     }
 

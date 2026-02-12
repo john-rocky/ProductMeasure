@@ -49,6 +49,7 @@
 		001000104 /* LabelData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000105 /* LabelData.swift */; };
 		001000106 /* LabelReaderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000107 /* LabelReaderService.swift */; };
 		001000108 /* LabelLiftAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000109 /* LabelLiftAnimation.swift */; };
+		001000122 /* LabelBillboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000123 /* LabelBillboard.swift */; };
 		001000110 /* LabelResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000111 /* LabelResultView.swift */; };
 		001000112 /* LabelScanBracketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000113 /* LabelScanBracketsView.swift */; };
 		001000114 /* WorkflowStepIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000115 /* WorkflowStepIndicator.swift */; };
@@ -102,6 +103,7 @@
 		001000105 /* LabelData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelData.swift; sourceTree = "<group>"; };
 		001000107 /* LabelReaderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReaderService.swift; sourceTree = "<group>"; };
 		001000109 /* LabelLiftAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelLiftAnimation.swift; sourceTree = "<group>"; };
+		001000123 /* LabelBillboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelBillboard.swift; sourceTree = "<group>"; };
 		001000111 /* LabelResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelResultView.swift; sourceTree = "<group>"; };
 		001000113 /* LabelScanBracketsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelScanBracketsView.swift; sourceTree = "<group>"; };
 		001000115 /* WorkflowStepIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowStepIndicator.swift; sourceTree = "<group>"; };
@@ -229,6 +231,7 @@
 				001000095 /* SelectionModeToggle.swift */,
 				001000103 /* DimensionCalloutView.swift */,
 				001000109 /* LabelLiftAnimation.swift */,
+				001000123 /* LabelBillboard.swift */,
 				001000111 /* LabelResultView.swift */,
 				001000113 /* LabelScanBracketsView.swift */,
 				001000115 /* WorkflowStepIndicator.swift */,
@@ -375,6 +378,7 @@
 				001000104 /* LabelData.swift in Sources */,
 				001000106 /* LabelReaderService.swift in Sources */,
 				001000108 /* LabelLiftAnimation.swift in Sources */,
+				001000122 /* LabelBillboard.swift in Sources */,
 				001000110 /* LabelResultView.swift in Sources */,
 				001000112 /* LabelScanBracketsView.swift in Sources */,
 				001000114 /* WorkflowStepIndicator.swift in Sources */,

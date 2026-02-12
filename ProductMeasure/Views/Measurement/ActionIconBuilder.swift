@@ -17,6 +17,8 @@ enum ActionType: String, CaseIterable {
     case reEdit = "action_reedit"
     case delete = "action_delete"
     case refine = "action_refine"
+    case labelDone = "action_label_done"
+    case labelRescan = "action_label_rescan"
 }
 
 /// Configuration for a single action icon
@@ -55,6 +57,12 @@ enum ActionIconBuilder {
         ActionIconConfig(type: .cancel, sfSymbol: "xmark", color: PMTheme.uiRed),
         ActionIconConfig(type: .fit, sfSymbol: "square.resize", color: PMTheme.uiBlue),
         ActionIconConfig(type: .done, sfSymbol: "checkmark", color: PMTheme.uiGreen),
+    ]
+
+    /// Actions for label billboard: Rescan, Done
+    static let labelBillboardActions: [ActionIconConfig] = [
+        ActionIconConfig(type: .labelRescan, sfSymbol: "arrow.counterclockwise", color: UIColor(hex: 0x00BFFF)),
+        ActionIconConfig(type: .labelDone, sfSymbol: "checkmark", color: PMTheme.uiGreen),
     ]
 
     /// Actions for completed box: Re-edit, Delete
