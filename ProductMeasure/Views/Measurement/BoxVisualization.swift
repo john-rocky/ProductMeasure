@@ -720,8 +720,8 @@ class BoxVisualization {
         let accentBarWidth: Float = 0.002
         let padding: Float = 0.008
         let innerPadding: Float = 0.005
-        let lineGap: Float = 0.0025
-        let sectionTopGap: Float = 0.005
+        let lineGap: Float = 0.004
+        let sectionTopGap: Float = 0.006
         let labelValueGap: Float = 0.005
         let separatorThick: Float = 0.0004
         let separatorMargin: Float = 0.001
