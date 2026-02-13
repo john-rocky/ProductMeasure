@@ -422,13 +422,16 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
             }
 
             // 5. Handle label mode taps
-            guard selectionMode != .label else {
+            // Read effective selection mode directly from viewModel to avoid stale
+            // coordinator state (updateUIView may lag behind @Published changes)
+            let effectiveMode = viewModel.isWorkflowActive ? viewModel.effectiveSelectionMode : selectionMode
+            guard effectiveMode != .label else {
                 Task { await viewModel.handleLabelTap(at: location) }
                 return
             }
 
             // 6. Only handle new measurement taps in tap mode
-            guard selectionMode == .tap else { return }
+            guard effectiveMode == .tap else { return }
 
             Task {
                 await viewModel.handleTap(at: location, mode: measurementMode)
@@ -941,6 +944,13 @@ class ARMeasurementViewModel: ObservableObject {
         print("[ViewModel] handleTap called at \(location)")
         print("[ViewModel] isProcessing: \(isProcessing), trackingState: \(sessionManager.trackingState)")
 
+        // Safety: if workflow expects label scan, redirect (handles stale coordinator selectionMode)
+        if workflowStep == .awaitingLabelScan || workflowStep == .showingLabelResult {
+            print("[ViewModel] Redirecting to handleLabelTap (workflow expects label scan)")
+            await handleLabelTap(at: location)
+            return
+        }
+
         guard !isProcessing else {
             print("[ViewModel] Already processing, ignoring tap")
             return
@@ -968,6 +978,15 @@ class ARMeasurementViewModel: ObservableObject {
         if let existingResult = currentMeasurement {
             print("[ViewModel] Auto-saving existing measurement before new tap")
             convertActiveBoxToCompleted(result: existingResult, unit: currentUnit)
+
+            // Transfer label billboard to the newly completed viz
+            if showLabelBillboard, let billboard = labelBillboard, let anchor = labelBillboardAnchor,
+               let lastViz = completedBoxVisualizations.last {
+                lastViz.attachLabelBillboard(billboard, anchor: anchor)
+                labelBillboard = nil
+                labelBillboardAnchor = nil
+                showLabelBillboard = false
+            }
         }
 
         // Clean up previous measurement to free memory
@@ -1439,6 +1458,17 @@ class ARMeasurementViewModel: ObservableObject {
         convertActiveBoxToCompleted(result: result, unit: unit)
         print("🔴 [ViewModel] convertActiveBoxToCompleted done. Count: \(completedBoxCount)")
 
+        // Transfer label billboard ownership to the completed visualization
+        if showLabelBillboard, let billboard = labelBillboard, let anchor = labelBillboardAnchor,
+           let lastViz = completedBoxVisualizations.last {
+            lastViz.attachLabelBillboard(billboard, anchor: anchor)
+            // Nil out ViewModel references so clearActiveBoxOnly() won't remove them
+            labelBillboard = nil
+            labelBillboardAnchor = nil
+            showLabelBillboard = false
+            print("🔴 [ViewModel] Transferred label billboard to completed viz")
+        }
+
         // Clear active box state (but don't call discardMeasurement which removes all)
         print("🔴 [ViewModel] Calling clearActiveBoxOnly...")
         clearActiveBoxOnly()
@@ -1452,6 +1482,8 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Remove oldest if at max capacity
         if completedBoxVisualizations.count >= maxCompletedBoxes {
+            // Clean up oldest viz's attached label billboard if any
+            completedBoxVisualizations.first?.removeAttachedLabelBillboard(using: sessionManager)
             if let oldAnchor = completedBoxAnchors.first {
                 sessionManager.removeAnchor(oldAnchor)
             }
@@ -1548,14 +1580,29 @@ class ARMeasurementViewModel: ObservableObject {
             labelBillboardAnchor = nil
             labelBillboard = nil
         }
+
+        // Clean up lift animation if present (may survive if billboard path was used)
+        if let anchor = labelLiftAnchor {
+            sessionManager.removeAnchor(anchor)
+        }
+        labelLiftAnchor = nil
+        labelLiftAnimation = nil
+
+        // Reset label processing flags
         currentLabelData = nil
         pendingLabelData = nil
+        isReadingLabel = false
+        showBarcodeScanEffect = false
+        correctedLabelImage = nil
 
         print("[ViewModel] clearActiveBoxOnly completed. Completed boxes preserved: \(completedBoxAnchors.count)")
     }
 
     /// Clear all completed boxes from the scene
     func clearAllMeasurements() {
+        for viz in completedBoxVisualizations {
+            viz.removeAttachedLabelBillboard(using: sessionManager)
+        }
         for anchor in completedBoxAnchors {
             sessionManager.removeAnchor(anchor)
         }
@@ -2281,6 +2328,10 @@ class ARMeasurementViewModel: ObservableObject {
                 if node === viz.entity {
                     return viz.id
                 }
+                // Also check if it belongs to the attached label billboard
+                if let labelBB = viz.attachedLabelBillboard, node === labelBB.entity {
+                    return viz.id
+                }
                 current = node.parent
             }
         }
@@ -2319,7 +2370,24 @@ class ARMeasurementViewModel: ObservableObject {
         // Auto-save current active box if exists
         if let existingResult = currentMeasurement {
             convertActiveBoxToCompleted(result: existingResult, unit: currentUnit)
+            // Transfer current active billboard to newly completed viz
+            if showLabelBillboard, let billboard = labelBillboard, let anchor = labelBillboardAnchor,
+               let lastViz = completedBoxVisualizations.last {
+                lastViz.attachLabelBillboard(billboard, anchor: anchor)
+                labelBillboard = nil
+                labelBillboardAnchor = nil
+                showLabelBillboard = false
+            }
             clearActiveBoxOnly()
+        }
+
+        // Transfer label billboard back to ViewModel if attached
+        if let (billboard, bbAnchor) = completedViz.detachLabelBillboard() {
+            labelBillboard = billboard
+            labelBillboardAnchor = bbAnchor
+            showLabelBillboard = true
+            // Restore active unified action icons
+            billboard.updateActionIcons(ActionIconBuilder.labelUnifiedActions)
         }
 
         // Get data from completed box
@@ -2350,6 +2418,9 @@ class ARMeasurementViewModel: ObservableObject {
               let index = completedBoxVisualizations.firstIndex(where: { $0.id == selectedId }) else {
             return
         }
+
+        // Clean up attached label billboard if any
+        completedBoxVisualizations[index].removeAttachedLabelBillboard(using: sessionManager)
 
         let anchor = completedBoxAnchors[index]
         sessionManager.removeAnchor(anchor)

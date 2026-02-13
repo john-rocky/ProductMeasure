@@ -21,6 +21,11 @@ class CompletedBoxVisualization {
     // Action icon row (for completed box actions)
     private var actionIconRow: Entity?
 
+    // Attached label billboard (transferred from ViewModel on save)
+    private(set) var attachedLabelBillboard: LabelBillboard?
+    private(set) var attachedLabelBillboardAnchor: AnchorEntity?
+    var hasLabelBillboard: Bool { attachedLabelBillboard != nil }
+
     private(set) var boundingBox: BoundingBox3D
     private(set) var boxId: Int
     private let height: Float
@@ -88,6 +93,11 @@ class CompletedBoxVisualization {
     // MARK: - Public Methods
 
     func updateLabelOrientations(cameraPosition: SIMD3<Float>) {
+        // Update attached label billboard orientation if present
+        if let labelBB = attachedLabelBillboard {
+            labelBB.updateOrientation(cameraPosition: cameraPosition)
+        }
+
         guard let billboard = dimensionBillboardEntity else { return }
 
         let billboardPos = billboard.position(relativeTo: nil)
@@ -101,13 +111,23 @@ class CompletedBoxVisualization {
     }
 
     func setDimensionBillboardVisible(_ visible: Bool) {
-        dimensionBillboardEntity?.isEnabled = visible
+        if hasLabelBillboard {
+            // Show/hide the rich label billboard instead of the simple one
+            attachedLabelBillboard?.setVisible(visible)
+            // Keep simple billboard hidden when label billboard is attached
+            dimensionBillboardEntity?.isEnabled = false
+        } else {
+            dimensionBillboardEntity?.isEnabled = visible
+        }
         if !visible {
             hideActionIcons()
         }
     }
 
     func showActionIcons() {
+        // Label billboard has built-in action icons — no-op
+        if hasLabelBillboard { return }
+
         guard actionIconRow == nil, let billboard = dimensionBillboardEntity else { return }
 
         let row = ActionIconBuilder.createActionRow(actions: ActionIconBuilder.completedActions)
@@ -117,12 +137,44 @@ class CompletedBoxVisualization {
     }
 
     func hideActionIcons() {
+        // Label billboard action icons are always visible — no-op
+        if hasLabelBillboard { return }
+
         actionIconRow?.removeFromParent()
         actionIconRow = nil
     }
 
     var isShowingActionIcons: Bool {
-        actionIconRow != nil
+        actionIconRow != nil || hasLabelBillboard
+    }
+
+    // MARK: - Label Billboard Attachment
+
+    /// Attach a LabelBillboard (transferred from ViewModel on save).
+    /// Swaps action icons to completed actions (re-edit / delete).
+    func attachLabelBillboard(_ billboard: LabelBillboard, anchor: AnchorEntity) {
+        attachedLabelBillboard = billboard
+        attachedLabelBillboardAnchor = anchor
+        billboard.updateActionIcons(ActionIconBuilder.completedActions)
+    }
+
+    /// Detach the label billboard without removing from scene (for re-edit transfer back).
+    func detachLabelBillboard() -> (LabelBillboard, AnchorEntity)? {
+        guard let billboard = attachedLabelBillboard, let anchor = attachedLabelBillboardAnchor else {
+            return nil
+        }
+        attachedLabelBillboard = nil
+        attachedLabelBillboardAnchor = nil
+        return (billboard, anchor)
+    }
+
+    /// Remove the attached label billboard from the AR scene and clear references.
+    func removeAttachedLabelBillboard(using sessionManager: ARSessionManager) {
+        if let anchor = attachedLabelBillboardAnchor {
+            sessionManager.removeAnchor(anchor)
+        }
+        attachedLabelBillboard = nil
+        attachedLabelBillboardAnchor = nil
     }
 
     func toMeasurementResult() -> MeasurementCalculator.MeasurementResult {
