@@ -169,10 +169,8 @@ class CompletedBoxVisualization {
     }
 
     /// Remove the attached label billboard from the AR scene and clear references.
-    func removeAttachedLabelBillboard(using sessionManager: ARSessionManager) {
-        if let anchor = attachedLabelBillboardAnchor {
-            sessionManager.removeAnchor(anchor)
-        }
+    func removeAttachedLabelBillboard() {
+        attachedLabelBillboardAnchor?.removeFromParent()
         attachedLabelBillboard = nil
         attachedLabelBillboardAnchor = nil
     }

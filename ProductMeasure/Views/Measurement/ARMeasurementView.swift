@@ -1483,7 +1483,7 @@ class ARMeasurementViewModel: ObservableObject {
         // Remove oldest if at max capacity
         if completedBoxVisualizations.count >= maxCompletedBoxes {
             // Clean up oldest viz's attached label billboard if any
-            completedBoxVisualizations.first?.removeAttachedLabelBillboard(using: sessionManager)
+            completedBoxVisualizations.first?.removeAttachedLabelBillboard()
             if let oldAnchor = completedBoxAnchors.first {
                 sessionManager.removeAnchor(oldAnchor)
             }
@@ -1601,7 +1601,7 @@ class ARMeasurementViewModel: ObservableObject {
     /// Clear all completed boxes from the scene
     func clearAllMeasurements() {
         for viz in completedBoxVisualizations {
-            viz.removeAttachedLabelBillboard(using: sessionManager)
+            viz.removeAttachedLabelBillboard()
         }
         for anchor in completedBoxAnchors {
             sessionManager.removeAnchor(anchor)
@@ -2420,7 +2420,7 @@ class ARMeasurementViewModel: ObservableObject {
         }
 
         // Clean up attached label billboard if any
-        completedBoxVisualizations[index].removeAttachedLabelBillboard(using: sessionManager)
+        completedBoxVisualizations[index].removeAttachedLabelBillboard()
 
         let anchor = completedBoxAnchors[index]
         sessionManager.removeAnchor(anchor)

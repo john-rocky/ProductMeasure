@@ -38,6 +38,10 @@ class LabelBillboard {
     private var currentMaxContentWidth: Float = 0
     private var currentMaxLabelWidth: Float = 0
 
+    // Placeholder dimension section (shown before measurement)
+    private var placeholderGroup: Entity?
+    private var placeholderSectionHeight: Float = 0
+
     /// Whether this billboard has been expanded with dimensions
     private(set) var isUnified: Bool = false
 
@@ -189,6 +193,45 @@ class LabelBillboard {
             }
         }
 
+        // -- Build placeholder dimension section (shown before measurement) --
+        let thickSeparatorThick: Float = 0.001
+        let phAccent = PMTheme.uiCyan
+
+        let phPrompt = textMesh("TAP TO MEASURE", size: headerFontSize, weight: .bold,
+                                color: phAccent.withAlphaComponent(0.55))
+        let phDimHeader = textMesh("DIMENSIONS", size: sectionFontSize, weight: .bold,
+                                   color: phAccent.withAlphaComponent(0.30))
+
+        let phLabels = ["WIDTH", "HEIGHT", "LENGTH", "VOLUME", "VOL.WT", "SIZE"]
+        var phLinePairs: [(label: (entity: ModelEntity, size: SIMD3<Float>),
+                           value: (entity: ModelEntity, size: SIMD3<Float>))] = []
+
+        for label in phLabels {
+            let l = textMesh(label, size: primaryFontSize, weight: .semibold,
+                            color: phAccent.withAlphaComponent(0.25))
+            let v = textMesh("---", size: primaryFontSize, weight: .medium,
+                            color: phAccent.withAlphaComponent(0.20))
+            phLinePairs.append((l, v))
+        }
+
+        // Calculate placeholder section height
+        var phHeight: Float = phPrompt.size.y
+        phHeight += sectionTopGap
+        phHeight += separatorThick + separatorMargin
+        phHeight += phDimHeader.size.y
+        for pair in phLinePairs {
+            phHeight += lineGap
+            phHeight += max(pair.label.size.y, pair.value.size.y)
+        }
+        phHeight += sectionTopGap + thickSeparatorThick
+        placeholderSectionHeight = phHeight
+
+        // Add placeholder height to total content
+        totalContentHeight += placeholderSectionHeight + sectionTopGap
+
+        // Update width if placeholder text is wider
+        maxContentWidth = max(maxContentWidth, phPrompt.size.x)
+
         // -- Layout dimensions --
         let totalWidth = accentBarWidth + innerPadding + maxContentWidth + padding * 2
         let totalHeight = totalContentHeight + padding * 2
@@ -266,6 +309,59 @@ class LabelBillboard {
 
         // -- Position text top-to-bottom --
         var cursor = padding + totalContentHeight
+
+        // -- Placeholder dimension section (top of billboard) --
+        let phGroup = Entity()
+        phGroup.name = "placeholder_dimensions"
+
+        // "TAP TO MEASURE" prompt
+        cursor -= phPrompt.size.y
+        phPrompt.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+        phGroup.addChild(phPrompt.entity)
+
+        // Thin separator
+        cursor -= sectionTopGap
+        let phSepW = maxContentWidth
+        let phSepMesh = MeshResource.generateBox(size: [phSepW, separatorThick, 0.0012])
+        var phSepMat = UnlitMaterial(color: phAccent.withAlphaComponent(0.15))
+        phSepMat.blending = .transparent(opacity: .init(floatLiteral: 0.15))
+        let phSepEntity = ModelEntity(mesh: phSepMesh, materials: [phSepMat])
+        phSepEntity.position = SIMD3<Float>(textLeftX + phSepW / 2, cursor, 0.0005)
+        phGroup.addChild(phSepEntity)
+        cursor -= separatorThick + separatorMargin
+
+        // "DIMENSIONS" header
+        cursor -= phDimHeader.size.y
+        phDimHeader.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+        phGroup.addChild(phDimHeader.entity)
+
+        // Placeholder data lines (visible immediately, not stagger-revealed)
+        for pair in phLinePairs {
+            cursor -= lineGap
+            let h = max(pair.label.size.y, pair.value.size.y)
+            cursor -= h
+            pair.label.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+            pair.value.entity.position = SIMD3<Float>(valueLeftX, cursor, 0)
+            phGroup.addChild(pair.label.entity)
+            phGroup.addChild(pair.value.entity)
+        }
+
+        // Thick separator between placeholder and label section
+        cursor -= sectionTopGap
+        let phThickSepW = maxContentWidth
+        let phThickSepMesh = MeshResource.generateBox(size: [phThickSepW, thickSeparatorThick, 0.0012])
+        var phThickSepMat = UnlitMaterial(color: phAccent.withAlphaComponent(0.15))
+        phThickSepMat.blending = .transparent(opacity: .init(floatLiteral: 0.15))
+        let phThickSepEntity = ModelEntity(mesh: phThickSepMesh, materials: [phThickSepMat])
+        phThickSepEntity.position = SIMD3<Float>(textLeftX + phThickSepW / 2, cursor, 0.0005)
+        phGroup.addChild(phThickSepEntity)
+        cursor -= thickSeparatorThick
+
+        container.addChild(phGroup)
+        placeholderGroup = phGroup
+
+        // Gap between placeholder and label section
+        cursor -= sectionTopGap
 
         // Header: "LABEL"
         cursor -= headerResult.size.y
@@ -421,6 +517,10 @@ class LabelBillboard {
             return
         }
 
+        // Remove placeholder dimension section
+        placeholderGroup?.removeFromParent()
+        placeholderGroup = nil
+
         // Green accent for dimension section
         let dimAccent = PMTheme.uiCyan
         let dimBorder = PMTheme.uiCyan.withAlphaComponent(0.40)
@@ -527,7 +627,7 @@ class LabelBillboard {
         let newMaxContentWidth = max(currentMaxContentWidth, dimMaxContentWidth)
         let newMaxLabelWidth = max(currentMaxLabelWidth, dimMaxLabelWidth)
         let newTotalWidth = accentBarWidth + innerPadding + newMaxContentWidth + padding * 2
-        let newTotalHeight = currentTotalHeight + dimSectionHeight + sectionTopGap
+        let newTotalHeight = currentTotalHeight - placeholderSectionHeight + dimSectionHeight
 
         let cornerRadius = min(newTotalHeight, newTotalWidth) * 0.06
         let newLeftEdge = -newTotalWidth / 2
