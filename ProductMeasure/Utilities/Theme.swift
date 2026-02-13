@@ -89,6 +89,11 @@ enum PMTheme {
     static let uiEdgeOuterDim  = UIColor(hex: 0x39FF14).withAlphaComponent(0.15)
     static let uiCornerMarkerDim = UIColor(hex: 0x39FF14).withAlphaComponent(0.6)
 
+    /// Red wireframe colors (for check-required boxes)
+    static let uiEdgeInnerRed = UIColor(hex: 0xFF404D).withAlphaComponent(1.0)
+    static let uiEdgeOuterRed = UIColor(hex: 0xFF404D).withAlphaComponent(0.15)
+    static let uiCornerMarkerRed = UIColor(hex: 0xFF404D).withAlphaComponent(0.6)
+
     // MARK: Billboard
 
     static let uiBillboardBg     = UIColor(red: 13/255, green: 18/255, blue: 31/255, alpha: 0.85)

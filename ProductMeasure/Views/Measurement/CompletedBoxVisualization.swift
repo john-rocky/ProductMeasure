@@ -44,22 +44,30 @@ class CompletedBoxVisualization {
 
     // MARK: - Constants
 
-    // Dual-layer edges (dimmer than active box)
-    private let innerEdgeColor: UIColor = PMTheme.uiEdgeInnerDim
-    private let outerEdgeColor: UIColor = PMTheme.uiEdgeOuterDim
+    // Dual-layer edges (dimmer than active box; red for boxId==2)
+    private var innerEdgeColor: UIColor {
+        boxId == 2 ? PMTheme.uiEdgeInnerRed : PMTheme.uiEdgeInnerDim
+    }
+    private var outerEdgeColor: UIColor {
+        boxId == 2 ? PMTheme.uiEdgeOuterRed : PMTheme.uiEdgeOuterDim
+    }
     private let innerEdgeRadius: Float = PMTheme.innerEdgeRadius
     private let outerEdgeRadius: Float = PMTheme.outerEdgeRadius
 
-    // Corner markers (smaller, dimmer)
+    // Corner markers (smaller, dimmer; red for boxId==2)
     private let cornerMarkerRadius: Float = PMTheme.cornerMarkerRadiusSmall
-    private let cornerMarkerColor: UIColor = PMTheme.uiCornerMarkerDim
+    private var cornerMarkerColor: UIColor {
+        boxId == 2 ? PMTheme.uiCornerMarkerRed : PMTheme.uiCornerMarkerDim
+    }
 
     // Label styling
     private let billboardIdFontSize: CGFloat = 0.014
     private let billboardBodyFontSize: CGFloat = 0.010
     private let labelTextColor: UIColor = PMTheme.uiBillboardText
     private let labelBackgroundColor: UIColor = PMTheme.uiBillboardBg
-    private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
+    private var billboardAccentColor: UIColor {
+        boxId == 2 ? PMTheme.uiRed : PMTheme.uiBillboardAccent
+    }
     private let billboardTopBorderColor: UIColor = PMTheme.uiBillboardTopBorder
 
     // MARK: - Initialization

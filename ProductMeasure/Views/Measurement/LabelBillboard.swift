@@ -586,6 +586,26 @@ class LabelBillboard {
             DataLine(label: "SIZE", value: SizeClass.classify(volumeCubicMeters: storedVolume).rawValue),
         ]
 
+        // -- Pre-generate check status banner --
+        // Full-width colored banner with icon + dark text for high visibility
+        let bannerPadV: Float = 0.003
+        let bannerGap: Float = 0.004   // gap below banner
+
+        var bannerTextResult: (entity: ModelEntity, size: SIMD3<Float>)?
+        var bannerBgColor: UIColor?
+        var bannerTotalHeight: Float = 0
+
+        if storedBoxId == 1 || storedBoxId == 2 {
+            let isOK = storedBoxId == 1
+            let bannerText = isOK ? "\u{2713}  CHECK OK" : "\u{26A0}  CHECK REQUIRED (SIZE)"
+            bannerBgColor = isOK
+                ? PMTheme.uiCyan.withAlphaComponent(0.85)
+                : PMTheme.uiRed.withAlphaComponent(0.85)
+            let bannerTextColor = UIColor(white: 0.05, alpha: 1.0)
+            bannerTextResult = textMesh(bannerText, size: headerFontSize, weight: .bold, color: bannerTextColor)
+            bannerTotalHeight = bannerTextResult!.size.y + bannerPadV * 2 + bannerGap
+        }
+
         // -- Pre-generate dimension text entities --
         let idResult = textMesh(String(format: "#%03d", storedBoxId), size: headerFontSize, weight: .bold, color: dimAccent)
         let dimHeader = textMesh("DIMENSIONS", size: sectionFontSize, weight: .bold, color: dimSectionTextColor)
@@ -596,8 +616,12 @@ class LabelBillboard {
         for dl in dimLines {
             let isHighlight = Self.isHighlightLabel(dl.label)
             let lColor = isHighlight ? dimHighlightLabelColor : dimLabelColor
-            let vColor = isHighlight ? dimHighlightValueColor : dimValueColor
+            var vColor = isHighlight ? dimHighlightValueColor : dimValueColor
             let vWeight: UIFont.Weight = isHighlight ? .bold : .medium
+            // Override SIZE value color to red for boxId==2
+            if dl.label == "SIZE" && storedBoxId == 2 {
+                vColor = PMTheme.uiRed
+            }
             let l = textMesh(dl.label, size: primaryFontSize, weight: .semibold, color: lColor)
             let v = textMesh(dl.value, size: primaryFontSize, weight: vWeight, color: vColor)
             dimMaxLabelWidth = max(dimMaxLabelWidth, l.size.x)
@@ -605,7 +629,8 @@ class LabelBillboard {
         }
 
         // -- Calculate dimension section height --
-        var dimSectionHeight: Float = idResult.size.y  // #NNN
+        var dimSectionHeight: Float = bannerTotalHeight  // banner (0 if no banner)
+        dimSectionHeight += idResult.size.y  // #NNN
         dimSectionHeight += sectionTopGap
         dimSectionHeight += separatorThick + separatorMargin
         dimSectionHeight += dimHeader.size.y
@@ -620,6 +645,9 @@ class LabelBillboard {
 
         // -- Calculate new billboard dimensions --
         var dimMaxContentWidth: Float = max(idResult.size.x, dimHeader.size.x)
+        if let txtResult = bannerTextResult {
+            dimMaxContentWidth = max(dimMaxContentWidth, txtResult.size.x)
+        }
         for pair in dimLinePairs {
             dimMaxContentWidth = max(dimMaxContentWidth, dimMaxLabelWidth + labelValueGap + pair.value.size.x)
         }
@@ -714,6 +742,30 @@ class LabelBillboard {
 
         // Position dimension text from top of new billboard downward
         var dimCursor = padding + (newTotalHeight - padding * 2)  // content area top
+
+        // Check status banner (full-width colored strip above #NNN header)
+        if let txtResult = bannerTextResult, let bgColor = bannerBgColor {
+            let bannerH = txtResult.size.y + bannerPadV * 2
+            // Full-width background strip
+            let bannerW = newTotalWidth - padding * 0.5
+            let bannerBgMesh = MeshResource.generateBox(
+                size: [bannerW, bannerH, 0.0012],
+                cornerRadius: bannerH * 0.2
+            )
+            var bannerMat = UnlitMaterial(color: bgColor)
+            bannerMat.blending = .transparent(opacity: .init(floatLiteral: 0.85))
+            let bannerBgEntity = ModelEntity(mesh: bannerBgMesh, materials: [bannerMat])
+            // Center banner horizontally, position at top
+            let bannerCenterY = dimCursor - bannerH / 2
+            bannerBgEntity.position = SIMD3<Float>(0, bannerCenterY, 0.0003)
+            dimContentGroup.addChild(bannerBgEntity)
+            // Center text on banner
+            let textY = dimCursor - bannerPadV - txtResult.size.y
+            let textX = -txtResult.size.x / 2  // center-aligned
+            txtResult.entity.position = SIMD3<Float>(textX, textY, 0.001)
+            dimContentGroup.addChild(txtResult.entity)
+            dimCursor -= bannerH + bannerGap
+        }
 
         // #NNN header
         dimCursor -= idResult.size.y
