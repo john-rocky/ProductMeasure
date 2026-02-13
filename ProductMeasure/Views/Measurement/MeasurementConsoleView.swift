@@ -16,10 +16,13 @@ struct MeasurementConsoleView: View {
     let qualityLabel: String
     let pointCount: Int
     let labelData: LabelData?
+    let cartonId: String?
+    let boxId: Int
     let lineRevealed: [Bool]
     let isComplete: Bool
     let onExportCSV: () -> Void
     let onClose: () -> Void
+    var onReMeasure: (() -> Void)? = nil
 
     @State private var scanlineOffset: CGFloat = 0
     @State private var cursorVisible = true
@@ -27,13 +30,30 @@ struct MeasurementConsoleView: View {
     private var allLines: [ConsoleLine] {
         var lines: [ConsoleLine] = []
 
+        let isSizeAlert = boxId == 2
+
+        // WMS registration section (6 lines, indices 0-5)
+        let ctnDisplay = cartonId ?? "N/A"
+        lines.append(ConsoleLine(icon: "network", label: "CONNECT", value: "wms.warehouse.io:443", section: .wms))
+        lines.append(ConsoleLine(icon: "arrow.up.circle", label: "REQUEST", value: "POST /wms/receipts", section: .wms))
+        lines.append(ConsoleLine(icon: "doc.text", label: "BODY", value: "{\"ctn\":\"\(ctnDisplay)\"}", section: .wms))
+        if isSizeAlert {
+            lines.append(ConsoleLine(icon: "xmark.circle", label: "RESPONSE", value: "400 SIZE MISMATCH", section: .wms, isAlert: true))
+            lines.append(ConsoleLine(icon: "exclamationmark.triangle", label: "REASON", value: "Exceeds size tolerance", section: .wms, isAlert: true))
+            lines.append(ConsoleLine(icon: "arrow.counterclockwise", label: "ACTION", value: "Re-measure required", section: .wms, isAlert: true))
+        } else {
+            lines.append(ConsoleLine(icon: "checkmark.circle", label: "RESPONSE", value: "200 OK", section: .wms))
+            lines.append(ConsoleLine(icon: "tray.and.arrow.down", label: "RECEIPT", value: "RCV-\(String(format: "%06d", Int.random(in: 100000...999999)))", section: .wms))
+            lines.append(ConsoleLine(icon: "printer", label: "PRINT", value: "Label sent to printer", section: .wms))
+        }
+
         // Dimensions section
         lines.append(ConsoleLine(icon: "ruler", label: "WIDTH", value: width, section: .dimensions))
         lines.append(ConsoleLine(icon: "ruler", label: "HEIGHT", value: height, section: .dimensions))
         lines.append(ConsoleLine(icon: "ruler", label: "LENGTH", value: length, section: .dimensions))
         lines.append(ConsoleLine(icon: "cube", label: "VOLUME", value: volume, section: .dimensions))
         lines.append(ConsoleLine(icon: "shippingbox", label: "VOL.WT", value: volumetricWeight, section: .dimensions))
-        lines.append(ConsoleLine(icon: "rectangle.3.group", label: "SIZE", value: sizeClass, section: .dimensions))
+        lines.append(ConsoleLine(icon: "rectangle.3.group", label: "SIZE", value: isSizeAlert ? "\(sizeClass) - OUT OF SPEC" : sizeClass, section: .dimensions, isAlert: isSizeAlert))
 
         // Label data section
         if let labelData = labelData {
@@ -85,7 +105,9 @@ struct MeasurementConsoleView: View {
                                     icon: line.icon,
                                     label: line.label,
                                     value: line.value,
-                                    isLast: index == revealedCount - 1
+                                    isLast: index == revealedCount - 1,
+                                    section: line.section,
+                                    isAlert: line.isAlert
                                 )
                                 .transition(.move(edge: .trailing).combined(with: .opacity))
                             }
@@ -139,9 +161,9 @@ struct MeasurementConsoleView: View {
 
             Spacer()
 
-            Text(isComplete ? "COMPLETE" : "LOADING...")
+            Text(isComplete ? (boxId == 2 ? "SIZE ALERT" : "COMPLETE") : "LOADING...")
                 .font(PMTheme.mono(10, weight: .medium))
-                .foregroundColor(isComplete ? PMTheme.green : PMTheme.cyan.opacity(0.7))
+                .foregroundColor(isComplete ? (boxId == 2 ? PMTheme.red : PMTheme.green) : PMTheme.cyan.opacity(0.7))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -152,17 +174,18 @@ struct MeasurementConsoleView: View {
 
     @ViewBuilder
     private func sectionHeader(_ section: ConsoleSection) -> some View {
+        let accent = section == .wms ? PMTheme.green : PMTheme.cyan
         HStack(spacing: 6) {
             Rectangle()
-                .fill(PMTheme.cyan.opacity(0.3))
+                .fill(accent.opacity(0.3))
                 .frame(width: 12, height: 1)
 
             Text(section.title)
                 .font(PMTheme.mono(PMTheme.consoleSectionFontSize, weight: .bold))
-                .foregroundColor(PMTheme.cyan.opacity(0.6))
+                .foregroundColor(accent.opacity(0.6))
 
             Rectangle()
-                .fill(PMTheme.cyan.opacity(0.3))
+                .fill(accent.opacity(0.3))
                 .frame(height: 1)
         }
         .padding(.top, 8)
@@ -172,11 +195,13 @@ struct MeasurementConsoleView: View {
     // MARK: - Console Line
 
     @ViewBuilder
-    private func consoleLine(icon: String, label: String, value: String, isLast: Bool) -> some View {
+    private func consoleLine(icon: String, label: String, value: String, isLast: Bool, section: ConsoleSection = .dimensions, isAlert: Bool = false) -> some View {
+        let valueColor: Color = isAlert ? PMTheme.red : (section == .wms ? PMTheme.green : PMTheme.textPrimary)
+        let iconColor: Color = isAlert ? PMTheme.red : (section == .wms ? PMTheme.green : PMTheme.cyan)
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 11))
-                .foregroundColor(PMTheme.cyan)
+                .foregroundColor(iconColor)
                 .frame(width: 16)
 
             Text(label)
@@ -186,7 +211,7 @@ struct MeasurementConsoleView: View {
 
             Text(value)
                 .font(PMTheme.mono(PMTheme.consoleFieldFontSize, weight: .medium))
-                .foregroundColor(PMTheme.textPrimary)
+                .foregroundColor(valueColor)
                 .lineLimit(2)
 
             if isLast && !isComplete {
@@ -228,28 +253,45 @@ struct MeasurementConsoleView: View {
 
     private var buttonRow: some View {
         HStack(spacing: 12) {
-            Button(action: onClose) {
-                Text("CLOSE")
-                    .font(PMTheme.mono(12, weight: .bold))
-                    .foregroundColor(PMTheme.textSecondary)
+            if boxId == 2 {
+                // Size out-of-spec: show RE-MEASURE button
+                Button(action: { (onReMeasure ?? onClose)() }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 11))
+                        Text("RE-MEASURE")
+                            .font(PMTheme.mono(12, weight: .bold))
+                    }
+                    .foregroundColor(.black)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .background(PMTheme.surfaceElevated)
+                    .background(PMTheme.red)
                     .clipShape(Capsule())
-            }
-
-            Button(action: onExportCSV) {
-                HStack(spacing: 4) {
-                    Image(systemName: "doc.text")
-                        .font(.system(size: 11))
-                    Text("EXPORT CSV")
-                        .font(PMTheme.mono(12, weight: .bold))
                 }
-                .foregroundColor(.black)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(PMTheme.cyan)
-                .clipShape(Capsule())
+            } else {
+                Button(action: onClose) {
+                    Text("CLOSE")
+                        .font(PMTheme.mono(12, weight: .bold))
+                        .foregroundColor(PMTheme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(PMTheme.surfaceElevated)
+                        .clipShape(Capsule())
+                }
+
+                Button(action: onExportCSV) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 11))
+                        Text("EXPORT CSV")
+                            .font(PMTheme.mono(12, weight: .bold))
+                    }
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(PMTheme.cyan)
+                    .clipShape(Capsule())
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -260,12 +302,14 @@ struct MeasurementConsoleView: View {
 // MARK: - Supporting Types
 
 enum ConsoleSection: Equatable {
+    case wms
     case dimensions
     case label
     case quality
 
     var title: String {
         switch self {
+        case .wms: return "WMS REGISTRATION"
         case .dimensions: return "DIMENSIONS"
         case .label: return "LABEL DATA"
         case .quality: return "QUALITY"
@@ -278,4 +322,5 @@ struct ConsoleLine {
     let label: String
     let value: String
     let section: ConsoleSection
+    var isAlert: Bool = false
 }

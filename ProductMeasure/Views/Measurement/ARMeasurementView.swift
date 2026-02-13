@@ -99,23 +99,24 @@ struct ARMeasurementView: View {
 
                         Spacer()
 
-                        // Save button when workflow reaches showingResult
+                        // Save/Check button when workflow reaches showingResult
                         if viewModel.workflowStep == .showingResult {
+                            let isCheck = viewModel.calloutBoxId == 2
                             Button(action: {
                                 viewModel.showMeasurementConsole()
                             }) {
                                 HStack(spacing: 6) {
-                                    Image(systemName: "checkmark.rectangle")
+                                    Image(systemName: isCheck ? "exclamationmark.magnifyingglass" : "checkmark.rectangle")
                                         .font(.system(size: 14))
-                                    Text("SAVE")
+                                    Text(isCheck ? "CHECK" : "SAVE")
                                         .font(PMTheme.mono(14, weight: .bold))
                                 }
                                 .foregroundColor(.black)
                                 .padding(.horizontal, 32)
                                 .padding(.vertical, 12)
-                                .background(PMTheme.cyan)
+                                .background(isCheck ? PMTheme.amber : PMTheme.cyan)
                                 .clipShape(Capsule())
-                                .shadow(color: PMTheme.cyan.opacity(0.4), radius: 8, x: 0, y: 2)
+                                .shadow(color: (isCheck ? PMTheme.amber : PMTheme.cyan).opacity(0.4), radius: 8, x: 0, y: 2)
                             }
                         }
 
@@ -254,10 +255,13 @@ struct ARMeasurementView: View {
                         qualityLabel: result.quality.overallQuality.rawValue.capitalized,
                         pointCount: result.quality.pointCount,
                         labelData: viewModel.pendingLabelData,
+                        cartonId: viewModel.pendingLabelData?.cartonId,
+                        boxId: viewModel.calloutBoxId,
                         lineRevealed: viewModel.consoleLineRevealed,
                         isComplete: viewModel.consoleReadingComplete,
                         onExportCSV: { viewModel.showCSVExport() },
-                        onClose: { viewModel.closeWorkflow() }
+                        onClose: { viewModel.closeWorkflow() },
+                        onReMeasure: { viewModel.closeWorkflow() }
                     )
                     .transition(.opacity)
                 }
@@ -2254,7 +2258,8 @@ class ARMeasurementViewModel: ObservableObject {
         let sizeClass = SizeClass.classify(volumeCubicMeters: result.boundingBox.volume).rawValue
 
         // Build console line count
-        var lineCount = 6 // dimensions section always has 6 lines
+        let wmsLineCount = 6
+        var lineCount = wmsLineCount + 6 // 6 WMS lines + 6 dimensions lines
         if let label = pendingLabelData {
             lineCount += label.displayFields.count
         }
@@ -2265,13 +2270,29 @@ class ARMeasurementViewModel: ObservableObject {
         showConsole = true
         workflowStep = .showingConsole
 
-        // Stagger line reveals
+        // Stagger line reveals with variable delays for WMS progression feel
         Task { [weak self] in
             guard let self = self else { return }
             let stagger = PMTheme.consoleTypingStagger
 
             for i in 0..<lineCount {
-                try? await Task.sleep(nanoseconds: UInt64(stagger * 1_000_000_000))
+                // Variable delay for WMS lines to simulate API call progression
+                let delay: Double
+                if i < wmsLineCount {
+                    switch i {
+                    case 0: delay = stagger              // CONNECT - normal
+                    case 1: delay = 0.3                  // REQUEST - brief pause after connect
+                    case 2: delay = 0.15                 // BODY - quick after request
+                    case 3: delay = 0.8                  // RESPONSE - simulated API wait
+                    case 4: delay = 0.2                  // RECEIPT/REASON - quick follow-up
+                    case 5: delay = 0.3                  // PRINT/ACTION - brief pause
+                    default: delay = stagger
+                    }
+                } else {
+                    delay = stagger
+                }
+
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 guard self.showConsole else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
                     if i < self.consoleLineRevealed.count {
