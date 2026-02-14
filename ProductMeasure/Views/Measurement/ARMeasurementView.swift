@@ -242,6 +242,15 @@ struct ARMeasurementView: View {
                     .allowsHitTesting(false)
                 }
 
+                // Status vignette flash (OK=green, NG=red)
+                if viewModel.showStatusVignette {
+                    StatusVignetteView(
+                        isNG: viewModel.statusVignetteIsNG,
+                        isVisible: $viewModel.showStatusVignette
+                    )
+                    .transition(.opacity)
+                }
+
                 // Measurement console overlay
                 if viewModel.showConsole, let result = viewModel.currentMeasurement {
                     let unit = measurementUnit
@@ -772,6 +781,10 @@ class ARMeasurementViewModel: ObservableObject {
     private var accumulatedQualities: [MeasurementQuality] = []
     private var originalAxisMapping: BoundingBox3D.AxisMapping?
     private var originalFloorY: Float?
+
+    // Status vignette state
+    @Published var showStatusVignette = false
+    @Published var statusVignetteIsNG = false
 
     // Dimension callout state
     @Published var showDimensionCallout = false
@@ -1328,6 +1341,10 @@ class ARMeasurementViewModel: ObservableObject {
                         self.calloutLineRevealed = [false, false, false, false]
                         self.calloutTransitionProgress = 0.0
                         self.showDimensionCallout = true
+
+                        // Trigger status vignette flash
+                        self.statusVignetteIsNG = self.nextBoxId == 2
+                        self.showStatusVignette = true
 
                         // Stagger line reveals
                         Task { [weak self] in

@@ -56,6 +56,7 @@
 		001000116 /* MeasurementConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000117 /* MeasurementConsoleView.swift */; };
 		001000118 /* CSVDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000119 /* CSVDisplayView.swift */; };
 		001000120 /* BarcodeScanEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000121 /* BarcodeScanEffectView.swift */; };
+		001000124 /* StatusVignetteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000125 /* StatusVignetteView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -110,6 +111,7 @@
 		001000117 /* MeasurementConsoleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementConsoleView.swift; sourceTree = "<group>"; };
 		001000119 /* CSVDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVDisplayView.swift; sourceTree = "<group>"; };
 		001000121 /* BarcodeScanEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScanEffectView.swift; sourceTree = "<group>"; };
+		001000125 /* StatusVignetteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusVignetteView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -238,6 +240,7 @@
 				001000117 /* MeasurementConsoleView.swift */,
 				001000119 /* CSVDisplayView.swift */,
 				001000121 /* BarcodeScanEffectView.swift */,
+				001000125 /* StatusVignetteView.swift */,
 			);
 			path = Measurement;
 			sourceTree = "<group>";
@@ -385,6 +388,7 @@
 				001000116 /* MeasurementConsoleView.swift in Sources */,
 				001000118 /* CSVDisplayView.swift in Sources */,
 				001000120 /* BarcodeScanEffectView.swift in Sources */,
+				001000124 /* StatusVignetteView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

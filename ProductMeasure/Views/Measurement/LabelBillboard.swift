@@ -521,9 +521,9 @@ class LabelBillboard {
         placeholderGroup?.removeFromParent()
         placeholderGroup = nil
 
-        // Green accent for dimension section
-        let dimAccent = PMTheme.uiCyan
-        let dimBorder = PMTheme.uiCyan.withAlphaComponent(0.40)
+        // Accent color based on boxId: green for 1st measurement, red for 2nd
+        let dimAccent = storedBoxId == 2 ? PMTheme.uiRed : PMTheme.uiCyan
+        let dimBorder = dimAccent.withAlphaComponent(0.40)
 
         // Layout constants (match buildBillboard)
         let accentBarWidth: Float = 0.002
@@ -734,6 +734,7 @@ class LabelBillboard {
         structuralGroup.addChild(newAccentGlow)
         structuralGroup.addChild(newTopBorder)
         structuralGroup.addChild(newBottomBorder)
+
         container.addChild(structuralGroup)
 
         // -- Build dimension content group above existing label content --

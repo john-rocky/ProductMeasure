@@ -17,6 +17,8 @@ struct DimensionCalloutView: View {
     let targetPosition: CGPoint
     let screenSize: CGSize
 
+    private var accentColor: Color { boxId == 2 ? PMTheme.red : PMTheme.cyan }
+
     private let cardWidth: CGFloat = 160
 
     // Right-side resting position (below top bar + toggle)
@@ -65,7 +67,7 @@ struct DimensionCalloutView: View {
         .background(
             HStack(spacing: 0) {
                 Rectangle()
-                    .fill(PMTheme.cyan)
+                    .fill(accentColor)
                     .frame(width: 3)
                 Spacer()
             }
@@ -74,7 +76,7 @@ struct DimensionCalloutView: View {
         .clipShape(RoundedRectangle(cornerRadius: PMTheme.calloutCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: PMTheme.calloutCornerRadius)
-                .strokeBorder(PMTheme.cyan.opacity(0.25), lineWidth: 0.5)
+                .strokeBorder(accentColor.opacity(0.25), lineWidth: 0.5)
         )
         .frame(width: cardWidth)
         .scaleEffect(currentScale)
@@ -87,6 +89,6 @@ struct DimensionCalloutView: View {
     private func calloutLine(text: String, isAccent: Bool = false) -> some View {
         Text(text)
             .font(PMTheme.mono(isAccent ? PMTheme.calloutIdFontSize : PMTheme.calloutBodyFontSize, weight: isAccent ? .bold : .medium))
-            .foregroundColor(isAccent ? PMTheme.cyan : PMTheme.textPrimary)
+            .foregroundColor(isAccent ? accentColor : PMTheme.textPrimary)
     }
 }
