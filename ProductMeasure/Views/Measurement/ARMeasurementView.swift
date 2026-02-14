@@ -259,6 +259,7 @@ struct ARMeasurementView: View {
                         boxId: viewModel.calloutBoxId,
                         lineRevealed: viewModel.consoleLineRevealed,
                         isComplete: viewModel.consoleReadingComplete,
+                        wmsLineStatus: viewModel.wmsLineStatus,
                         onExportCSV: { viewModel.showCSVExport() },
                         onClose: { viewModel.closeWorkflow() },
                         onReMeasure: { viewModel.closeWorkflow() }
@@ -810,6 +811,7 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var showCSVDisplay = false
     @Published var consoleLineRevealed: [Bool] = []
     @Published var consoleReadingComplete = false
+    @Published var wmsLineStatus: [WMSLineStatus] = []
     @Published var csvString: String = ""
     private let exportService = ExportService()
 
@@ -2266,6 +2268,7 @@ class ARMeasurementViewModel: ObservableObject {
         lineCount += 2 // quality section
 
         consoleLineRevealed = Array(repeating: false, count: lineCount)
+        wmsLineStatus = Array(repeating: .pending, count: wmsLineCount)
         consoleReadingComplete = false
         showConsole = true
         workflowStep = .showingConsole
@@ -2285,19 +2288,47 @@ class ARMeasurementViewModel: ObservableObject {
                     case 2: delay = 0.15                 // BODY - quick after request
                     case 3: delay = 0.8                  // RESPONSE - simulated API wait
                     case 4: delay = 0.2                  // RECEIPT/REASON - quick follow-up
-                    case 5: delay = 0.3                  // PRINT/ACTION - brief pause
+                    case 5: delay = 0.5                  // PRINT/ACTION - longer for "Spooling..."
                     default: delay = stagger
                     }
                 } else {
                     delay = stagger
                 }
 
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                // WMS status transitions: mark previous completed, current processing
+                if i < wmsLineCount {
+                    if i > 0 {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            self.wmsLineStatus[i - 1] = .completed
+                        }
+                    }
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        self.wmsLineStatus[i] = .processing
+                    }
+                } else if i == wmsLineCount {
+                    // First non-WMS line: mark last WMS line as completed
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        self.wmsLineStatus[wmsLineCount - 1] = .completed
+                    }
+                }
+
+                // Reveal the line
                 guard self.showConsole else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
                     if i < self.consoleLineRevealed.count {
                         self.consoleLineRevealed[i] = true
                     }
+                }
+
+                // Wait after reveal so spinner is visible
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard self.showConsole else { return }
+            }
+
+            // Ensure all WMS lines are completed
+            withAnimation(.easeOut(duration: 0.15)) {
+                for i in 0..<wmsLineCount {
+                    self.wmsLineStatus[i] = .completed
                 }
             }
 
@@ -2336,6 +2367,7 @@ class ARMeasurementViewModel: ObservableObject {
         showCSVDisplay = false
         consoleLineRevealed = []
         consoleReadingComplete = false
+        wmsLineStatus = []
         csvString = ""
         workflowStep = .idle
     }

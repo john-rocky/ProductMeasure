@@ -5,6 +5,12 @@
 
 import SwiftUI
 
+// MARK: - WMS Line Status
+
+enum WMSLineStatus: Equatable {
+    case pending, processing, completed
+}
+
 /// Full-screen console overlay showing measurement + label data with typing animation
 struct MeasurementConsoleView: View {
     let width: String
@@ -20,12 +26,14 @@ struct MeasurementConsoleView: View {
     let boxId: Int
     let lineRevealed: [Bool]
     let isComplete: Bool
+    let wmsLineStatus: [WMSLineStatus]
     let onExportCSV: () -> Void
     let onClose: () -> Void
     var onReMeasure: (() -> Void)? = nil
 
     @State private var scanlineOffset: CGFloat = 0
     @State private var cursorVisible = true
+    @State private var receiptNumber = String(format: "%06d", Int.random(in: 100000...999999))
 
     private var allLines: [ConsoleLine] {
         var lines: [ConsoleLine] = []
@@ -34,17 +42,26 @@ struct MeasurementConsoleView: View {
 
         // WMS registration section (6 lines, indices 0-5)
         let ctnDisplay = cartonId ?? "N/A"
-        lines.append(ConsoleLine(icon: "network", label: "CONNECT", value: "wms.warehouse.io:443", section: .wms))
-        lines.append(ConsoleLine(icon: "arrow.up.circle", label: "REQUEST", value: "POST /wms/receipts", section: .wms))
-        lines.append(ConsoleLine(icon: "doc.text", label: "BODY", value: "{\"ctn\":\"\(ctnDisplay)\"}", section: .wms))
+        lines.append(ConsoleLine(icon: "network", label: "CONNECT", value: "wms.warehouse.io:443", section: .wms,
+                                 processingValue: "Connecting...", completedValue: "wms.warehouse.io:443 \u{2713}"))
+        lines.append(ConsoleLine(icon: "arrow.up.circle", label: "REQUEST", value: "POST /wms/receipts", section: .wms,
+                                 processingValue: "Sending...", completedValue: "POST /wms/receipts \u{2713}"))
+        lines.append(ConsoleLine(icon: "doc.text", label: "BODY", value: "{\"ctn\":\"\(ctnDisplay)\"}", section: .wms,
+                                 processingValue: "Encoding...", completedValue: "{\"ctn\":\"\(ctnDisplay)\"} \u{2713}"))
         if isSizeAlert {
-            lines.append(ConsoleLine(icon: "xmark.circle", label: "RESPONSE", value: "400 SIZE MISMATCH", section: .wms, isAlert: true))
-            lines.append(ConsoleLine(icon: "exclamationmark.triangle", label: "REASON", value: "Exceeds size tolerance", section: .wms, isAlert: true))
-            lines.append(ConsoleLine(icon: "arrow.counterclockwise", label: "ACTION", value: "Re-measure required", section: .wms, isAlert: true))
+            lines.append(ConsoleLine(icon: "xmark.circle", label: "RESPONSE", value: "400 SIZE MISMATCH", section: .wms, isAlert: true,
+                                     processingValue: "Awaiting...", completedValue: "400 SIZE MISMATCH"))
+            lines.append(ConsoleLine(icon: "exclamationmark.triangle", label: "REASON", value: "Exceeds size tolerance", section: .wms, isAlert: true,
+                                     processingValue: "Checking...", completedValue: "Exceeds size tolerance"))
+            lines.append(ConsoleLine(icon: "arrow.counterclockwise", label: "ACTION", value: "Re-measure required", section: .wms, isAlert: true,
+                                     processingValue: "Evaluating...", completedValue: "Re-measure required"))
         } else {
-            lines.append(ConsoleLine(icon: "checkmark.circle", label: "RESPONSE", value: "200 OK", section: .wms))
-            lines.append(ConsoleLine(icon: "tray.and.arrow.down", label: "RECEIPT", value: "RCV-\(String(format: "%06d", Int.random(in: 100000...999999)))", section: .wms))
-            lines.append(ConsoleLine(icon: "printer", label: "PRINT", value: "Label sent to printer", section: .wms))
+            lines.append(ConsoleLine(icon: "checkmark.circle", label: "RESPONSE", value: "200 OK", section: .wms,
+                                     processingValue: "Awaiting...", completedValue: "200 OK \u{2713}"))
+            lines.append(ConsoleLine(icon: "tray.and.arrow.down", label: "RECEIPT", value: "RCV-\(receiptNumber)", section: .wms,
+                                     processingValue: "Generating...", completedValue: "RCV-\(receiptNumber) \u{2713}"))
+            lines.append(ConsoleLine(icon: "printer", label: "PRINT", value: "Label sent to printer", section: .wms,
+                                     processingValue: "Spooling...", completedValue: "Label sent to printer \u{2713}"))
         }
 
         // Dimensions section
@@ -71,6 +88,13 @@ struct MeasurementConsoleView: View {
 
     private var revealedCount: Int {
         lineRevealed.filter { $0 }.count
+    }
+
+    private var wmsProgress: Double {
+        guard !wmsLineStatus.isEmpty else { return 0 }
+        let completed = Double(wmsLineStatus.filter { $0 == .completed }.count)
+        let processing = Double(wmsLineStatus.filter { $0 == .processing }.count)
+        return (completed + processing * 0.5) / Double(wmsLineStatus.count)
     }
 
     var body: some View {
@@ -102,12 +126,9 @@ struct MeasurementConsoleView: View {
                                 }
 
                                 consoleLine(
-                                    icon: line.icon,
-                                    label: line.label,
-                                    value: line.value,
-                                    isLast: index == revealedCount - 1,
-                                    section: line.section,
-                                    isAlert: line.isAlert
+                                    line: line,
+                                    wmsIndex: line.section == .wms ? index : nil,
+                                    isLast: index == revealedCount - 1
                                 )
                                 .transition(.move(edge: .trailing).combined(with: .opacity))
                             }
@@ -175,18 +196,31 @@ struct MeasurementConsoleView: View {
     @ViewBuilder
     private func sectionHeader(_ section: ConsoleSection) -> some View {
         let accent = section == .wms ? PMTheme.green : PMTheme.cyan
-        HStack(spacing: 6) {
-            Rectangle()
-                .fill(accent.opacity(0.3))
-                .frame(width: 12, height: 1)
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Rectangle()
+                    .fill(accent.opacity(0.3))
+                    .frame(width: 12, height: 1)
 
-            Text(section.title)
-                .font(PMTheme.mono(PMTheme.consoleSectionFontSize, weight: .bold))
-                .foregroundColor(accent.opacity(0.6))
+                Text(section.title)
+                    .font(PMTheme.mono(PMTheme.consoleSectionFontSize, weight: .bold))
+                    .foregroundColor(accent.opacity(0.6))
 
-            Rectangle()
-                .fill(accent.opacity(0.3))
-                .frame(height: 1)
+                Rectangle()
+                    .fill(accent.opacity(0.3))
+                    .frame(height: 1)
+            }
+
+            // Progress bar for WMS section
+            if section == .wms && wmsProgress < 1.0 {
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(PMTheme.green)
+                        .frame(width: geometry.size.width * wmsProgress, height: 2)
+                        .animation(.easeInOut(duration: 0.3), value: wmsProgress)
+                }
+                .frame(height: 2)
+            }
         }
         .padding(.top, 8)
         .padding(.bottom, 4)
@@ -195,23 +229,46 @@ struct MeasurementConsoleView: View {
     // MARK: - Console Line
 
     @ViewBuilder
-    private func consoleLine(icon: String, label: String, value: String, isLast: Bool, section: ConsoleSection = .dimensions, isAlert: Bool = false) -> some View {
-        let valueColor: Color = isAlert ? PMTheme.red : (section == .wms ? PMTheme.green : PMTheme.textPrimary)
-        let iconColor: Color = isAlert ? PMTheme.red : (section == .wms ? PMTheme.green : PMTheme.cyan)
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 11))
-                .foregroundColor(iconColor)
-                .frame(width: 16)
+    private func consoleLine(line: ConsoleLine, wmsIndex: Int?, isLast: Bool) -> some View {
+        let status: WMSLineStatus? = {
+            guard let idx = wmsIndex, idx < wmsLineStatus.count else { return nil }
+            return wmsLineStatus[idx]
+        }()
 
-            Text(label)
+        let displayValue: String = {
+            if let status = status {
+                switch status {
+                case .processing: return line.processingValue ?? line.value
+                case .completed: return line.completedValue ?? line.value
+                case .pending: return line.value
+                }
+            }
+            return line.value
+        }()
+
+        let isProcessing = status == .processing
+        let valueColor: Color = line.isAlert ? PMTheme.red : (line.section == .wms ? PMTheme.green : PMTheme.textPrimary)
+        let iconColor: Color = line.isAlert ? PMTheme.red : (line.section == .wms ? PMTheme.green : PMTheme.cyan)
+
+        HStack(alignment: .top, spacing: 8) {
+            if isProcessing {
+                WMSTextSpinner(color: line.isAlert ? PMTheme.red : PMTheme.green)
+            } else {
+                Image(systemName: line.icon)
+                    .font(.system(size: 11))
+                    .foregroundColor(iconColor)
+                    .frame(width: 16)
+            }
+
+            Text(line.label)
                 .font(PMTheme.mono(10, weight: .semibold))
                 .foregroundColor(PMTheme.textDimmed)
                 .frame(width: 60, alignment: .leading)
 
-            Text(value)
+            Text(displayValue)
                 .font(PMTheme.mono(PMTheme.consoleFieldFontSize, weight: .medium))
                 .foregroundColor(valueColor)
+                .opacity(isProcessing ? 0.7 : 1.0)
                 .lineLimit(2)
 
             if isLast && !isComplete {
@@ -299,6 +356,23 @@ struct MeasurementConsoleView: View {
     }
 }
 
+// MARK: - WMS Text Spinner
+
+private struct WMSTextSpinner: View {
+    let color: Color
+    @State private var frameIndex = 0
+    private let frames = ["|", "/", "\u{2014}", "\\"]
+    private let timer = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Text(frames[frameIndex % frames.count])
+            .font(PMTheme.mono(12, weight: .bold))
+            .foregroundColor(color)
+            .frame(width: 16)
+            .onReceive(timer) { _ in frameIndex += 1 }
+    }
+}
+
 // MARK: - Supporting Types
 
 enum ConsoleSection: Equatable {
@@ -323,4 +397,6 @@ struct ConsoleLine {
     let value: String
     let section: ConsoleSection
     var isAlert: Bool = false
+    var processingValue: String? = nil
+    var completedValue: String? = nil
 }
