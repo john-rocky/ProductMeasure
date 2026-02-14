@@ -15,7 +15,7 @@ class ARSessionManager: NSObject, ObservableObject {
     @Published var trackingState: ARCamera.TrackingState = .notAvailable
     @Published var trackingStateMessage: String = "Initializing..."
     @Published var isDepthAvailable: Bool = false
-    @Published var currentFrame: ARFrame?
+    var currentFrame: ARFrame?
 
     // MARK: - AR Components
 
@@ -39,7 +39,12 @@ class ARSessionManager: NSObject, ObservableObject {
 
         // Configure AR view
         arView.automaticallyConfigureSession = false
-        arView.renderOptions = [.disablePersonOcclusion, .disableDepthOfField]
+        arView.renderOptions = [
+            .disablePersonOcclusion,
+            .disableDepthOfField,
+            .disableMotionBlur,
+            .disableGroundingShadows
+        ]
     }
 
     // MARK: - Session Control
@@ -153,27 +158,29 @@ extension ARSessionManager: ARSessionDelegate {
 
 private extension ARSessionManager {
     func updateTrackingState(_ state: ARCamera.TrackingState) {
-        trackingState = state
-
+        let newMessage: String
         switch state {
         case .notAvailable:
-            trackingStateMessage = "Tracking not available"
+            newMessage = "Tracking not available"
         case .limited(let reason):
             switch reason {
             case .initializing:
-                trackingStateMessage = "Initializing AR..."
+                newMessage = "Initializing AR..."
             case .excessiveMotion:
-                trackingStateMessage = "Move device slower"
+                newMessage = "Move device slower"
             case .insufficientFeatures:
-                trackingStateMessage = "Point at more textured surfaces"
+                newMessage = "Point at more textured surfaces"
             case .relocalizing:
-                trackingStateMessage = "Relocalizing..."
+                newMessage = "Relocalizing..."
             @unknown default:
-                trackingStateMessage = "Limited tracking"
+                newMessage = "Limited tracking"
             }
         case .normal:
-            trackingStateMessage = "Ready to measure"
+            newMessage = "Ready to measure"
         }
+        guard trackingStateMessage != newMessage else { return }
+        trackingState = state
+        trackingStateMessage = newMessage
     }
 }
 

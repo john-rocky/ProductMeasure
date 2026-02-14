@@ -13,6 +13,7 @@ struct ARMeasurementView: View {
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
+    @Environment(\.scenePhase) private var scenePhase
 
     /// When workflow is active, derives selection mode from workflow step
     private var activeSelectionMode: SelectionMode {
@@ -283,6 +284,16 @@ struct ARMeasurementView: View {
         }
         .onChange(of: measurementMode) { _, newMode in
             viewModel.currentMeasurementMode = newMode
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                viewModel.startSession()
+            case .inactive, .background:
+                viewModel.pauseSession()
+            @unknown default:
+                break
+            }
         }
     }
 
@@ -864,10 +875,9 @@ class ARMeasurementViewModel: ObservableObject {
             .assign(to: &$trackingMessage)
 
         // Setup frame update callback for billboard updates
+        // Already dispatched to MainActor by ARSessionManager
         sessionManager.onFrameUpdate = { [weak self] frame in
-            Task { @MainActor in
-                self?.onFrameUpdate(frame: frame)
-            }
+            self?.onFrameUpdate(frame: frame)
         }
     }
 
@@ -881,6 +891,8 @@ class ARMeasurementViewModel: ObservableObject {
 
     /// Called on each AR frame update
     private func onFrameUpdate(frame: ARFrame) {
+        guard boxVisualization != nil || showLabelBillboard || !completedBoxVisualizations.isEmpty else { return }
+
         let cameraPosition = SIMD3<Float>(
             frame.camera.transform.columns.3.x,
             frame.camera.transform.columns.3.y,
