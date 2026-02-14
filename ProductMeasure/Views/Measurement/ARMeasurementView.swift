@@ -54,13 +54,8 @@ struct ARMeasurementView: View {
                 // Overlay UI (on top)
                 GeometryReader { geometry in
                     VStack {
-                        // Top bar with status and clear button
+                        // Top bar: only clear button
                         HStack {
-                            StatusBar(
-                                trackingMessage: viewModel.trackingMessage,
-                                isProcessing: viewModel.isProcessing
-                            )
-
                             Spacer()
 
                             // Clear all button (visible when completed boxes exist)
@@ -80,21 +75,6 @@ struct ARMeasurementView: View {
                                     .clipShape(Capsule())
                                 }
                             }
-
-                            // Selection mode toggle (hidden during workflow)
-                            if !viewModel.isWorkflowActive {
-                                SelectionModeToggle(selectionMode: $selectionMode)
-                            }
-                        }
-
-                        // Workflow step indicator
-                        if viewModel.isWorkflowActive {
-                            WorkflowStepIndicator(
-                                currentStep: viewModel.workflowStep,
-                                onSkipLabel: viewModel.workflowStep == .awaitingLabelScan ? {
-                                    viewModel.skipLabelScan()
-                                } : nil
-                            )
                         }
 
                         Spacer()
@@ -120,19 +100,20 @@ struct ARMeasurementView: View {
                             }
                         }
 
-                        // Instruction text when in targeting mode or refining
-                        if viewModel.isRefining {
+                        // Instruction / status prompt (bottom)
+                        if viewModel.isProcessing {
+                            InstructionCard(mode: .processing)
+                        } else if viewModel.isRefining {
                             InstructionCard(mode: .refine)
-                        } else if viewModel.currentMeasurement == nil && !viewModel.isProcessing && !viewModel.isReadingLabel {
+                        } else if viewModel.currentMeasurement == nil && !viewModel.isReadingLabel {
                             if viewModel.isWorkflowActive {
-                                // Workflow-aware instructions
                                 switch viewModel.workflowStep {
                                 case .awaitingLabelScan:
                                     InstructionCard(mode: .label)
                                 case .awaitingSecondTap:
                                     InstructionCard(mode: .secondTap)
                                 default:
-                                    EmptyView()
+                                    InstructionCard(mode: .ready(viewModel.trackingMessage))
                                 }
                             } else {
                                 if selectionMode == .tap && (viewModel.animationPhase == .showingTargetBrackets || viewModel.hasPendingFirstTap) {
@@ -650,12 +631,18 @@ struct ScanningIndicator: View {
 // MARK: - Instruction Card
 
 struct InstructionCard: View {
-    enum Mode {
+    enum Mode: Equatable {
         case tap, box, refine, secondTap, label
+        case processing
+        case ready(String)  // tracking message
     }
 
     var mode: Mode = .tap
-    @State private var iconScale: CGFloat = 1.0
+
+    private var isProcessing: Bool {
+        if case .processing = mode { return true }
+        return false
+    }
 
     private var iconName: String {
         switch mode {
@@ -664,6 +651,11 @@ struct InstructionCard: View {
         case .refine: return "arrow.triangle.2.circlepath"
         case .secondTap: return "arrow.triangle.2.circlepath"
         case .label: return "doc.text.viewfinder"
+        case .processing: return "circle.dotted"
+        case .ready(let msg):
+            if msg == "Ready to measure" { return "checkmark.circle.fill" }
+            else if msg.contains("not") || msg.contains("Not") { return "exclamationmark.triangle.fill" }
+            else { return "arrow.triangle.2.circlepath" }
         }
     }
 
@@ -674,61 +666,52 @@ struct InstructionCard: View {
         case .refine: return "Refine from a different angle"
         case .secondTap: return "Tap again from a different angle"
         case .label: return "Point at a label and tap"
-        }
-    }
-
-    private var subtitle: String {
-        switch mode {
-        case .tap: return "Point your device at an object and tap"
-        case .box: return "Drag to draw a rectangle around the object"
-        case .refine: return "Move to a different angle and tap the same object"
-        case .secondTap: return "Move around and tap the same object to refine"
-        case .label: return "Tap on a shipping label to read its contents"
+        case .processing: return "Processing..."
+        case .ready(let msg): return msg
         }
     }
 
     private var isLabelMode: Bool { mode == .label }
 
     private var accentColor: Color {
-        isLabelMode ? PMTheme.labelBlue : PMTheme.cyan
+        if isLabelMode { return PMTheme.labelBlue }
+        if case .ready(let msg) = mode {
+            if msg == "Ready to measure" { return PMTheme.green }
+            else if msg.contains("not") || msg.contains("Not") { return PMTheme.red }
+            else { return PMTheme.amber }
+        }
+        return PMTheme.cyan
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(accentColor.opacity(0.12))
-                    .frame(width: 52, height: 52)
-                    .scaleEffect(iconScale)
-
+        HStack(spacing: 8) {
+            if isProcessing {
+                ScanningIndicator()
+                    .frame(width: 18, height: 18)
+            } else {
                 Image(systemName: iconName)
-                    .font(.title2)
-                    .foregroundStyle(isLabelMode ? PMTheme.labelBlueGradient : PMTheme.cyanGradient)
-                    .scaleEffect(iconScale)
+                    .font(.system(size: 14))
+                    .foregroundColor(accentColor)
+                    .symbolEffect(.pulse, options: .repeating, value: isReadyPulse)
             }
 
             Text(title)
-                .font(PMTheme.mono(14, weight: .semibold))
+                .font(PMTheme.mono(13))
                 .foregroundColor(PMTheme.textPrimary)
-
-            Text(subtitle)
-                .font(PMTheme.mono(11))
-                .multilineTextAlignment(.center)
-                .foregroundColor(PMTheme.textDimmed)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .background(PMTheme.surfaceGlass)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(PMTheme.surfaceDark.opacity(0.85))
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(accentColor.opacity(0.20), lineWidth: 0.5)
+            Capsule()
+                .strokeBorder(accentColor.opacity(0.30), lineWidth: 0.5)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
-                iconScale = 1.08
-            }
-        }
+        .clipShape(Capsule())
+    }
+
+    private var isReadyPulse: Bool {
+        if case .ready(let msg) = mode { return msg == "Ready to measure" }
+        return false
     }
 }
 
