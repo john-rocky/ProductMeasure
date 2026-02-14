@@ -40,22 +40,24 @@ struct MeasurementConsoleView: View {
 
         let isSizeAlert = boxId == 2
 
-        // WMS registration section (6 lines, indices 0-5)
-        let ctnDisplay = cartonId ?? "N/A"
-        lines.append(ConsoleLine(icon: "network", label: "CONNECT", value: "wms.warehouse.io:443", section: .wms,
-                                 processingValue: "Connecting...", completedValue: "wms.warehouse.io:443 \u{2713}"))
-        lines.append(ConsoleLine(icon: "arrow.up.circle", label: "REQUEST", value: "POST /wms/receipts", section: .wms,
-                                 processingValue: "Sending...", completedValue: "POST /wms/receipts \u{2713}"))
-        lines.append(ConsoleLine(icon: "doc.text", label: "BODY", value: "{\"ctn\":\"\(ctnDisplay)\"}", section: .wms,
-                                 processingValue: "Encoding...", completedValue: "{\"ctn\":\"\(ctnDisplay)\"} \u{2713}"))
+        // WMS registration section
         if isSizeAlert {
-            lines.append(ConsoleLine(icon: "xmark.circle", label: "RESPONSE", value: "400 SIZE MISMATCH", section: .wms, isAlert: true,
-                                     processingValue: "Awaiting...", completedValue: "400 SIZE MISMATCH"))
-            lines.append(ConsoleLine(icon: "exclamationmark.triangle", label: "REASON", value: "Exceeds size tolerance", section: .wms, isAlert: true,
-                                     processingValue: "Checking...", completedValue: "Exceeds size tolerance"))
+            // Second scan: no POST, just show failed status (3 lines, indices 0-2)
+            lines.append(ConsoleLine(icon: "xmark.circle", label: "STATUS", value: "REGISTRATION FAILED", section: .wms, isAlert: true,
+                                     processingValue: "Checking...", completedValue: "REGISTRATION FAILED"))
+            lines.append(ConsoleLine(icon: "exclamationmark.triangle", label: "REASON", value: "Size error detected", section: .wms, isAlert: true,
+                                     processingValue: "Evaluating...", completedValue: "Size error detected"))
             lines.append(ConsoleLine(icon: "arrow.counterclockwise", label: "ACTION", value: "Re-measure required", section: .wms, isAlert: true,
-                                     processingValue: "Evaluating...", completedValue: "Re-measure required"))
+                                     processingValue: "Resolving...", completedValue: "Re-measure required"))
         } else {
+            // First scan: full POST flow (6 lines, indices 0-5)
+            let ctnDisplay = cartonId ?? "N/A"
+            lines.append(ConsoleLine(icon: "network", label: "CONNECT", value: "wms.warehouse.io:443", section: .wms,
+                                     processingValue: "Connecting...", completedValue: "wms.warehouse.io:443 \u{2713}"))
+            lines.append(ConsoleLine(icon: "arrow.up.circle", label: "REQUEST", value: "POST /wms/receipts", section: .wms,
+                                     processingValue: "Sending...", completedValue: "POST /wms/receipts \u{2713}"))
+            lines.append(ConsoleLine(icon: "doc.text", label: "BODY", value: "{\"ctn\":\"\(ctnDisplay)\"}", section: .wms,
+                                     processingValue: "Encoding...", completedValue: "{\"ctn\":\"\(ctnDisplay)\"} \u{2713}"))
             lines.append(ConsoleLine(icon: "checkmark.circle", label: "RESPONSE", value: "200 OK", section: .wms,
                                      processingValue: "Awaiting...", completedValue: "200 OK \u{2713}"))
             lines.append(ConsoleLine(icon: "tray.and.arrow.down", label: "RECEIPT", value: "RCV-\(receiptNumber)", section: .wms,

@@ -2276,9 +2276,9 @@ class ARMeasurementViewModel: ObservableObject {
         let volWeight = unit.formatVolumetricWeight(cubicMeters: result.boundingBox.volume)
         let sizeClass = SizeClass.classify(volumeCubicMeters: result.boundingBox.volume).rawValue
 
-        // Build console line count
-        let wmsLineCount = 6
-        var lineCount = wmsLineCount + 6 // 6 WMS lines + 6 dimensions lines
+        // Build console line count (second scan has 3 failed-status WMS lines, first scan has 6)
+        let wmsLineCount = calloutBoxId == 2 ? 3 : 6
+        var lineCount = wmsLineCount + 6 // WMS lines + 6 dimensions lines
         if let label = pendingLabelData {
             lineCount += label.displayFields.count
         }
@@ -2295,18 +2295,29 @@ class ARMeasurementViewModel: ObservableObject {
             guard let self = self else { return }
             let stagger = PMTheme.consoleTypingStagger
 
+            let isSizeAlert = self.calloutBoxId == 2
             for i in 0..<lineCount {
                 // Variable delay for WMS lines to simulate API call progression
                 let delay: Double
                 if i < wmsLineCount {
-                    switch i {
-                    case 0: delay = stagger              // CONNECT - normal
-                    case 1: delay = 0.3                  // REQUEST - brief pause after connect
-                    case 2: delay = 0.15                 // BODY - quick after request
-                    case 3: delay = 0.8                  // RESPONSE - simulated API wait
-                    case 4: delay = 0.2                  // RECEIPT/REASON - quick follow-up
-                    case 5: delay = 0.5                  // PRINT/ACTION - longer for "Spooling..."
-                    default: delay = stagger
+                    if isSizeAlert {
+                        // Second scan: quick failed-status reveal (no POST simulation)
+                        switch i {
+                        case 0: delay = 0.3              // STATUS - brief pause
+                        case 1: delay = 0.25             // REASON - quick follow-up
+                        case 2: delay = 0.2              // ACTION - quick
+                        default: delay = stagger
+                        }
+                    } else {
+                        switch i {
+                        case 0: delay = stagger          // CONNECT - normal
+                        case 1: delay = 0.3              // REQUEST - brief pause after connect
+                        case 2: delay = 0.15             // BODY - quick after request
+                        case 3: delay = 0.8              // RESPONSE - simulated API wait
+                        case 4: delay = 0.2              // RECEIPT - quick follow-up
+                        case 5: delay = 0.5              // PRINT - longer for "Spooling..."
+                        default: delay = stagger
+                        }
                     }
                 } else {
                     delay = stagger
