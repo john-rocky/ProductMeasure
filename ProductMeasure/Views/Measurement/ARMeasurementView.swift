@@ -1342,10 +1342,6 @@ class ARMeasurementViewModel: ObservableObject {
                         self.calloutTransitionProgress = 0.0
                         self.showDimensionCallout = true
 
-                        // Trigger status vignette flash
-                        self.statusVignetteIsNG = self.nextBoxId == 2
-                        self.showStatusVignette = true
-
                         // Stagger line reveals
                         Task { [weak self] in
                             guard let self = self else { return }
@@ -1400,6 +1396,10 @@ class ARMeasurementViewModel: ObservableObject {
 
                                 let qualityLabel = adjustedResult.quality.overallQuality.rawValue
                                 let pointCount = adjustedResult.quality.pointCount
+                                // Trigger status vignette flash at banner reveal
+                                self.statusVignetteIsNG = self.nextBoxId == 2
+                                self.showStatusVignette = true
+
                                 lb.expandWithDimensions(
                                     height: adjustedResult.height,
                                     length: adjustedResult.length,
