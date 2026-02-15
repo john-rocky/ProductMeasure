@@ -185,6 +185,7 @@ class PointCloudGenerator {
         }
 
         var points: [SIMD3<Float>] = []
+        points.reserveCapacity(depthData.count)
         var debugCount = 0
 
         for data in depthData {
@@ -243,10 +244,16 @@ class PointCloudGenerator {
         let distances = points.map { simd_distance($0, centroid) }
 
         // MAD-based outlier removal (robust against outliers inflating threshold)
-        let sortedDistances = distances.sorted()
+        // Reuse single sorted array for both median and MAD computation
+        var sortedDistances = distances.sorted()
         let medianDist = sortedDistances[sortedDistances.count / 2]
-        let absDeviations = distances.map { abs($0 - medianDist) }.sorted()
-        let mad = absDeviations[absDeviations.count / 2]
+
+        // Compute absolute deviations in-place (reuse sortedDistances array)
+        for i in 0..<sortedDistances.count {
+            sortedDistances[i] = abs(distances[i] - medianDist)
+        }
+        sortedDistances.sort()
+        let mad = sortedDistances[sortedDistances.count / 2]
         let maxDistance = medianDist + 3.0 * 1.4826 * mad
 
         return zip(points, distances).compactMap { point, distance in

@@ -171,12 +171,16 @@ class DepthProcessor {
         guard depthData.count > 10 else { return depthData }
 
         let depths = depthData.map { $0.depth }
-        let sortedDepths = depths.sorted()
+        var sortedDepths = depths.sorted()
         let medianDepth = sortedDepths[sortedDepths.count / 2]
 
         // MAD (Median Absolute Deviation) — robust estimator
-        let absDeviations = depths.map { abs($0 - medianDepth) }.sorted()
-        let mad = absDeviations[absDeviations.count / 2]
+        // Reuse sortedDepths array for absolute deviations to avoid extra allocation
+        for i in 0..<sortedDepths.count {
+            sortedDepths[i] = abs(depths[i] - medianDepth)
+        }
+        sortedDepths.sort()
+        let mad = sortedDepths[sortedDepths.count / 2]
 
         // 1.4826 scales MAD to be consistent with stdDev for normal distributions
         let threshold = 3.0 * 1.4826 * mad

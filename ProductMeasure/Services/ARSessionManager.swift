@@ -15,7 +15,7 @@ class ARSessionManager: NSObject, ObservableObject {
     @Published var trackingState: ARCamera.TrackingState = .notAvailable
     @Published var trackingStateMessage: String = "Initializing..."
     @Published var isDepthAvailable: Bool = false
-    @Published var currentFrame: ARFrame?
+    var currentFrame: ARFrame?
 
     // MARK: - AR Components
 
@@ -25,6 +25,9 @@ class ARSessionManager: NSObject, ObservableObject {
     // MARK: - Callbacks
 
     var onFrameUpdate: ((ARFrame) -> Void)?
+
+    /// Timestamp of last frame forwarded to onFrameUpdate (throttle to ~20fps)
+    private var lastFrameTimestamp: TimeInterval = 0
 
     // MARK: - Initialization
 
@@ -126,6 +129,11 @@ extension ARSessionManager: ARSessionDelegate {
         Task { @MainActor in
             self.currentFrame = frame
             self.updateTrackingState(frame.camera.trackingState)
+
+            // Throttle onFrameUpdate to ~20fps (50ms interval)
+            let timestamp = frame.timestamp
+            guard timestamp - self.lastFrameTimestamp >= 0.05 else { return }
+            self.lastFrameTimestamp = timestamp
             self.onFrameUpdate?(frame)
         }
     }
@@ -153,6 +161,7 @@ extension ARSessionManager: ARSessionDelegate {
 
 private extension ARSessionManager {
     func updateTrackingState(_ state: ARCamera.TrackingState) {
+        guard trackingState != state else { return }
         trackingState = state
 
         switch state {

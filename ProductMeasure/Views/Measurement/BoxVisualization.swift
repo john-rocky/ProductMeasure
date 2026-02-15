@@ -137,8 +137,9 @@ class BoxVisualization {
         recolorEdges(forBoxId: boxId)
     }
 
-    /// Update dimensions when box is edited (recreates labels with new values)
+    /// Update dimensions when box is edited (recreates labels only if values changed)
     func updateDimensions(height: Float, length: Float, width: Float) {
+        guard height != storedHeight || length != storedLength || width != storedWidth else { return }
         storedHeight = height
         storedLength = length
         storedWidth = width
@@ -338,6 +339,10 @@ class BoxVisualization {
         }
     }
 
+    // Cached unit-length edge meshes (created once, scaled via transform)
+    private static let unitOuterEdgeMesh = MeshResource.generateBox(size: [1, 1, 1])
+    private static let unitInnerEdgeMesh = MeshResource.generateBox(size: [1, 1, 1])
+
     /// Create a dual-layer edge: inner bright line + outer glow
     private func createDualEdgeEntity(from start: SIMD3<Float>, to end: SIMD3<Float>, index: Int) -> Entity {
         let parent = Entity()
@@ -348,22 +353,22 @@ class BoxVisualization {
         let midpoint = (start + end) / 2
         let orientation = calculateOrientation(direction: direction)
 
-        // Outer glow layer
-        let outerMesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
+        // Outer glow layer (unit mesh scaled to actual size)
         var outerMaterial = UnlitMaterial(color: outerEdgeColor)
         outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.35))
-        let outerEntity = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
+        let outerEntity = ModelEntity(mesh: Self.unitOuterEdgeMesh, materials: [outerMaterial])
         outerEntity.name = "edge_outer_\(index)"
         outerEntity.position = midpoint
         outerEntity.orientation = orientation
+        outerEntity.scale = SIMD3<Float>(outerEdgeRadius * 2, outerEdgeRadius * 2, length)
 
-        // Inner bright layer
-        let innerMesh = MeshResource.generateBox(size: [innerEdgeRadius * 2, innerEdgeRadius * 2, length])
+        // Inner bright layer (unit mesh scaled to actual size)
         let innerMaterial = UnlitMaterial(color: innerEdgeColor)
-        let innerEntity = ModelEntity(mesh: innerMesh, materials: [innerMaterial])
+        let innerEntity = ModelEntity(mesh: Self.unitInnerEdgeMesh, materials: [innerMaterial])
         innerEntity.name = "edge_inner_\(index)"
         innerEntity.position = midpoint
         innerEntity.orientation = orientation
+        innerEntity.scale = SIMD3<Float>(innerEdgeRadius * 2, innerEdgeRadius * 2, length)
 
         parent.addChild(outerEntity)
         parent.addChild(innerEntity)
@@ -382,9 +387,9 @@ class BoxVisualization {
             child.position = midpoint
             child.orientation = orientation
             if child.name.contains("outer") {
-                child.model?.mesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
+                child.scale = SIMD3<Float>(outerEdgeRadius * 2, outerEdgeRadius * 2, length)
             } else {
-                child.model?.mesh = MeshResource.generateBox(size: [innerEdgeRadius * 2, innerEdgeRadius * 2, length])
+                child.scale = SIMD3<Float>(innerEdgeRadius * 2, innerEdgeRadius * 2, length)
             }
         }
     }
@@ -490,6 +495,10 @@ class BoxVisualization {
 
     // MARK: - Rotation Handle Creation
 
+    /// Cached torus arc mesh generated at unit radius (1.0), scaled to actual size
+    private var cachedTorusMesh: MeshResource?
+    private let torusUnitRadius: Float = 1.0
+
     private func createRotationRing() {
         let handleEntity = Entity()
         handleEntity.name = "rotation_ring"
@@ -497,14 +506,20 @@ class BoxVisualization {
         let material = UnlitMaterial(color: PMTheme.uiCyan.withAlphaComponent(0.6))
         let placeholderRadius: Float = 0.03
 
-        if let torusMesh = createTorusArcMesh(
-            majorRadius: placeholderRadius,
-            minorRadius: rotationArcThickness,
-            startAngle: 0,
-            arcAngle: rotationArcAngle
-        ) {
+        if cachedTorusMesh == nil {
+            cachedTorusMesh = createTorusArcMesh(
+                majorRadius: torusUnitRadius,
+                minorRadius: rotationArcThickness,
+                startAngle: 0,
+                arcAngle: rotationArcAngle
+            )
+        }
+
+        if let torusMesh = cachedTorusMesh {
             let torusEntity = ModelEntity(mesh: torusMesh, materials: [material])
             torusEntity.name = "rotation_arc"
+            let meshScale = placeholderRadius / torusUnitRadius
+            torusEntity.scale = SIMD3<Float>(repeating: meshScale)
             handleEntity.addChild(torusEntity)
         }
 
@@ -600,15 +615,10 @@ class BoxVisualization {
         ringEntity.position = boundingBox.localToWorld(localPos)
         ringEntity.orientation = boundingBox.rotation
 
+        // Scale cached torus mesh instead of regenerating
         if let arcEntity = ringEntity.children.first(where: { $0.name == "rotation_arc" }) as? ModelEntity {
-            if let newMesh = createTorusArcMesh(
-                majorRadius: arcRadius,
-                minorRadius: rotationArcThickness,
-                startAngle: 0,
-                arcAngle: rotationArcAngle
-            ) {
-                arcEntity.model?.mesh = newMesh
-            }
+            let meshScale = arcRadius / torusUnitRadius
+            arcEntity.scale = SIMD3<Float>(repeating: meshScale)
         }
 
         if let arrowEntity = ringEntity.children.first(where: { $0.name == "rotation_arrow" }) as? ModelEntity {

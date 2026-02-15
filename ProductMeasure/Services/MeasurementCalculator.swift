@@ -106,148 +106,151 @@ class MeasurementCalculator {
         }
         print("[Calculator] Segmentation successful, mask size: \(segmentation.maskSize)")
 
-        // 2. Get masked pixels
-        let maskedPixels = segmentationService.getMaskedPixels(
-            mask: segmentation.mask,
-            imageSize: imageSize
-        )
-
-        guard !maskedPixels.isEmpty else {
-            print("[Calculator] No masked pixels found")
-            return nil
-        }
-        print("[Calculator] Found \(maskedPixels.count) masked pixels before depth filtering")
-
-        // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
-        let filteredPixels = filterMaskedPixelsByDepth(
-            maskedPixels: maskedPixels,
-            frame: frame,
-            tapPoint: normalizedTap,
-            imageSize: imageSize
-        )
-
-        guard !filteredPixels.isEmpty else {
-            print("[Calculator] No pixels after depth filtering")
-            return nil
-        }
-        print("[Calculator] Found \(filteredPixels.count) masked pixels after depth filtering")
-
-        // Create debug mask image (memory-optimized version)
-        let debugMaskImage = DebugVisualization.visualizeMask(
-            mask: segmentation.mask,
-            cameraImage: frame.capturedImage,
-            tapPoint: normalizedTap
-        )
-
-        // Skip depth image to save memory
-        let debugDepthImage: UIImage? = nil
-
-        // 4. Generate point cloud from filtered pixels
-        var pointCloud = pointCloudGenerator.generatePointCloud(
-            frame: frame,
-            maskedPixels: filteredPixels,
-            imageSize: imageSize
-        )
-
-        guard !pointCloud.isEmpty else {
-            print("[Calculator] Point cloud is empty")
-            return nil
-        }
-        print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
-
-        // 5. Filter point cloud by 3D distance from raycast hit position
-        // This is CRITICAL - if no points are near the tap, the mask is wrong
-        if let hitPosition = raycastHitPosition {
-            // First check: is the raycast hit anywhere near the point cloud?
-            var nearestDistance: Float = .infinity
-            for p in pointCloud.points {
-                nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
-            }
-            print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
-
-            // If the nearest point is more than 2m away, the mask is completely wrong
-            if nearestDistance > 2.0 {
-                print("[Calculator] ERROR: Mask does not contain tapped location. Nearest point is \(nearestDistance)m away.")
-                return nil
-            }
-
-            // Use adaptive radius based on point cloud spread, minimum 1m
-            let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
-            let initialRadius: Float = max(1.0, pointSpread)
-            var filteredPoints = filterPointsByProximity(
-                points: pointCloud.points,
-                center: hitPosition,
-                maxDistance: initialRadius
+        // Offload CPU-heavy processing (depth filter, point cloud, clustering, bbox) off main thread
+        return await Task.detached(priority: .userInitiated) { [self] in
+            // 2. Get masked pixels
+            let maskedPixels = segmentationService.getMaskedPixels(
+                mask: segmentation.mask,
+                imageSize: imageSize
             )
-            print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
 
-            // Use clustering to find the connected object - this separates the tapped object from others
-            if filteredPoints.count >= 30 {
-                filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
-                print("[Calculator] After clustering: \(filteredPoints.count) points")
-
-                pointCloud = PointCloudGenerator.PointCloud(
-                    points: filteredPoints,
-                    quality: pointCloud.quality
-                )
-            } else if filteredPoints.count >= 10 {
-                pointCloud = PointCloudGenerator.PointCloud(
-                    points: filteredPoints,
-                    quality: pointCloud.quality
-                )
-            } else {
-                print("[Calculator] Too few points near tap location (\(filteredPoints.count))")
+            guard !maskedPixels.isEmpty else {
+                print("[Calculator] No masked pixels found")
                 return nil
             }
-        }
+            print("[Calculator] Found \(maskedPixels.count) masked pixels before depth filtering")
 
-        // 6. Estimate bounding box (with vertical plane snap for box mode)
-        let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
-            guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
-            return plane
-        }
+            // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
+            let filteredPixels = filterMaskedPixelsByDepth(
+                maskedPixels: maskedPixels,
+                frame: frame,
+                tapPoint: normalizedTap,
+                imageSize: imageSize
+            )
 
-        guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
-            points: pointCloud.points,
-            mode: mode,
-            verticalPlaneAnchors: verticalPlanes
-        ) else {
-            print("[Calculator] Failed to estimate bounding box")
-            return nil
-        }
-        print("[Calculator] Bounding box estimated")
-        print("[Calculator] Box center: \(boundingBox.center)")
-        print("[Calculator] Box extents: \(boundingBox.extents)")
+            guard !filteredPixels.isEmpty else {
+                print("[Calculator] No pixels after depth filtering")
+                return nil
+            }
+            print("[Calculator] Found \(filteredPixels.count) masked pixels after depth filtering")
 
-        // 7. Calculate dimensions using camera-based axis mapping
-        let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
-        let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
-        let volume = boundingBox.volume
+            // Create debug mask image (memory-optimized version)
+            let debugMaskImage = DebugVisualization.visualizeMask(
+                mask: segmentation.mask,
+                cameraImage: frame.capturedImage,
+                tapPoint: normalizedTap
+            )
 
-        print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
-        print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
-        print("[Calculator] Volume: \(volume * 1_000_000) cm³")
+            // Skip depth image to save memory
+            let debugDepthImage: UIImage? = nil
 
-        var result = MeasurementResult(
-            boundingBox: boundingBox,
-            length: length,
-            width: width,
-            height: height,
-            volume: volume,
-            quality: pointCloud.quality,
-            heightAxisIndex: mapping.height,
-            lengthAxisIndex: mapping.length,
-            widthAxisIndex: mapping.width
-        )
+            // 4. Generate point cloud from filtered pixels
+            var pointCloud = pointCloudGenerator.generatePointCloud(
+                frame: frame,
+                maskedPixels: filteredPixels,
+                imageSize: imageSize
+            )
 
-        // Store point cloud for Fit functionality
-        result.pointCloud = pointCloud.points
+            guard !pointCloud.isEmpty else {
+                print("[Calculator] Point cloud is empty")
+                return nil
+            }
+            print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
 
-        // Attach debug info (images only, not point cloud to save memory)
-        result.debugMaskImage = debugMaskImage
-        result.debugDepthImage = debugDepthImage
+            // 5. Filter point cloud by 3D distance from raycast hit position
+            // This is CRITICAL - if no points are near the tap, the mask is wrong
+            if let hitPosition = raycastHitPosition {
+                // First check: is the raycast hit anywhere near the point cloud?
+                var nearestDistance: Float = .infinity
+                for p in pointCloud.points {
+                    nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
+                }
+                print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
 
-        return result
+                // If the nearest point is more than 2m away, the mask is completely wrong
+                if nearestDistance > 2.0 {
+                    print("[Calculator] ERROR: Mask does not contain tapped location. Nearest point is \(nearestDistance)m away.")
+                    return nil
+                }
+
+                // Use adaptive radius based on point cloud spread, minimum 1m
+                let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
+                let initialRadius: Float = max(1.0, pointSpread)
+                var filteredPoints = filterPointsByProximity(
+                    points: pointCloud.points,
+                    center: hitPosition,
+                    maxDistance: initialRadius
+                )
+                print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
+
+                // Use clustering to find the connected object - this separates the tapped object from others
+                if filteredPoints.count >= 30 {
+                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                    print("[Calculator] After clustering: \(filteredPoints.count) points")
+
+                    pointCloud = PointCloudGenerator.PointCloud(
+                        points: filteredPoints,
+                        quality: pointCloud.quality
+                    )
+                } else if filteredPoints.count >= 10 {
+                    pointCloud = PointCloudGenerator.PointCloud(
+                        points: filteredPoints,
+                        quality: pointCloud.quality
+                    )
+                } else {
+                    print("[Calculator] Too few points near tap location (\(filteredPoints.count))")
+                    return nil
+                }
+            }
+
+            // 6. Estimate bounding box (with vertical plane snap for box mode)
+            let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+                guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
+                return plane
+            }
+
+            guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
+                points: pointCloud.points,
+                mode: mode,
+                verticalPlaneAnchors: verticalPlanes
+            ) else {
+                print("[Calculator] Failed to estimate bounding box")
+                return nil
+            }
+            print("[Calculator] Bounding box estimated")
+            print("[Calculator] Box center: \(boundingBox.center)")
+            print("[Calculator] Box extents: \(boundingBox.extents)")
+
+            // 7. Calculate dimensions using camera-based axis mapping
+            let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
+            let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
+            let volume = boundingBox.volume
+
+            print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
+            print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
+            print("[Calculator] Volume: \(volume * 1_000_000) cm³")
+
+            var result = MeasurementResult(
+                boundingBox: boundingBox,
+                length: length,
+                width: width,
+                height: height,
+                volume: volume,
+                quality: pointCloud.quality,
+                heightAxisIndex: mapping.height,
+                lengthAxisIndex: mapping.length,
+                widthAxisIndex: mapping.width
+            )
+
+            // Store point cloud for Fit functionality
+            result.pointCloud = pointCloud.points
+
+            // Attach debug info (images only, not point cloud to save memory)
+            result.debugMaskImage = debugMaskImage
+            result.debugDepthImage = debugDepthImage
+
+            return result
+        }.value
     }
 
     /// Perform measurement within a specific region of interest (box selection mode)
@@ -291,20 +294,7 @@ class MeasurementCalculator {
         }
         print("[Calculator] Segmentation successful, mask size: \(segmentation.maskSize)")
 
-        // 2. Get masked pixels with ROI coordinate transformation
-        let maskedPixels = segmentationService.getMaskedPixelsWithROI(
-            mask: segmentation.mask,
-            imageSize: imageSize,
-            visionROI: visionROI
-        )
-
-        guard !maskedPixels.isEmpty else {
-            print("[Calculator] No masked pixels found")
-            return nil
-        }
-        print("[Calculator] Found \(maskedPixels.count) masked pixels")
-
-        // 4. Apply depth filtering based on box center
+        // Pre-compute normalized center on calling thread (cheap)
         let boxCenter = CGPoint(x: regionOfInterest.midX, y: regionOfInterest.midY)
         let normalizedCenter = convertScreenToImageCoordinates(
             screenPoint: boxCenter,
@@ -312,123 +302,140 @@ class MeasurementCalculator {
             imageSize: imageSize
         )
 
-        let depthFilteredPixels = filterMaskedPixelsByDepth(
-            maskedPixels: maskedPixels,
-            frame: frame,
-            tapPoint: normalizedCenter,
-            imageSize: imageSize
-        )
-
-        guard !depthFilteredPixels.isEmpty else {
-            print("[Calculator] No pixels after depth filtering")
-            return nil
-        }
-        print("[Calculator] Found \(depthFilteredPixels.count) masked pixels after depth filtering")
-
-        // Create debug mask image with ROI
-        let debugMaskImage = DebugVisualization.visualizeMaskWithROI(
-            mask: segmentation.mask,
-            cameraImage: frame.capturedImage,
-            visionROI: visionROI,
-            screenRect: regionOfInterest,
-            viewSize: viewSize,
-            tapPoint: normalizedCenter
-        )
-
-        // 5. Generate point cloud
-        var pointCloud = pointCloudGenerator.generatePointCloud(
-            frame: frame,
-            maskedPixels: depthFilteredPixels,
-            imageSize: imageSize
-        )
-
-        guard !pointCloud.isEmpty else {
-            print("[Calculator] Point cloud is empty")
-            return nil
-        }
-        print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
-
-        // 6. Filter by proximity if raycast hit available
-        if let hitPosition = raycastHitPosition {
-            var nearestDistance: Float = .infinity
-            for p in pointCloud.points {
-                nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
-            }
-            print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
-
-            if nearestDistance > 2.0 {
-                print("[Calculator] ERROR: Point cloud too far from raycast hit")
-                return nil
-            }
-
-            let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
-            let initialRadius: Float = max(1.0, pointSpread)
-            var filteredPoints = filterPointsByProximity(
-                points: pointCloud.points,
-                center: hitPosition,
-                maxDistance: initialRadius
+        // Offload CPU-heavy processing off main thread
+        return await Task.detached(priority: .userInitiated) { [self] in
+            // 2. Get masked pixels with ROI coordinate transformation
+            let maskedPixels = segmentationService.getMaskedPixelsWithROI(
+                mask: segmentation.mask,
+                imageSize: imageSize,
+                visionROI: visionROI
             )
-            print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
 
-            if filteredPoints.count >= 30 {
-                filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
-                print("[Calculator] After clustering: \(filteredPoints.count) points")
-
-                pointCloud = PointCloudGenerator.PointCloud(
-                    points: filteredPoints,
-                    quality: pointCloud.quality
-                )
-            } else if filteredPoints.count >= 10 {
-                pointCloud = PointCloudGenerator.PointCloud(
-                    points: filteredPoints,
-                    quality: pointCloud.quality
-                )
-            } else {
-                print("[Calculator] Too few points near box center (\(filteredPoints.count))")
+            guard !maskedPixels.isEmpty else {
+                print("[Calculator] No masked pixels found")
                 return nil
             }
-        }
+            print("[Calculator] Found \(maskedPixels.count) masked pixels")
 
-        // 7. Estimate bounding box (with vertical plane snap for box mode)
-        let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
-            guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
-            return plane
-        }
+            // 4. Apply depth filtering based on box center
+            let depthFilteredPixels = filterMaskedPixelsByDepth(
+                maskedPixels: maskedPixels,
+                frame: frame,
+                tapPoint: normalizedCenter,
+                imageSize: imageSize
+            )
 
-        guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
-            points: pointCloud.points,
-            mode: mode,
-            verticalPlaneAnchors: verticalPlanes
-        ) else {
-            print("[Calculator] Failed to estimate bounding box")
-            return nil
-        }
-        print("[Calculator] Bounding box estimated")
+            guard !depthFilteredPixels.isEmpty else {
+                print("[Calculator] No pixels after depth filtering")
+                return nil
+            }
+            print("[Calculator] Found \(depthFilteredPixels.count) masked pixels after depth filtering")
 
-        // 8. Calculate dimensions using camera-based axis mapping
-        let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
-        let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
-        let volume = boundingBox.volume
+            // Create debug mask image with ROI
+            let debugMaskImage = DebugVisualization.visualizeMaskWithROI(
+                mask: segmentation.mask,
+                cameraImage: frame.capturedImage,
+                visionROI: visionROI,
+                screenRect: regionOfInterest,
+                viewSize: viewSize,
+                tapPoint: normalizedCenter
+            )
 
-        print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
-        print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
+            // 5. Generate point cloud
+            var pointCloud = pointCloudGenerator.generatePointCloud(
+                frame: frame,
+                maskedPixels: depthFilteredPixels,
+                imageSize: imageSize
+            )
 
-        var result = MeasurementResult(
-            boundingBox: boundingBox,
-            length: length,
-            width: width,
-            height: height,
-            volume: volume,
-            quality: pointCloud.quality,
-            heightAxisIndex: mapping.height,
-            lengthAxisIndex: mapping.length,
-            widthAxisIndex: mapping.width
-        )
+            guard !pointCloud.isEmpty else {
+                print("[Calculator] Point cloud is empty")
+                return nil
+            }
+            print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
 
-        result.pointCloud = pointCloud.points
-        result.debugMaskImage = debugMaskImage
+            // 6. Filter by proximity if raycast hit available
+            if let hitPosition = raycastHitPosition {
+                var nearestDistance: Float = .infinity
+                for p in pointCloud.points {
+                    nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
+                }
+                print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
 
-        return result
+                if nearestDistance > 2.0 {
+                    print("[Calculator] ERROR: Point cloud too far from raycast hit")
+                    return nil
+                }
+
+                let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
+                let initialRadius: Float = max(1.0, pointSpread)
+                var filteredPoints = filterPointsByProximity(
+                    points: pointCloud.points,
+                    center: hitPosition,
+                    maxDistance: initialRadius
+                )
+                print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
+
+                if filteredPoints.count >= 30 {
+                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                    print("[Calculator] After clustering: \(filteredPoints.count) points")
+
+                    pointCloud = PointCloudGenerator.PointCloud(
+                        points: filteredPoints,
+                        quality: pointCloud.quality
+                    )
+                } else if filteredPoints.count >= 10 {
+                    pointCloud = PointCloudGenerator.PointCloud(
+                        points: filteredPoints,
+                        quality: pointCloud.quality
+                    )
+                } else {
+                    print("[Calculator] Too few points near box center (\(filteredPoints.count))")
+                    return nil
+                }
+            }
+
+            // 7. Estimate bounding box (with vertical plane snap for box mode)
+            let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+                guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
+                return plane
+            }
+
+            guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
+                points: pointCloud.points,
+                mode: mode,
+                verticalPlaneAnchors: verticalPlanes
+            ) else {
+                print("[Calculator] Failed to estimate bounding box")
+                return nil
+            }
+            print("[Calculator] Bounding box estimated")
+
+            // 8. Calculate dimensions using camera-based axis mapping
+            let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
+            let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
+            let volume = boundingBox.volume
+
+            print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
+            print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
+
+            var result = MeasurementResult(
+                boundingBox: boundingBox,
+                length: length,
+                width: width,
+                height: height,
+                volume: volume,
+                quality: pointCloud.quality,
+                heightAxisIndex: mapping.height,
+                lengthAxisIndex: mapping.length,
+                widthAxisIndex: mapping.width
+            )
+
+            result.pointCloud = pointCloud.points
+            result.debugMaskImage = debugMaskImage
+
+            return result
+        }.value
     }
 
     /// Convert screen rectangle to Vision normalized coordinates
@@ -594,67 +601,70 @@ class MeasurementCalculator {
             return nil
         }
 
-        // 2. Masked pixels
-        let maskedPixels = segmentationService.getMaskedPixels(
-            mask: segmentation.mask, imageSize: imageSize
-        )
-        guard !maskedPixels.isEmpty else { return nil }
-
-        // 3. Depth filtering
-        let filteredPixels = filterMaskedPixelsByDepth(
-            maskedPixels: maskedPixels, frame: frame,
-            tapPoint: normalizedTap, imageSize: imageSize
-        )
-        guard !filteredPixels.isEmpty else { return nil }
-
-        // 4. Point cloud generation
-        var pointCloud = pointCloudGenerator.generatePointCloud(
-            frame: frame, maskedPixels: filteredPixels, imageSize: imageSize
-        )
-        guard !pointCloud.isEmpty else { return nil }
-        print("[Refine] Generated \(pointCloud.points.count) points")
-
-        // 5. Proximity filter + clustering (same as measure())
-        if let hitPosition = raycastHitPosition {
-            var nearestDistance: Float = .infinity
-            for p in pointCloud.points {
-                nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
-            }
-            if nearestDistance > 2.0 { return nil }
-
-            let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
-            let initialRadius: Float = max(1.0, pointSpread)
-            var filteredPoints = filterPointsByProximity(
-                points: pointCloud.points, center: hitPosition, maxDistance: initialRadius
+        // Offload CPU-heavy processing off main thread
+        return await Task.detached(priority: .userInitiated) { [self] in
+            // 2. Masked pixels
+            let maskedPixels = segmentationService.getMaskedPixels(
+                mask: segmentation.mask, imageSize: imageSize
             )
+            guard !maskedPixels.isEmpty else { return nil }
 
-            if filteredPoints.count >= 30 {
-                filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
-                pointCloud = PointCloudGenerator.PointCloud(
-                    points: filteredPoints, quality: pointCloud.quality
+            // 3. Depth filtering
+            let filteredPixels = filterMaskedPixelsByDepth(
+                maskedPixels: maskedPixels, frame: frame,
+                tapPoint: normalizedTap, imageSize: imageSize
+            )
+            guard !filteredPixels.isEmpty else { return nil }
+
+            // 4. Point cloud generation
+            var pointCloud = pointCloudGenerator.generatePointCloud(
+                frame: frame, maskedPixels: filteredPixels, imageSize: imageSize
+            )
+            guard !pointCloud.isEmpty else { return nil }
+            print("[Refine] Generated \(pointCloud.points.count) points")
+
+            // 5. Proximity filter + clustering (same as measure())
+            if let hitPosition = raycastHitPosition {
+                var nearestDistance: Float = .infinity
+                for p in pointCloud.points {
+                    nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
+                }
+                if nearestDistance > 2.0 { return nil }
+
+                let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
+                let initialRadius: Float = max(1.0, pointSpread)
+                var filteredPoints = filterPointsByProximity(
+                    points: pointCloud.points, center: hitPosition, maxDistance: initialRadius
                 )
-            } else if filteredPoints.count >= 10 {
-                pointCloud = PointCloudGenerator.PointCloud(
-                    points: filteredPoints, quality: pointCloud.quality
-                )
-            } else {
-                print("[Refine] Too few points near tap (\(filteredPoints.count))")
+
+                if filteredPoints.count >= 30 {
+                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                    pointCloud = PointCloudGenerator.PointCloud(
+                        points: filteredPoints, quality: pointCloud.quality
+                    )
+                } else if filteredPoints.count >= 10 {
+                    pointCloud = PointCloudGenerator.PointCloud(
+                        points: filteredPoints, quality: pointCloud.quality
+                    )
+                } else {
+                    print("[Refine] Too few points near tap (\(filteredPoints.count))")
+                    return nil
+                }
+            }
+
+            // 6. Same-object validation: check overlap with expanded existing box
+            let expandedBox = Self.expandedBoundingBox(existingBox, scale: AppConstants.refinementProximityScale)
+            let insideCount = pointCloud.points.filter { expandedBox.contains($0) }.count
+            let overlapRatio = Float(insideCount) / Float(pointCloud.points.count)
+            print("[Refine] Overlap ratio: \(overlapRatio) (\(insideCount)/\(pointCloud.points.count))")
+
+            guard overlapRatio >= AppConstants.refinementOverlapThreshold else {
+                print("[Refine] Overlap too low – object not matched")
                 return nil
             }
-        }
 
-        // 6. Same-object validation: check overlap with expanded existing box
-        let expandedBox = Self.expandedBoundingBox(existingBox, scale: AppConstants.refinementProximityScale)
-        let insideCount = pointCloud.points.filter { expandedBox.contains($0) }.count
-        let overlapRatio = Float(insideCount) / Float(pointCloud.points.count)
-        print("[Refine] Overlap ratio: \(overlapRatio) (\(insideCount)/\(pointCloud.points.count))")
-
-        guard overlapRatio >= AppConstants.refinementOverlapThreshold else {
-            print("[Refine] Overlap too low – object not matched")
-            return nil
-        }
-
-        return RefinementPointCloud(points: pointCloud.points, quality: pointCloud.quality)
+            return RefinementPointCloud(points: pointCloud.points, quality: pointCloud.quality)
+        }.value
     }
 
     /// Expand a bounding box by scaling its extents

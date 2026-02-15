@@ -282,7 +282,7 @@ class AnimatedBoxVisualization {
         let pulseMaterial = UnlitMaterial(color: pulseColor)
         setAllInnerEdgeMaterial(pulseMaterial)
 
-        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] timer in
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0/30.0, repeats: true) { [weak self] timer in
             guard let self = self, let startTime = self.animationStartTime else {
                 timer.invalidate()
                 return
@@ -425,6 +425,10 @@ class AnimatedBoxVisualization {
         }
     }
 
+    // Cached unit-length edge meshes (created once, scaled via transform)
+    private static let unitOuterEdgeMesh = MeshResource.generateBox(size: [1, 1, 1])
+    private static let unitInnerEdgeMesh = MeshResource.generateBox(size: [1, 1, 1])
+
     private func createDualEdgeEntity(from start: SIMD3<Float>, to end: SIMD3<Float>, name: String) -> Entity {
         let parent = Entity()
         parent.name = name
@@ -434,22 +438,22 @@ class AnimatedBoxVisualization {
         let midpoint = (start + end) / 2
         let orientation = calculateOrientation(direction: direction)
 
-        // Outer glow
-        let outerMesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
+        // Outer glow (unit mesh scaled to actual size)
         var outerMaterial = UnlitMaterial(color: outerEdgeColor)
         outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.35))
-        let outerEntity = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
+        let outerEntity = ModelEntity(mesh: Self.unitOuterEdgeMesh, materials: [outerMaterial])
         outerEntity.name = "\(name)_outer"
         outerEntity.position = midpoint
         outerEntity.orientation = orientation
+        outerEntity.scale = SIMD3<Float>(outerEdgeRadius * 2, outerEdgeRadius * 2, length)
 
-        // Inner bright
-        let innerMesh = MeshResource.generateBox(size: [innerEdgeRadius * 2, innerEdgeRadius * 2, length])
+        // Inner bright (unit mesh scaled to actual size)
         let innerMaterial = UnlitMaterial(color: innerEdgeColor)
-        let innerEntity = ModelEntity(mesh: innerMesh, materials: [innerMaterial])
+        let innerEntity = ModelEntity(mesh: Self.unitInnerEdgeMesh, materials: [innerMaterial])
         innerEntity.name = "\(name)_inner"
         innerEntity.position = midpoint
         innerEntity.orientation = orientation
+        innerEntity.scale = SIMD3<Float>(innerEdgeRadius * 2, innerEdgeRadius * 2, length)
 
         parent.addChild(outerEntity)
         parent.addChild(innerEntity)
@@ -521,9 +525,9 @@ class AnimatedBoxVisualization {
             modelEntity.position = midpoint
             modelEntity.orientation = orientation
             if child.name.contains("outer") {
-                modelEntity.model?.mesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
+                modelEntity.scale = SIMD3<Float>(outerEdgeRadius * 2, outerEdgeRadius * 2, length)
             } else {
-                modelEntity.model?.mesh = MeshResource.generateBox(size: [innerEdgeRadius * 2, innerEdgeRadius * 2, length])
+                modelEntity.scale = SIMD3<Float>(innerEdgeRadius * 2, innerEdgeRadius * 2, length)
             }
         }
     }

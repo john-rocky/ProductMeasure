@@ -879,6 +879,10 @@ class ARMeasurementViewModel: ObservableObject {
         }
     }
 
+    /// Last camera position/forward for delta check (skip updates when stationary)
+    private var lastFrameCameraPosition: SIMD3<Float> = .zero
+    private var lastFrameCameraForward: SIMD3<Float> = .init(0, 0, -1)
+
     /// Called on each AR frame update
     private func onFrameUpdate(frame: ARFrame) {
         let cameraPosition = SIMD3<Float>(
@@ -891,6 +895,13 @@ class ARMeasurementViewModel: ObservableObject {
             frame.camera.transform.columns.2.y,
             frame.camera.transform.columns.2.z
         )
+
+        // Skip billboard updates when camera is nearly stationary
+        let posDelta = simd_distance(cameraPosition, lastFrameCameraPosition)
+        let dirDelta = simd_distance(cameraForward, lastFrameCameraForward)
+        guard posDelta > 0.005 || dirDelta > 0.01 else { return }
+        lastFrameCameraPosition = cameraPosition
+        lastFrameCameraForward = cameraForward
 
         // Active box billboard is always visible (excluded from prominence logic)
         // But hide during callout transition when 2D card is showing

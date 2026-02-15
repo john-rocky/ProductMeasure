@@ -407,16 +407,30 @@ class BoundingBoxEstimator {
         rotation: simd_quatf
     ) -> (center: SIMD3<Float>, extents: SIMD3<Float>) {
         let inverseRotation = rotation.inverse
-        let localPoints = points.map { inverseRotation.act($0 - centroid) }
+        let n = points.count
+
+        // Single pass: transform to local space and distribute into 3 pre-allocated arrays
+        var xVals = [Float]()
+        var yVals = [Float]()
+        var zVals = [Float]()
+        xVals.reserveCapacity(n)
+        yVals.reserveCapacity(n)
+        zVals.reserveCapacity(n)
+
+        for point in points {
+            let local = inverseRotation.act(point - centroid)
+            xVals.append(local.x)
+            yVals.append(local.y)
+            zVals.append(local.z)
+        }
 
         // Use percentile-based extents to trim extreme noise only
         // Trim 1% from each side per axis — conservative to avoid shrinking real boundaries
-        let n = localPoints.count
         let trimCount = max(1, Int(Float(n) * 0.01))
 
-        let xVals = localPoints.map { $0.x }.sorted()
-        let yVals = localPoints.map { $0.y }.sorted()
-        let zVals = localPoints.map { $0.z }.sorted()
+        xVals.sort()
+        yVals.sort()
+        zVals.sort()
 
         let lo = max(0, trimCount)
         let hi = max(lo + 1, n - 1 - trimCount)
