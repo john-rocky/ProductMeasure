@@ -246,7 +246,7 @@ class CompletedBoxVisualization {
         // Outer glow layer (transparent like active box — glow is subtle so depth-sort issues are negligible)
         let outerMesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
         var outerMaterial = UnlitMaterial(color: outerEdgeColor)
-        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.15))
+        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.25))
         let outerEntity = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
         outerEntity.name = "completed_edge_outer_\(index)"
         outerEntity.position = midpoint

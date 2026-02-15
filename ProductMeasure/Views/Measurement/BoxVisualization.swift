@@ -265,7 +265,7 @@ class BoxVisualization {
                 guard let model = child as? ModelEntity else { continue }
                 if child.name.contains("outer") {
                     var mat = UnlitMaterial(color: redOuter)
-                    mat.blending = .transparent(opacity: .init(floatLiteral: 0.15))
+                    mat.blending = .transparent(opacity: .init(floatLiteral: 0.35))
                     model.model?.materials = [mat]
                 } else if child.name.contains("inner") {
                     model.model?.materials = [UnlitMaterial(color: redInner)]
@@ -351,7 +351,7 @@ class BoxVisualization {
         // Outer glow layer
         let outerMesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
         var outerMaterial = UnlitMaterial(color: outerEdgeColor)
-        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.15))
+        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.35))
         let outerEntity = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
         outerEntity.name = "edge_outer_\(index)"
         outerEntity.position = midpoint

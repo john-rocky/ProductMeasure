@@ -437,7 +437,7 @@ class AnimatedBoxVisualization {
         // Outer glow
         let outerMesh = MeshResource.generateBox(size: [outerEdgeRadius * 2, outerEdgeRadius * 2, length])
         var outerMaterial = UnlitMaterial(color: outerEdgeColor)
-        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.15))
+        outerMaterial.blending = .transparent(opacity: .init(floatLiteral: 0.35))
         let outerEntity = ModelEntity(mesh: outerMesh, materials: [outerMaterial])
         outerEntity.name = "\(name)_outer"
         outerEntity.position = midpoint

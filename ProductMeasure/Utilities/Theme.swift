@@ -80,18 +80,18 @@ enum PMTheme {
     /// Active box inner edge: bright cyan, full alpha
     static let uiEdgeInner  = UIColor(hex: 0x39FF14).withAlphaComponent(1.0)
     /// Active box outer glow edge: cyan, low alpha
-    static let uiEdgeOuter  = UIColor(hex: 0x39FF14).withAlphaComponent(0.15)
+    static let uiEdgeOuter  = UIColor(hex: 0x39FF14).withAlphaComponent(0.35)
     /// Corner marker: cyan sphere
     static let uiCornerMarker = UIColor(hex: 0x39FF14).withAlphaComponent(0.9)
 
     /// Completed box inner edge: same bright green, opaque to avoid transparent depth-sort issues
     static let uiEdgeInnerDim  = UIColor(hex: 0x39FF14)
-    static let uiEdgeOuterDim  = UIColor(hex: 0x39FF14).withAlphaComponent(0.15)
+    static let uiEdgeOuterDim  = UIColor(hex: 0x39FF14).withAlphaComponent(0.25)
     static let uiCornerMarkerDim = UIColor(hex: 0x39FF14).withAlphaComponent(0.6)
 
     /// Red wireframe colors (for check-required boxes)
     static let uiEdgeInnerRed = UIColor(hex: 0xFF404D).withAlphaComponent(1.0)
-    static let uiEdgeOuterRed = UIColor(hex: 0xFF404D).withAlphaComponent(0.15)
+    static let uiEdgeOuterRed = UIColor(hex: 0xFF404D).withAlphaComponent(0.35)
     static let uiCornerMarkerRed = UIColor(hex: 0xFF404D).withAlphaComponent(0.6)
 
     // MARK: Billboard
