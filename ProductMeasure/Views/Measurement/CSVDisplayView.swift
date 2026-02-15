@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UIKit
+import LinkPresentation
 
 /// Monospace CSV text display with Copy/Share/Done buttons
 struct CSVDisplayView: View {
@@ -122,7 +123,8 @@ struct CSVDisplayView: View {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootVC = windowScene.windows.first?.rootViewController else { return }
 
-        let activityVC = UIActivityViewController(activityItems: [csvString], applicationActivities: nil)
+        let itemSource = ShareActivityItemSource(item: csvString, title: "CSV Export")
+        let activityVC = UIActivityViewController(activityItems: [itemSource], applicationActivities: nil)
 
         // iPad popover
         if let popover = activityVC.popoverPresentationController {

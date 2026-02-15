@@ -364,7 +364,7 @@ struct ShareSheet: View {
     }
 
     private func shareContent() {
-        var items: [Any] = [shareText]
+        var items: [Any] = [ShareActivityItemSource(item: shareText, title: "Measurement")]
 
         if let imageData = measurement.annotatedImageData,
            let image = UIImage(data: imageData) {

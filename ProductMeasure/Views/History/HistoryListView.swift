@@ -279,8 +279,9 @@ struct ExportSheet: View {
         do {
             try data.write(to: tempURL)
 
+            let itemSource = ShareActivityItemSource(item: tempURL, title: "Measurements Export")
             let activityVC = UIActivityViewController(
-                activityItems: [tempURL],
+                activityItems: [itemSource],
                 applicationActivities: nil
             )
             activityVC.completionWithItemsHandler = { _, _, _, _ in
