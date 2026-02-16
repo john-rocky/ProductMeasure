@@ -44,6 +44,25 @@ enum AppConstants {
     static let labelAreaWeight: Float = 0.5
 }
 
+enum AppMode: String, CaseIterable, Codable {
+    case warehouse = "warehouse"
+    case shipping = "shipping"
+
+    var displayName: String {
+        switch self {
+        case .warehouse: return "Warehouse"
+        case .shipping: return "Shipping"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .warehouse: return "Full measurement workflow with label scanning and WMS registration."
+        case .shipping: return "Find the best-fit shipping box for a measured object."
+        }
+    }
+}
+
 enum MeasurementUnit: String, CaseIterable, Codable {
     case millimeters = "mm"
     case centimeters = "cm"

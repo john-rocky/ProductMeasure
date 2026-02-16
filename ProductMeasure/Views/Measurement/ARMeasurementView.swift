@@ -10,6 +10,7 @@ import UIKit
 
 struct ARMeasurementView: View {
     @StateObject private var viewModel = ARMeasurementViewModel()
+    @AppStorage("appMode") private var appMode: AppMode = .warehouse
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
@@ -79,24 +80,43 @@ struct ARMeasurementView: View {
 
                         Spacer()
 
-                        // Save/Check button when workflow reaches showingResult
+                        // Action button when workflow reaches showingResult
                         if viewModel.workflowStep == .showingResult {
-                            let isCheck = viewModel.calloutBoxId == 2
-                            Button(action: {
-                                viewModel.showMeasurementConsole()
-                            }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: isCheck ? "exclamationmark.magnifyingglass" : "checkmark.rectangle")
-                                        .font(.system(size: 14))
-                                    Text(isCheck ? "CHECK" : "SAVE")
-                                        .font(PMTheme.mono(14, weight: .bold))
+                            if appMode == .shipping {
+                                Button(action: {
+                                    viewModel.resetForNewShippingMeasurement()
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "arrow.counterclockwise")
+                                            .font(.system(size: 14))
+                                        Text("NEW")
+                                            .font(PMTheme.mono(14, weight: .bold))
+                                    }
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 32)
+                                    .padding(.vertical, 12)
+                                    .background(PMTheme.green)
+                                    .clipShape(Capsule())
+                                    .shadow(color: PMTheme.green.opacity(0.4), radius: 8, x: 0, y: 2)
                                 }
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 32)
-                                .padding(.vertical, 12)
-                                .background(isCheck ? PMTheme.amber : PMTheme.cyan)
-                                .clipShape(Capsule())
-                                .shadow(color: (isCheck ? PMTheme.amber : PMTheme.cyan).opacity(0.4), radius: 8, x: 0, y: 2)
+                            } else {
+                                let isCheck = viewModel.calloutBoxId == 2
+                                Button(action: {
+                                    viewModel.showMeasurementConsole()
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: isCheck ? "exclamationmark.magnifyingglass" : "checkmark.rectangle")
+                                            .font(.system(size: 14))
+                                        Text(isCheck ? "CHECK" : "SAVE")
+                                            .font(PMTheme.mono(14, weight: .bold))
+                                    }
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 32)
+                                    .padding(.vertical, 12)
+                                    .background(isCheck ? PMTheme.amber : PMTheme.cyan)
+                                    .clipShape(Capsule())
+                                    .shadow(color: (isCheck ? PMTheme.amber : PMTheme.cyan).opacity(0.4), radius: 8, x: 0, y: 2)
+                                }
                             }
                         }
 
@@ -274,6 +294,7 @@ struct ARMeasurementView: View {
             viewModel.startSession()
             viewModel.currentUnit = measurementUnit
             viewModel.currentMeasurementMode = measurementMode
+            viewModel.appMode = appMode
         }
         .onDisappear {
             viewModel.pauseSession()
@@ -283,6 +304,9 @@ struct ARMeasurementView: View {
         }
         .onChange(of: measurementMode) { _, newMode in
             viewModel.currentMeasurementMode = newMode
+        }
+        .onChange(of: appMode) { _, newMode in
+            viewModel.appMode = newMode
         }
     }
 
@@ -748,6 +772,9 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var isEditing = false
     @Published var isDragging = false
 
+    // App mode (synced from view's @AppStorage)
+    var appMode: AppMode = .warehouse
+
     // Debug visualization
     @Published var showDebugMask = false
     @Published var showDebugDepth = false
@@ -859,6 +886,11 @@ class ARMeasurementViewModel: ObservableObject {
     // Published count for UI
     @Published var completedBoxCount: Int = 0
 
+    // Shipping box recommendation
+    @Published var shippingRecommendation: ShippingBoxRecommendation?
+    private var shippingBoxVisualization: ShippingBoxVisualization?
+    private var shippingBoxAnchor: AnchorEntity?
+
     init() {
         sessionManager.$trackingStateMessage
             .assign(to: &$trackingMessage)
@@ -909,13 +941,17 @@ class ARMeasurementViewModel: ObservableObject {
         if let boxViz = boxVisualization {
             let inCalloutPhase = animationPhase == .dimensionCallout || animationPhase == .calloutTransition
             let unifiedLabelActive = showLabelBillboard && (labelBillboard?.isUnified == true)
-            if !inCalloutPhase && !unifiedLabelActive {
-                boxViz.setDimensionBillboardVisible(true, forceShow: true)
-            } else if unifiedLabelActive {
+            let shippingBillboardActive = appMode == .shipping && shippingBoxVisualization != nil
+            if shippingBillboardActive || unifiedLabelActive {
                 boxViz.setDimensionBillboardVisible(false)
+            } else if !inCalloutPhase {
+                boxViz.setDimensionBillboardVisible(true, forceShow: true)
             }
             boxViz.updateLabelOrientations(cameraPosition: cameraPosition)
         }
+
+        // Shipping box billboard orientation tracking
+        shippingBoxVisualization?.updateBillboardOrientation(cameraPosition: cameraPosition)
 
         // Label billboard orientation tracking
         if showLabelBillboard {
@@ -1040,8 +1076,10 @@ class ARMeasurementViewModel: ObservableObject {
                 pendingFirstTapFloorY = raycastHitPosition?.y
                 hasPendingFirstTap = true
 
-                // Start guided workflow: auto-transition to label scan step
-                workflowStep = .awaitingLabelScan
+                // Start guided workflow: label scan (warehouse) or skip to second tap (shipping)
+                print("[Shipping] First tap complete, appMode=\(appMode)")
+                workflowStep = appMode == .shipping ? .awaitingSecondTap : .awaitingLabelScan
+                print("[Shipping] workflowStep=\(workflowStep)")
 
                 // Seed refinement accumulators for the merge on second tap
                 if let pc = result.pointCloud {
@@ -1366,6 +1404,27 @@ class ARMeasurementViewModel: ObservableObject {
                             self.currentMeasurement = adjustedResult
                             self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY, unit: self.currentUnit)
 
+                            // Shipping mode: compute recommendation and show overlay
+                            print("[Shipping] appMode=\(self.appMode), checking shipping overlay...")
+                            if self.appMode == .shipping {
+                                let rec = ShippingBoxSelector.selectBestFit(
+                                    objectLength: adjustedResult.length,
+                                    objectWidth: adjustedResult.width,
+                                    objectHeight: adjustedResult.height,
+                                    objectVolume: adjustedResult.volume
+                                )
+                                self.shippingRecommendation = rec
+                                print("[Shipping] recommendation=\(rec?.displayText ?? "nil"), dims=L\(adjustedResult.length*100)cm W\(adjustedResult.width*100)cm H\(adjustedResult.height*100)cm")
+                                self.showShippingBoxOverlay(
+                                    for: adjustedBox,
+                                    recommendation: rec,
+                                    objectLength: adjustedResult.length,
+                                    objectWidth: adjustedResult.width,
+                                    objectHeight: adjustedResult.height
+                                )
+                                print("[Shipping] shippingBoxVisualization=\(self.shippingBoxVisualization != nil), anchor=\(self.shippingBoxAnchor != nil)")
+                            }
+
                             // Hide 3D billboard initially
                             self.boxVisualization?.setDimensionBillboardVisible(false)
 
@@ -1546,6 +1605,14 @@ class ARMeasurementViewModel: ObservableObject {
         boxVisualization = nil
         boxVisualizationAnchor = nil
         pointCloudEntity = nil
+
+        // Remove shipping box overlay
+        if let anchor = shippingBoxAnchor {
+            sessionManager.removeAnchor(anchor)
+        }
+        shippingBoxVisualization = nil
+        shippingBoxAnchor = nil
+        shippingRecommendation = nil
 
         // Remove animation anchor if exists
         if let anchor = animatedBoxAnchor {
@@ -2394,6 +2461,11 @@ class ARMeasurementViewModel: ObservableObject {
         workflowStep = .idle
     }
 
+    func resetForNewShippingMeasurement() {
+        clearActiveBoxOnly()
+        workflowStep = .idle
+    }
+
     /// Find the completed box ID that owns a given entity
     func findCompletedBoxId(for entity: Entity) -> Int? {
         for viz in completedBoxVisualizations {
@@ -2546,6 +2618,36 @@ class ARMeasurementViewModel: ObservableObject {
         if let entity = boxVisualization?.entity {
             boxVisualizationAnchor = sessionManager.addEntityWithAnchor(entity)
         }
+    }
+
+    private func showShippingBoxOverlay(
+        for objectBox: BoundingBox3D,
+        recommendation: ShippingBoxRecommendation?,
+        objectLength: Float,
+        objectWidth: Float,
+        objectHeight: Float
+    ) {
+        // Remove existing shipping overlay if any
+        if let anchor = shippingBoxAnchor {
+            sessionManager.removeAnchor(anchor)
+        }
+        shippingBoxVisualization = nil
+        shippingBoxAnchor = nil
+
+        guard let rec = recommendation else { return }
+        let box = rec.shippingBox
+        let dims = SIMD3<Float>(box.lengthCm / 100.0, box.widthCm / 100.0, box.heightCm / 100.0)
+        let viz = ShippingBoxVisualization(
+            objectBoundingBox: objectBox,
+            shippingBoxDimensionsMeters: dims,
+            recommendation: rec,
+            objectLength: objectLength,
+            objectWidth: objectWidth,
+            objectHeight: objectHeight,
+            unit: currentUnit
+        )
+        shippingBoxVisualization = viz
+        shippingBoxAnchor = sessionManager.addEntityWithAnchor(viz.entity)
     }
 
     private func showPointCloudVisualization(points: [SIMD3<Float>]) {

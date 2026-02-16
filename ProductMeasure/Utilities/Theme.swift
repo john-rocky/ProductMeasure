@@ -94,6 +94,10 @@ enum PMTheme {
     static let uiEdgeOuterRed = UIColor(hex: 0xFF404D).withAlphaComponent(0.35)
     static let uiCornerMarkerRed = UIColor(hex: 0xFF404D).withAlphaComponent(0.6)
 
+    // MARK: Shipping Box Wireframe (cyan-blue, distinct from neon green measurement wireframe)
+    static let uiShippingBoxInner = UIColor(red: 0.0, green: 0.83, blue: 1.0, alpha: 1.0)
+    static let uiShippingBoxOuter = UIColor(red: 0.0, green: 0.83, blue: 1.0, alpha: 1.0)
+
     // MARK: Billboard
 
     static let uiBillboardBg     = UIColor(red: 13/255, green: 18/255, blue: 31/255, alpha: 0.85)
