@@ -53,6 +53,7 @@ class BoundingBoxEstimator {
             let hull = convexHull2D(horizontalPoints)
             if hull.count >= 3 {
                 var mabrAngle = minimumAreaBoundingRect(hull: hull)
+                mabrAngle = fineAngleSearch(baseAngle: mabrAngle, hull: hull)
 
                 // Snap to vertical plane if one is nearby and aligned
                 mabrAngle = snapToVerticalPlane(
@@ -200,67 +201,121 @@ class BoundingBoxEstimator {
         return bestAngle
     }
 
-    // MARK: - Iterative Angle Refinement
+    // MARK: - Fine Angle Search
 
-    /// Refine box orientation by filtering far-off points and re-running MABR,
-    /// but always compute final extents from ALL original points to avoid shrinkage
+    /// Fine-grained angle search around the best MABR angle
+    /// Searches ±5° in 0.5° steps for a tighter minimum area
+    private func fineAngleSearch(baseAngle: Float, hull: [SIMD2<Float>]) -> Float {
+        var bestAngle = baseAngle
+        var bestArea = computeRotatedArea(hull: hull, angle: baseAngle)
+
+        let range = AppConstants.mabrFineSearchRange
+        let step = AppConstants.mabrFineSearchStep
+
+        var testAngle = baseAngle - range
+        while testAngle <= baseAngle + range {
+            let area = computeRotatedArea(hull: hull, angle: testAngle)
+            if area < bestArea {
+                bestArea = area
+                bestAngle = testAngle
+            }
+            testAngle += step
+        }
+
+        return bestAngle
+    }
+
+    /// Compute the bounding rectangle area for a hull at a given rotation angle
+    private func computeRotatedArea(hull: [SIMD2<Float>], angle: Float) -> Float {
+        let cosA = cos(-angle)
+        let sinA = sin(-angle)
+
+        var minX: Float = .infinity, maxX: Float = -.infinity
+        var minY: Float = .infinity, maxY: Float = -.infinity
+
+        for p in hull {
+            let rx = p.x * cosA - p.y * sinA
+            let ry = p.x * sinA + p.y * cosA
+            minX = min(minX, rx); maxX = max(maxX, rx)
+            minY = min(minY, ry); maxY = max(maxY, ry)
+        }
+
+        return (maxX - minX) * (maxY - minY)
+    }
+
+    // MARK: - Iterative Box Refinement
+
+    /// Multi-pass refinement: filter outlier points to refine angle, but compute
+    /// final extents from ALL original points to prevent iterative shrinkage
     private func refineBoxIteratively(
         initialBox: BoundingBox3D,
         points: [SIMD3<Float>],
         verticalPlaneAnchors: [ARPlaneAnchor]
     ) -> BoundingBox3D {
-        // Single refinement pass: filter outlier points, re-estimate angle only
-        let margin: Float = 0.015  // 1.5cm
-        let minRetainRatio: Float = 0.5
+        let margin = AppConstants.boxRefinementMargin
+        let minRetainRatio = AppConstants.boxRefinementMinRetainRatio
+        let iterations = AppConstants.boxRefinementIterations
 
-        let inverseRotation = initialBox.rotation.inverse
-        let filteredPoints = points.filter { point in
-            let local = inverseRotation.act(point - initialBox.center)
-            let ex = initialBox.extents.x + margin
-            let ey = initialBox.extents.y + margin
-            let ez = initialBox.extents.z + margin
-            return abs(local.x) <= ex && abs(local.y) <= ey && abs(local.z) <= ez
+        var currentBox = initialBox
+
+        for iteration in 0..<iterations {
+            let inverseRotation = currentBox.rotation.inverse
+            // Always filter from ALL original points (not progressively filtered)
+            let filteredPoints = points.filter { point in
+                let local = inverseRotation.act(point - currentBox.center)
+                let ex = currentBox.extents.x + margin
+                let ey = currentBox.extents.y + margin
+                let ez = currentBox.extents.z + margin
+                return abs(local.x) <= ex && abs(local.y) <= ey && abs(local.z) <= ez
+            }
+
+            // If too many points pruned, stop refinement
+            guard Float(filteredPoints.count) >= Float(points.count) * minRetainRatio,
+                  filteredPoints.count >= 20 else {
+                break
+            }
+
+            let centroid = filteredPoints.reduce(.zero, +) / Float(filteredPoints.count)
+            let horizontalPoints = filteredPoints.map { SIMD2<Float>($0.x, $0.z) }
+
+            guard horizontalPoints.count >= 20 else { break }
+            let hull = convexHull2D(horizontalPoints)
+            guard hull.count >= 3 else { break }
+
+            // Use filtered points for angle refinement only
+            var angle = minimumAreaBoundingRect(hull: hull)
+            angle = fineAngleSearch(baseAngle: angle, hull: hull)
+            angle = snapToVerticalPlane(
+                angle: angle,
+                boxCenter: centroid,
+                verticalPlaneAnchors: verticalPlaneAnchors
+            )
+
+            let cosA = cos(angle)
+            let sinA = sin(angle)
+            let xAxis = SIMD3<Float>(cosA, 0, sinA).normalized
+            let yAxis = SIMD3<Float>(0, 1, 0)
+            let zAxis = SIMD3<Float>(-sinA, 0, cosA).normalized
+
+            let rotationMatrix = simd_float3x3(xAxis, yAxis, zAxis)
+            let rotation = simd_quatf(rotationMatrix: rotationMatrix)
+
+            // Compute extents from ALL original points with the refined angle
+            let fullCentroid = points.reduce(.zero, +) / Float(points.count)
+            let (center, extents) = computeExtents(points: points, centroid: fullCentroid, rotation: rotation)
+
+            currentBox = BoundingBox3D(center: center, extents: extents, rotation: rotation)
+
+            print("[BBoxEstimator] Refinement iteration \(iteration + 1): angle=\(angle * 180 / .pi)°")
         }
 
-        // If too many points pruned, keep original box
-        guard Float(filteredPoints.count) >= Float(points.count) * minRetainRatio,
-              filteredPoints.count >= 20 else {
-            return initialBox
-        }
-
-        let centroid = filteredPoints.reduce(.zero, +) / Float(filteredPoints.count)
-        let horizontalPoints = filteredPoints.map { SIMD2<Float>($0.x, $0.z) }
-
-        guard horizontalPoints.count >= 20 else { return initialBox }
-        let hull = convexHull2D(horizontalPoints)
-        guard hull.count >= 3 else { return initialBox }
-
-        var angle = minimumAreaBoundingRect(hull: hull)
-        angle = snapToVerticalPlane(
-            angle: angle,
-            boxCenter: centroid,
-            verticalPlaneAnchors: verticalPlaneAnchors
-        )
-
-        let cosA = cos(angle)
-        let sinA = sin(angle)
-        let xAxis = SIMD3<Float>(cosA, 0, sinA).normalized
-        let yAxis = SIMD3<Float>(0, 1, 0)
-        let zAxis = SIMD3<Float>(-sinA, 0, cosA).normalized
-
-        let rotationMatrix = simd_float3x3(xAxis, yAxis, zAxis)
-        let rotation = simd_quatf(rotationMatrix: rotationMatrix)
-
-        // Compute extents from ALL original points (not filtered) to avoid shrinkage
-        let fullCentroid = points.reduce(.zero, +) / Float(points.count)
-        let (center, extents) = computeExtents(points: points, centroid: fullCentroid, rotation: rotation)
-
-        return BoundingBox3D(center: center, extents: extents, rotation: rotation)
+        return currentBox
     }
 
     // MARK: - AR Plane-Assisted Orientation Snap
 
     /// Snap MABR angle to a nearby vertical plane's orientation if closely aligned
+    /// Uses weighted scoring: proximity (50%) + alignment (30%) + area (20%)
     private func snapToVerticalPlane(
         angle: Float,
         boxCenter: SIMD3<Float>,
@@ -272,7 +327,10 @@ class BoundingBoxEstimator {
         let snapThreshold: Float = 10.0 * .pi / 180.0  // 10 degrees
 
         var bestPlaneAngle: Float?
-        var bestPlaneArea: Float = 0
+        var bestScore: Float = 0
+
+        // Find maximum plane area for normalization
+        let maxPlaneArea = verticalPlaneAnchors.map { $0.extent.x * $0.extent.z }.max() ?? 1.0
 
         for anchor in verticalPlaneAnchors {
             // Distance from box center to plane center
@@ -295,8 +353,11 @@ class BoundingBoxEstimator {
             )
             let planeAngle = atan2(normal.z, normal.x)
 
-            // Check if plane angle is within snapThreshold of MABR angle (or +90°)
             let planeArea = anchor.extent.x * anchor.extent.z
+
+            // Score components
+            let proximityScore = 1.0 - (dist / maxDistance)
+            let areaScore = planeArea / maxPlaneArea
 
             for offset in [Float(0), .pi / 2, -.pi / 2, .pi] {
                 var diff = (angle + offset) - planeAngle
@@ -304,15 +365,23 @@ class BoundingBoxEstimator {
                 while diff > .pi { diff -= 2 * .pi }
                 while diff < -.pi { diff += 2 * .pi }
 
-                if abs(diff) < snapThreshold && planeArea > bestPlaneArea {
+                guard abs(diff) < snapThreshold else { continue }
+
+                let alignmentScore = 1.0 - abs(diff) / snapThreshold
+
+                let score = proximityScore * AppConstants.planeSnapProximityWeight +
+                            alignmentScore * AppConstants.planeSnapAlignmentWeight +
+                            areaScore * AppConstants.planeSnapAreaWeight
+
+                if score > bestScore {
                     bestPlaneAngle = planeAngle - offset
-                    bestPlaneArea = planeArea
+                    bestScore = score
                 }
             }
         }
 
         if let snapped = bestPlaneAngle {
-            print("[BBoxEstimator] Snapped angle to vertical plane: \(angle * 180 / .pi)° -> \(snapped * 180 / .pi)°")
+            print("[BBoxEstimator] Snapped angle to vertical plane: \(angle * 180 / .pi)° -> \(snapped * 180 / .pi)° (score: \(bestScore))")
             return snapped
         }
 
@@ -424,9 +493,9 @@ class BoundingBoxEstimator {
             zVals.append(local.z)
         }
 
-        // Use percentile-based extents to trim extreme noise only
-        // Trim 1% from each side per axis — conservative to avoid shrinking real boundaries
-        let trimCount = max(1, Int(Float(n) * 0.01))
+        // Use percentile-based extents to trim extreme noise
+        // Trim 2% from each side per axis for tighter fit
+        let trimCount = max(1, Int(Float(n) * AppConstants.extentsTrimPercent))
 
         xVals.sort()
         yVals.sort()

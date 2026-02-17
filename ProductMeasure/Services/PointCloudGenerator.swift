@@ -277,7 +277,7 @@ class PointCloudGenerator {
             grid[key, default: []].append(point)
         }
 
-        // Return the centroid of each cell
+        // Grid centroid downsampling
         return grid.values.map { cellPoints in
             cellPoints.reduce(.zero, +) / Float(cellPoints.count)
         }

@@ -8,7 +8,7 @@ import Foundation
 enum AppConstants {
     // MARK: - Point Cloud Processing
     static let maxPointCloudSize = 20000
-    static let pointCloudGridSize: Float = 0.003 // 3mm grid for downsampling
+    static let pointCloudGridSize: Float = 0.003 // 3mm grid
 
     // MARK: - Depth Processing
     static let minDepthConfidence: Float = 0.4
@@ -34,6 +34,28 @@ enum AppConstants {
     static let maxRefinementRounds = 3
     static let refinementProximityScale: Float = 2.0   // Scale factor for same-object validation
     static let refinementOverlapThreshold: Float = 0.30 // Minimum overlap ratio for new point cloud
+
+    // MARK: - Depth Filtering
+    static let depthFilterPercentTolerance: Float = 0.20
+    static let depthFilterMinTolerance: Float = 0.07
+    static let depthFilterMaxTolerance: Float = 0.25
+
+    // MARK: - Box Refinement
+    static let boxRefinementMargin: Float = 0.015
+    static let boxRefinementMinRetainRatio: Float = 0.5
+    static let boxRefinementIterations: Int = 2
+
+    // MARK: - MABR Fine Angle Search
+    static let mabrFineSearchRange: Float = 5.0 * .pi / 180.0
+    static let mabrFineSearchStep: Float = 0.5 * .pi / 180.0
+
+    // MARK: - Vertical Plane Snap
+    static let planeSnapProximityWeight: Float = 0.5
+    static let planeSnapAlignmentWeight: Float = 0.3
+    static let planeSnapAreaWeight: Float = 0.2
+
+    // MARK: - Extent Trimming
+    static let extentsTrimPercent: Float = 0.01
 
     // MARK: - Label Reader
     static let labelMinConfidence: Float = 0.6

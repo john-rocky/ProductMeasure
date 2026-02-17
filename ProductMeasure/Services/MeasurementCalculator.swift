@@ -729,10 +729,9 @@ class MeasurementCalculator {
         }
 
         // Filter pixels by depth - keep those within a tolerance of tap depth
-        // Use a percentage-based tolerance (±25% of tap depth or ±10cm, whichever is larger)
-        let percentTolerance = tapDepth * 0.25
-        let minTolerance: Float = 0.10
-        let depthTolerance = max(percentTolerance, minTolerance)
+        // Use 15% of tap depth, clamped to [5cm, 25cm]
+        let percentTolerance = tapDepth * AppConstants.depthFilterPercentTolerance
+        let depthTolerance = min(max(percentTolerance, AppConstants.depthFilterMinTolerance), AppConstants.depthFilterMaxTolerance)
 
         print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m")
 
@@ -811,7 +810,8 @@ class MeasurementCalculator {
 
         print("[Clustering] Starting with \(points.count) points")
 
-        let neighborThreshold: Float = 0.04  // 4cm
+        // Fixed 4cm neighbor threshold for clustering
+        let neighborThreshold: Float = 0.04
         let cellSize = neighborThreshold
 
         // Build spatial hash grid: cell → [point indices]
