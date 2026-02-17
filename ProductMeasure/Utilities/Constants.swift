@@ -47,12 +47,22 @@ enum AppConstants {
 
     // MARK: - MABR Fine Angle Search
     static let mabrFineSearchRange: Float = 5.0 * .pi / 180.0
-    static let mabrFineSearchStep: Float = 0.5 * .pi / 180.0
+    static let mabrFineSearchStep: Float = 0.2 * .pi / 180.0  // 0.2° for ~0.35cm accuracy at 1m
 
     // MARK: - Vertical Plane Snap
     static let planeSnapProximityWeight: Float = 0.5
     static let planeSnapAlignmentWeight: Float = 0.3
     static let planeSnapAreaWeight: Float = 0.2
+
+    // MARK: - Floor Snap
+    static let floorSnapThresholdDefault: Float = 0.05    // 5cm for raycast-only
+    static let floorSnapThresholdWithPlane: Float = 0.08   // 8cm when plane-backed
+
+    // MARK: - Depth-Adaptive Clustering
+    static let clusteringMinThreshold: Float = 0.03
+    static let clusteringMaxThreshold: Float = 0.06
+    static let clusteringDepthScale: Float = 0.015
+    static let clusteringBaseOffset: Float = 0.02
 
     // MARK: - Extent Trimming
     static let extentsTrimPercent: Float = 0.01

@@ -33,6 +33,9 @@ class MeasurementCalculator {
         // Point cloud for Fit functionality
         var pointCloud: [SIMD3<Float>]?
 
+        // Floor Y from horizontal plane detection
+        var detectedFloorY: Float?
+
         // Debug info
         var debugMaskImage: UIImage?
         var debugDepthImage: UIImage?
@@ -184,8 +187,11 @@ class MeasurementCalculator {
                 print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
 
                 // Use clustering to find the connected object - this separates the tapped object from others
+                let cameraPos = SIMD3<Float>(frame.camera.transform.columns.3.x,
+                                             frame.camera.transform.columns.3.y,
+                                             frame.camera.transform.columns.3.z)
                 if filteredPoints.count >= 30 {
-                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: cameraPos)
                     print("[Calculator] After clustering: \(filteredPoints.count) points")
 
                     pointCloud = PointCloudGenerator.PointCloud(
@@ -207,6 +213,25 @@ class MeasurementCalculator {
             let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
                 guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
                 return plane
+            }
+
+            // Detect floor from horizontal plane anchors
+            let horizontalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+                guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .horizontal else { return nil }
+                return plane
+            }
+            var detectedFloorY: Float? = nil
+            if let hitY = raycastHitPosition?.y {
+                let bestPlane = horizontalPlanes.min { p1, p2 in
+                    abs(p1.transform.columns.3.y - hitY) < abs(p2.transform.columns.3.y - hitY)
+                }
+                if let plane = bestPlane {
+                    let planeY = plane.transform.columns.3.y
+                    if abs(planeY - hitY) < 0.10 {
+                        detectedFloorY = planeY
+                        print("[Calculator] Horizontal plane floor detected at Y=\(planeY) (raycast hit Y=\(hitY))")
+                    }
+                }
             }
 
             guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
@@ -244,6 +269,7 @@ class MeasurementCalculator {
 
             // Store point cloud for Fit functionality
             result.pointCloud = pointCloud.points
+            result.detectedFloorY = detectedFloorY
 
             // Attach debug info (images only, not point cloud to save memory)
             result.debugMaskImage = debugMaskImage
@@ -376,8 +402,11 @@ class MeasurementCalculator {
                 )
                 print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
 
+                let cameraPos = SIMD3<Float>(frame.camera.transform.columns.3.x,
+                                             frame.camera.transform.columns.3.y,
+                                             frame.camera.transform.columns.3.z)
                 if filteredPoints.count >= 30 {
-                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: cameraPos)
                     print("[Calculator] After clustering: \(filteredPoints.count) points")
 
                     pointCloud = PointCloudGenerator.PointCloud(
@@ -399,6 +428,25 @@ class MeasurementCalculator {
             let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
                 guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
                 return plane
+            }
+
+            // Detect floor from horizontal plane anchors
+            let horizontalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+                guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .horizontal else { return nil }
+                return plane
+            }
+            var detectedFloorY: Float? = nil
+            if let hitY = raycastHitPosition?.y {
+                let bestPlane = horizontalPlanes.min { p1, p2 in
+                    abs(p1.transform.columns.3.y - hitY) < abs(p2.transform.columns.3.y - hitY)
+                }
+                if let plane = bestPlane {
+                    let planeY = plane.transform.columns.3.y
+                    if abs(planeY - hitY) < 0.10 {
+                        detectedFloorY = planeY
+                        print("[Calculator] Horizontal plane floor detected at Y=\(planeY) (raycast hit Y=\(hitY))")
+                    }
+                }
             }
 
             guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
@@ -432,6 +480,7 @@ class MeasurementCalculator {
             )
 
             result.pointCloud = pointCloud.points
+            result.detectedFloorY = detectedFloorY
             result.debugMaskImage = debugMaskImage
 
             return result
@@ -637,8 +686,11 @@ class MeasurementCalculator {
                     points: pointCloud.points, center: hitPosition, maxDistance: initialRadius
                 )
 
+                let cameraPos = SIMD3<Float>(frame.camera.transform.columns.3.x,
+                                             frame.camera.transform.columns.3.y,
+                                             frame.camera.transform.columns.3.z)
                 if filteredPoints.count >= 30 {
-                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition)
+                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: cameraPos)
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints, quality: pointCloud.quality
                     )
@@ -729,7 +781,7 @@ class MeasurementCalculator {
         }
 
         // Filter pixels by depth - keep those within a tolerance of tap depth
-        // Use 15% of tap depth, clamped to [5cm, 25cm]
+        // Use 20% of tap depth, clamped to [7cm, 25cm]
         let percentTolerance = tapDepth * AppConstants.depthFilterPercentTolerance
         let depthTolerance = min(max(percentTolerance, AppConstants.depthFilterMinTolerance), AppConstants.depthFilterMaxTolerance)
 
@@ -803,15 +855,31 @@ class MeasurementCalculator {
         return filteredPoints
     }
 
+    /// Estimate median distance from camera to point cloud
+    private func estimateMedianDepth(points: [SIMD3<Float>], cameraPosition: SIMD3<Float>) -> Float {
+        let distances = points.map { simd_distance($0, cameraPosition) }
+        let sorted = distances.sorted()
+        return sorted[sorted.count / 2]
+    }
+
     /// Extract the main cluster of points around the center using spatial-hash flood-fill
     /// This helps isolate the tapped object from other nearby objects
-    private func extractMainCluster(points: [SIMD3<Float>], center: SIMD3<Float>) -> [SIMD3<Float>] {
+    private func extractMainCluster(points: [SIMD3<Float>], center: SIMD3<Float>, cameraPosition: SIMD3<Float>? = nil) -> [SIMD3<Float>] {
         guard points.count > 20 else { return points }
 
         print("[Clustering] Starting with \(points.count) points")
 
-        // Fixed 4cm neighbor threshold for clustering
-        let neighborThreshold: Float = 0.04
+        // Depth-adaptive clustering: LiDAR noise scales with distance
+        let neighborThreshold: Float
+        if let camPos = cameraPosition {
+            let medianDepth = estimateMedianDepth(points: points, cameraPosition: camPos)
+            neighborThreshold = min(AppConstants.clusteringMaxThreshold,
+                                    max(AppConstants.clusteringMinThreshold,
+                                        AppConstants.clusteringBaseOffset + medianDepth * AppConstants.clusteringDepthScale))
+            print("[Clustering] Depth-adaptive threshold: \(neighborThreshold * 100)cm (median depth: \(medianDepth)m)")
+        } else {
+            neighborThreshold = 0.04
+        }
         let cellSize = neighborThreshold
 
         // Build spatial hash grid: cell → [point indices]
