@@ -9,12 +9,16 @@ import SwiftUI
 struct CornerBracketsView: View {
     let phase: BoundingBoxAnimationPhase
     let screenSize: CGSize
+    var stabilityLevel: StabilityLevel = .moving
 
     // Bracket styling
-    private let bracketColor: Color = PMTheme.cyan
-    private let bracketLineWidth: CGFloat = 3
     private let bracketLength: CGFloat = 24
-    private let targetInset: CGFloat = 60
+
+    private var currentInset: CGFloat { PMTheme.bracketInset(for: stabilityLevel) }
+    private var currentLineWidth: CGFloat { PMTheme.bracketLineWidth(for: stabilityLevel) }
+    private var currentCrosshairOpacity: Double { PMTheme.crosshairOpacity(for: stabilityLevel) }
+    private var currentColor: Color { stabilityLevel == .locked ? PMTheme.stabilityLockedColor : PMTheme.cyan }
+    private var isPulsing: Bool { stabilityLevel != .locked }
 
     @State private var pulseScale: CGFloat = 1.0
     @State private var pulseOpacity: Double = 0.8
@@ -24,8 +28,8 @@ struct CornerBracketsView: View {
         GeometryReader { geometry in
             let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
             let targetSize = CGSize(
-                width: geometry.size.width - targetInset * 2,
-                height: geometry.size.width - targetInset * 2
+                width: geometry.size.width - currentInset * 2,
+                height: geometry.size.width - currentInset * 2
             )
 
             ZStack {
@@ -36,13 +40,13 @@ struct CornerBracketsView: View {
                     // Outer dim brackets (offset)
                     targetBracketsView(center: center, size: targetSize, opacity: 0.3, offset: 4)
 
-                    // Inner bright brackets (pulsing)
-                    targetBracketsView(center: center, size: targetSize, opacity: pulseOpacity, offset: 0)
-                        .scaleEffect(pulseScale, anchor: .center)
+                    // Inner bright brackets (pulsing when not locked)
+                    targetBracketsView(center: center, size: targetSize, opacity: isPulsing ? pulseOpacity : 1.0, offset: 0)
+                        .scaleEffect(isPulsing ? pulseScale : 1.0, anchor: .center)
 
                     // Rotating center diamond
                     Diamond()
-                        .stroke(PMTheme.cyan.opacity(0.30), lineWidth: 1)
+                        .stroke(currentColor.opacity(0.30), lineWidth: 1)
                         .frame(width: 10, height: 10)
                         .rotationEffect(.degrees(diamondRotation))
                         .position(x: center.x, y: center.y)
@@ -50,15 +54,44 @@ struct CornerBracketsView: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: phase)
+        .animation(
+            stabilityLevel == .locked
+                ? .spring(response: PMTheme.stabilityLockSpringResponse, dampingFraction: 0.7)
+                : .easeInOut(duration: PMTheme.stabilitySettleTransition),
+            value: stabilityLevel
+        )
         .allowsHitTesting(false)
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                pulseScale = 1.04
-                pulseOpacity = 1.0
-            }
+            startPulseAnimation()
             withAnimation(.linear(duration: 8.0).repeatForever(autoreverses: false)) {
                 diamondRotation = 360
             }
+        }
+        .onChange(of: stabilityLevel) { _, newLevel in
+            if newLevel == .locked {
+                // Snap animation: spring for the "squeeze" feel
+                withAnimation(.spring(response: PMTheme.stabilityLockSpringResponse, dampingFraction: 0.7)) {
+                    pulseScale = 1.0
+                    pulseOpacity = 1.0
+                }
+            } else if newLevel == .moving {
+                // Resume pulse animation
+                startPulseAnimation()
+            } else {
+                // Settling/stable: smooth ease transition
+                withAnimation(.easeInOut(duration: PMTheme.stabilitySettleTransition)) {
+                    // Keep pulse running, just let inset/color change via computed properties
+                }
+            }
+        }
+    }
+
+    private func startPulseAnimation() {
+        pulseScale = 1.0
+        pulseOpacity = 0.8
+        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+            pulseScale = 1.04
+            pulseOpacity = 1.0
         }
     }
 
@@ -72,19 +105,19 @@ struct CornerBracketsView: View {
         ZStack {
             // Horizontal line
             Rectangle()
-                .fill(PMTheme.cyan.opacity(0.40))
+                .fill(currentColor.opacity(currentCrosshairOpacity))
                 .frame(width: crossSize, height: 1)
                 .position(x: center.x, y: center.y)
 
             // Vertical line
             Rectangle()
-                .fill(PMTheme.cyan.opacity(0.40))
+                .fill(currentColor.opacity(currentCrosshairOpacity))
                 .frame(width: 1, height: crossSize)
                 .position(x: center.x, y: center.y)
 
             // Center dot
             Circle()
-                .fill(PMTheme.cyan.opacity(0.40))
+                .fill(currentColor.opacity(currentCrosshairOpacity))
                 .frame(width: dotSize, height: dotSize)
                 .position(x: center.x, y: center.y)
         }
@@ -99,22 +132,22 @@ struct CornerBracketsView: View {
 
         ZStack {
             BracketShape(corner: .topLeft, length: bracketLength)
-                .stroke(bracketColor.opacity(opacity), lineWidth: bracketLineWidth)
+                .stroke(currentColor.opacity(opacity), lineWidth: currentLineWidth)
                 .frame(width: bracketLength, height: bracketLength)
                 .position(x: center.x - halfWidth, y: center.y - halfHeight)
 
             BracketShape(corner: .topRight, length: bracketLength)
-                .stroke(bracketColor.opacity(opacity), lineWidth: bracketLineWidth)
+                .stroke(currentColor.opacity(opacity), lineWidth: currentLineWidth)
                 .frame(width: bracketLength, height: bracketLength)
                 .position(x: center.x + halfWidth, y: center.y - halfHeight)
 
             BracketShape(corner: .bottomLeft, length: bracketLength)
-                .stroke(bracketColor.opacity(opacity), lineWidth: bracketLineWidth)
+                .stroke(currentColor.opacity(opacity), lineWidth: currentLineWidth)
                 .frame(width: bracketLength, height: bracketLength)
                 .position(x: center.x - halfWidth, y: center.y + halfHeight)
 
             BracketShape(corner: .bottomRight, length: bracketLength)
-                .stroke(bracketColor.opacity(opacity), lineWidth: bracketLineWidth)
+                .stroke(currentColor.opacity(opacity), lineWidth: currentLineWidth)
                 .frame(width: bracketLength, height: bracketLength)
                 .position(x: center.x + halfWidth, y: center.y + halfHeight)
         }
@@ -184,7 +217,8 @@ struct Diamond: Shape {
 
         CornerBracketsView(
             phase: .showingTargetBrackets,
-            screenSize: CGSize(width: 400, height: 800)
+            screenSize: CGSize(width: 400, height: 800),
+            stabilityLevel: .locked
         )
     }
 }

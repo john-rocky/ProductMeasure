@@ -126,6 +126,34 @@ enum PMTheme {
     static let calloutIdFontSize: CGFloat = 16
     static let calloutBodyFontSize: CGFloat = 14
 
+    // MARK: Stability Feedback
+
+    static func bracketInset(for level: StabilityLevel) -> CGFloat {
+        switch level {
+        case .moving:   return 60
+        case .settling: return 52
+        case .stable:   return 44
+        case .locked:   return 36
+        }
+    }
+
+    static func crosshairOpacity(for level: StabilityLevel) -> Double {
+        switch level {
+        case .moving:   return 0.40
+        case .settling: return 0.55
+        case .stable:   return 0.75
+        case .locked:   return 1.0
+        }
+    }
+
+    static func bracketLineWidth(for level: StabilityLevel) -> CGFloat {
+        level == .locked ? 4.0 : 3.0
+    }
+
+    static let stabilitySettleTransition: Double = 0.6
+    static let stabilityLockSpringResponse: Double = 0.25
+    static let stabilityLockedColor = Color(hex: 0x00E680)
+
     // MARK: Gradients
 
     static var cyanGradient: LinearGradient {

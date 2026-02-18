@@ -123,6 +123,11 @@ class ARMeasurementViewModel: ObservableObject {
     // Animation state - start with target brackets visible
     @Published var animationPhase: BoundingBoxAnimationPhase = .showingTargetBrackets
     @Published var animationContext: BoundingBoxAnimationContext?
+
+    // Stability detection
+    @Published var stabilityLevel: StabilityLevel = .moving
+    private var stabilityWindowStart: Date?
+    private var lastHapticLevel: StabilityLevel = .moving
     let animationCoordinator = BoxAnimationCoordinator()
 
     let sessionManager = ARSessionManager()
@@ -193,9 +198,12 @@ class ARMeasurementViewModel: ObservableObject {
             frame.camera.transform.columns.2.z
         )
 
-        // Skip billboard updates when camera is nearly stationary
+        // Stability detection (runs every frame, before billboard guard)
         let posDelta = simd_distance(cameraPosition, lastFrameCameraPosition)
         let dirDelta = simd_distance(cameraForward, lastFrameCameraForward)
+        updateStabilityLevel(posDelta: posDelta, dirDelta: dirDelta)
+
+        // Skip billboard updates when camera is nearly stationary
         guard posDelta > 0.005 || dirDelta > 0.01 else { return }
         lastFrameCameraPosition = cameraPosition
         lastFrameCameraForward = cameraForward
@@ -250,6 +258,54 @@ class ARMeasurementViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Stability Detection
+
+    private func updateStabilityLevel(posDelta: Float, dirDelta: Float) {
+        let isStill = posDelta < AppConstants.stabilityPositionThreshold
+            && dirDelta < AppConstants.stabilityRotationThreshold
+
+        if !isStill {
+            stabilityWindowStart = nil
+            if stabilityLevel != .moving {
+                stabilityLevel = .moving
+                lastHapticLevel = .moving
+            }
+            return
+        }
+
+        // Device is still — start or continue timing
+        let now = Date()
+        if stabilityWindowStart == nil {
+            stabilityWindowStart = now
+        }
+        let elapsed = now.timeIntervalSince(stabilityWindowStart!)
+
+        let newLevel: StabilityLevel
+        if elapsed >= AppConstants.stabilityLockedTime {
+            newLevel = .locked
+        } else if elapsed >= AppConstants.stabilityStableTime {
+            newLevel = .stable
+        } else if elapsed >= AppConstants.stabilitySettlingTime {
+            newLevel = .settling
+        } else {
+            newLevel = .moving
+        }
+
+        if newLevel != stabilityLevel {
+            stabilityLevel = newLevel
+            if newLevel == .locked && lastHapticLevel != .locked {
+                triggerStabilityHaptic()
+            }
+            lastHapticLevel = newLevel
+        }
+    }
+
+    private func triggerStabilityHaptic() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.prepare()
+        generator.impactOccurred(intensity: 0.6)
+    }
+
     func pauseSession() {
         sessionManager.pauseSession()
     }
@@ -291,6 +347,11 @@ class ARMeasurementViewModel: ObservableObject {
             #endif
             return
         }
+
+        // Reset stability on tap
+        stabilityLevel = .moving
+        stabilityWindowStart = nil
+        lastHapticLevel = .moving
 
         // Two-tap flow: if we have a pending first-tap result, this is the second tap
         if let firstResult = pendingFirstTapResult {

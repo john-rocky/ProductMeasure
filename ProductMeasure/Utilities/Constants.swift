@@ -72,6 +72,13 @@ enum AppConstants {
     // MARK: - Extent Trimming
     static let extentsTrimPercent: Float = 0.01
 
+    // MARK: - Stability Detection
+    static let stabilityPositionThreshold: Float = 0.004  // 4mm
+    static let stabilityRotationThreshold: Float = 0.008  // ~0.5°
+    static let stabilitySettlingTime: Double = 0.4
+    static let stabilityStableTime: Double = 0.9
+    static let stabilityLockedTime: Double = 1.6
+
     // MARK: - Label Reader
     static let labelMinConfidence: Float = 0.6
     static let labelMinSize: Float = 0.1
@@ -262,6 +269,17 @@ enum WorkflowStep: Equatable {
     case showingResult
     case showingConsole
     case showingCSV
+}
+
+enum StabilityLevel: Int, Comparable {
+    case moving = 0
+    case settling = 1
+    case stable = 2
+    case locked = 3
+
+    static func < (lhs: StabilityLevel, rhs: StabilityLevel) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
 }
 
 enum SelectionMode: String, CaseIterable, Codable {

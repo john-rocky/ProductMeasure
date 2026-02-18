@@ -42,7 +42,8 @@ struct ARMeasurementView: View {
                     GeometryReader { geometry in
                         CornerBracketsView(
                             phase: viewModel.animationPhase,
-                            screenSize: geometry.size
+                            screenSize: geometry.size,
+                            stabilityLevel: viewModel.stabilityLevel
                         )
                     }
                     .ignoresSafeArea()
