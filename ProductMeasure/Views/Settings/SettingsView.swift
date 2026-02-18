@@ -231,6 +231,8 @@ extension AppMode: RawRepresentable {
         switch rawValue {
         case "warehouse": self = .warehouse
         case "shipping": self = .shipping
+        case "measure": self = .measure
+        case "labelOnly": self = .labelOnly
         default: return nil
         }
     }

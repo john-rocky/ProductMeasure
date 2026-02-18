@@ -17,9 +17,10 @@ struct ARMeasurementView: View {
     @AppStorage("showScanningTips") private var showScanningTips = true
     @State private var showScanningTipsSheet = false
 
-    /// When workflow is active, derives selection mode from workflow step
+    /// When workflow is active or in label-only mode, derives selection mode from ViewModel
     private var activeSelectionMode: SelectionMode {
-        viewModel.isWorkflowActive ? viewModel.effectiveSelectionMode : selectionMode
+        if appMode == .labelOnly { return .label }
+        return viewModel.isWorkflowActive ? viewModel.effectiveSelectionMode : selectionMode
     }
 
     var body: some View {
@@ -96,9 +97,26 @@ struct ARMeasurementView: View {
 
                         // Action button when workflow reaches showingResult
                         if viewModel.workflowStep == .showingResult {
-                            if appMode == .shipping {
+                            if appMode == .shipping || appMode == .measure {
                                 Button(action: {
-                                    viewModel.resetForNewShippingMeasurement()
+                                    viewModel.resetForNewMeasurement()
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "arrow.counterclockwise")
+                                            .font(.system(size: 14))
+                                        Text("NEW")
+                                            .font(PMTheme.mono(14, weight: .bold))
+                                    }
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 32)
+                                    .padding(.vertical, 12)
+                                    .background(PMTheme.green)
+                                    .clipShape(Capsule())
+                                    .shadow(color: PMTheme.green.opacity(0.4), radius: 8, x: 0, y: 2)
+                                }
+                            } else if appMode == .labelOnly {
+                                Button(action: {
+                                    viewModel.resetForNewLabelScan()
                                 }) {
                                     HStack(spacing: 6) {
                                         Image(systemName: "arrow.counterclockwise")
@@ -150,11 +168,11 @@ struct ARMeasurementView: View {
                                     InstructionCard(mode: .ready(viewModel.trackingMessage))
                                 }
                             } else {
-                                if selectionMode == .tap && (viewModel.animationPhase == .showingTargetBrackets || viewModel.hasPendingFirstTap) {
+                                if activeSelectionMode == .tap && (viewModel.animationPhase == .showingTargetBrackets || viewModel.hasPendingFirstTap) {
                                     InstructionCard(mode: .tap)
-                                } else if selectionMode == .box {
+                                } else if activeSelectionMode == .box {
                                     InstructionCard(mode: .box)
-                                } else if selectionMode == .label {
+                                } else if activeSelectionMode == .label {
                                     InstructionCard(mode: .label)
                                 }
                             }
@@ -229,14 +247,14 @@ struct ARMeasurementView: View {
                             isComplete: viewModel.labelReadingComplete,
                             onDismiss: {
                                 viewModel.dismissLabelResult()
-                                if !viewModel.isWorkflowActive {
+                                if !viewModel.isWorkflowActive && appMode != .labelOnly {
                                     selectionMode = .tap
                                 }
                             },
                             onRescan: {
                                 viewModel.resetLabelScan()
                             },
-                            dismissButtonLabel: viewModel.isWorkflowActive ? "CONTINUE" : "DONE"
+                            dismissButtonLabel: (viewModel.isWorkflowActive && appMode != .labelOnly) ? "CONTINUE" : "DONE"
                         )
                     }
                     .transition(.opacity)
@@ -460,7 +478,7 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
             // 5. Handle label mode taps
             // Read effective selection mode directly from viewModel to avoid stale
             // coordinator state (updateUIView may lag behind @Published changes)
-            let effectiveMode = viewModel.isWorkflowActive ? viewModel.effectiveSelectionMode : selectionMode
+            let effectiveMode = (viewModel.appMode == .labelOnly || viewModel.isWorkflowActive) ? viewModel.effectiveSelectionMode : selectionMode
             guard effectiveMode != .label else {
                 Task { await viewModel.handleLabelTap(at: location) }
                 return
@@ -871,6 +889,8 @@ class ARMeasurementViewModel: ObservableObject {
 
     /// Derives selection mode from workflow step when workflow is active
     var effectiveSelectionMode: SelectionMode {
+        // Label-only mode always uses label selection
+        if appMode == .labelOnly { return .label }
         switch workflowStep {
         case .awaitingLabelScan, .showingLabelResult:
             return .label
@@ -1024,8 +1044,8 @@ class ARMeasurementViewModel: ObservableObject {
         print("[ViewModel] handleTap called at \(location)")
         print("[ViewModel] isProcessing: \(isProcessing), trackingState: \(sessionManager.trackingState)")
 
-        // Safety: if workflow expects label scan, redirect (handles stale coordinator selectionMode)
-        if workflowStep == .awaitingLabelScan || workflowStep == .showingLabelResult {
+        // Safety: if workflow expects label scan or label-only mode, redirect
+        if workflowStep == .awaitingLabelScan || workflowStep == .showingLabelResult || appMode == .labelOnly {
             print("[ViewModel] Redirecting to handleLabelTap (workflow expects label scan)")
             await handleLabelTap(at: location)
             return
@@ -1108,10 +1128,17 @@ class ARMeasurementViewModel: ObservableObject {
                 pendingFirstTapFloorPlaneBacked = result.detectedFloorY != nil
                 hasPendingFirstTap = true
 
-                // Start guided workflow: label scan (warehouse) or skip to second tap (shipping)
-                print("[Shipping] First tap complete, appMode=\(appMode)")
-                workflowStep = appMode == .shipping ? .awaitingSecondTap : .awaitingLabelScan
-                print("[Shipping] workflowStep=\(workflowStep)")
+                // Start guided workflow based on app mode
+                print("[Workflow] First tap complete, appMode=\(appMode)")
+                switch appMode {
+                case .warehouse:
+                    workflowStep = .awaitingLabelScan
+                case .shipping, .measure:
+                    workflowStep = .awaitingSecondTap
+                case .labelOnly:
+                    break  // Should not reach here (label-only skips measurement)
+                }
+                print("[Workflow] workflowStep=\(workflowStep)")
 
                 // Seed refinement accumulators for the merge on second tap
                 if let pc = result.pointCloud {
@@ -2185,7 +2212,7 @@ class ARMeasurementViewModel: ObservableObject {
         isReadingLabel = false
 
         // Advance workflow to showingLabelResult
-        if workflowStep == .awaitingLabelScan {
+        if workflowStep == .awaitingLabelScan || appMode == .labelOnly {
             workflowStep = .showingLabelResult
         }
 
@@ -2236,7 +2263,11 @@ class ARMeasurementViewModel: ObservableObject {
                 // Store label data and advance workflow — no Done button needed
                 self.pendingLabelData = self.currentLabelData
                 if self.workflowStep == .showingLabelResult {
-                    self.workflowStep = .awaitingSecondTap
+                    if self.appMode == .labelOnly {
+                        self.workflowStep = .showingResult
+                    } else {
+                        self.workflowStep = .awaitingSecondTap
+                    }
                 }
             }
         }
@@ -2313,7 +2344,11 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Advance workflow if active
         if isWorkflowActive {
-            workflowStep = .awaitingSecondTap
+            if appMode == .labelOnly {
+                workflowStep = .showingResult
+            } else {
+                workflowStep = .awaitingSecondTap
+            }
         }
     }
 
@@ -2502,6 +2537,16 @@ class ARMeasurementViewModel: ObservableObject {
 
     func resetForNewShippingMeasurement() {
         clearActiveBoxOnly()
+        workflowStep = .idle
+    }
+
+    func resetForNewMeasurement() {
+        clearActiveBoxOnly()
+        workflowStep = .idle
+    }
+
+    func resetForNewLabelScan() {
+        resetLabelScan()
         workflowStep = .idle
     }
 

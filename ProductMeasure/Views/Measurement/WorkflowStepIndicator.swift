@@ -8,6 +8,7 @@ import SwiftUI
 /// Horizontal step indicator for guided measurement workflow
 struct WorkflowStepIndicator: View {
     let currentStep: WorkflowStep
+    let appMode: AppMode
     let onSkipLabel: (() -> Void)?
 
     private struct StepInfo {
@@ -15,21 +16,53 @@ struct WorkflowStepIndicator: View {
         let label: String
     }
 
-    private let steps: [StepInfo] = [
-        StepInfo(icon: "hand.tap", label: "Measure"),
-        StepInfo(icon: "doc.text.viewfinder", label: "Label"),
-        StepInfo(icon: "arrow.triangle.2.circlepath", label: "Refine"),
-        StepInfo(icon: "checkmark.rectangle", label: "Review"),
-        StepInfo(icon: "doc.text", label: "Export"),
-    ]
+    private var steps: [StepInfo] {
+        switch appMode {
+        case .warehouse:
+            return [
+                StepInfo(icon: "hand.tap", label: "Measure"),
+                StepInfo(icon: "doc.text.viewfinder", label: "Label"),
+                StepInfo(icon: "arrow.triangle.2.circlepath", label: "Refine"),
+                StepInfo(icon: "checkmark.rectangle", label: "Review"),
+                StepInfo(icon: "doc.text", label: "Export"),
+            ]
+        case .shipping, .measure:
+            return [
+                StepInfo(icon: "hand.tap", label: "Measure"),
+                StepInfo(icon: "arrow.triangle.2.circlepath", label: "Refine"),
+                StepInfo(icon: "checkmark.rectangle", label: "Result"),
+            ]
+        case .labelOnly:
+            return [
+                StepInfo(icon: "doc.text.viewfinder", label: "Scan"),
+                StepInfo(icon: "checkmark.rectangle", label: "Result"),
+            ]
+        }
+    }
 
     private var activeIndex: Int {
-        switch currentStep {
-        case .idle: return 0
-        case .awaitingLabelScan, .showingLabelResult: return 1
-        case .awaitingSecondTap: return 2
-        case .showingResult: return 3
-        case .showingConsole, .showingCSV: return 4
+        switch appMode {
+        case .warehouse:
+            switch currentStep {
+            case .idle: return 0
+            case .awaitingLabelScan, .showingLabelResult: return 1
+            case .awaitingSecondTap: return 2
+            case .showingResult: return 3
+            case .showingConsole, .showingCSV: return 4
+            }
+        case .shipping, .measure:
+            switch currentStep {
+            case .idle: return 0
+            case .awaitingSecondTap: return 1
+            case .showingResult, .showingConsole, .showingCSV: return 2
+            default: return 0
+            }
+        case .labelOnly:
+            switch currentStep {
+            case .idle, .awaitingLabelScan, .showingLabelResult: return 0
+            case .showingResult, .showingConsole, .showingCSV: return 1
+            default: return 0
+            }
         }
     }
 
@@ -47,8 +80,8 @@ struct WorkflowStepIndicator: View {
                 }
             }
 
-            // Skip button during label scan step
-            if currentStep == .awaitingLabelScan, let onSkip = onSkipLabel {
+            // Skip button during label scan step (warehouse only)
+            if appMode == .warehouse && currentStep == .awaitingLabelScan, let onSkip = onSkipLabel {
                 Button(action: onSkip) {
                     HStack(spacing: 4) {
                         Text("SKIP")

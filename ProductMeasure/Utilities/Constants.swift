@@ -84,11 +84,15 @@ enum AppConstants {
 enum AppMode: String, CaseIterable, Codable {
     case warehouse = "warehouse"
     case shipping = "shipping"
+    case measure = "measure"
+    case labelOnly = "labelOnly"
 
     var displayName: String {
         switch self {
         case .warehouse: return "Warehouse"
         case .shipping: return "Shipping"
+        case .measure: return "Measure"
+        case .labelOnly: return "Label"
         }
     }
 
@@ -96,6 +100,8 @@ enum AppMode: String, CaseIterable, Codable {
         switch self {
         case .warehouse: return "Full measurement workflow with label scanning and WMS registration."
         case .shipping: return "Find the best-fit shipping box for a measured object."
+        case .measure: return "Measure objects and show dimensions in AR. No label scan or saving."
+        case .labelOnly: return "Read labels only. No measurement or history."
         }
     }
 }
