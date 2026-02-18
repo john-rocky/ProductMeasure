@@ -75,15 +75,27 @@ class InstanceSegmentationService {
             return nil
         }
 
-        // Use ALL instances - the 3D filtering will isolate the correct one based on raycast hit
-#if DEBUG
-        print("[Segmentation] Using ALL \(allInstances.count) instances (3D filtering will select correct one)")
-#endif
+        // Try to isolate the specific instance the user tapped
+        let tappedInstanceId = findInstance(at: tapPoint, in: observation, from: handler)
 
-        // Generate combined mask for all instances
+        let instancesToMask: IndexSet
+        if let instanceId = tappedInstanceId {
+            instancesToMask = IndexSet([instanceId])
+#if DEBUG
+            print("[Segmentation] Using tapped instance \(instanceId)")
+#endif
+        } else {
+            // Fallback: use all instances — depth connectivity refinement will separate objects
+            instancesToMask = IndexSet(allInstances)
+#if DEBUG
+            print("[Segmentation] No instance at tap point, falling back to ALL \(allInstances.count) instances")
+#endif
+        }
+
+        // Generate mask for selected instance(s)
         do {
             let instanceMask = try observation.generateMaskedImage(
-                ofInstances: IndexSet(allInstances),
+                ofInstances: instancesToMask,
                 from: handler,
                 croppedToInstancesExtent: false
             )
@@ -191,110 +203,99 @@ class InstanceSegmentationService {
 
     // MARK: - Private Methods
 
+    /// Find which instance the user tapped by generating per-instance masks
+    /// and checking coverage near the tap point.
+    /// Uses generateMaskedImage (proven reliable) instead of generateScaledMaskForImage.
     private func findInstance(
         at point: CGPoint,
         in observation: VNInstanceMaskObservation,
-        pixelBuffer: CVPixelBuffer
+        from handler: VNImageRequestHandler
     ) -> Int? {
         let allInstances = observation.allInstances
-
-        let imageWidth = CVPixelBufferGetWidth(pixelBuffer)
-        let imageHeight = CVPixelBufferGetHeight(pixelBuffer)
+        guard !allInstances.isEmpty else { return nil }
 
 #if DEBUG
         print("[Segmentation] Finding instance at normalized point: \(point)")
-        print("[Segmentation] Expected image pixel: (\(Int(point.x * CGFloat(imageWidth))), \(Int(point.y * CGFloat(imageHeight))))")
-        print("[Segmentation] Original image size: \(imageWidth)x\(imageHeight)")
-        print("[Segmentation] All instances found: \(Array(allInstances))")
+        print("[Segmentation] All instances: \(Array(allInstances))")
 #endif
 
-        // Try to get the scaled mask using .up orientation (same as segmentation request)
-        do {
-            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
-            let instanceMap = try observation.generateScaledMaskForImage(
-                forInstances: allInstances,
-                from: handler
-            )
+        var bestInstance: Int? = nil
+        var bestScore = 0
 
-            CVPixelBufferLockBaseAddress(instanceMap, .readOnly)
-            defer { CVPixelBufferUnlockBaseAddress(instanceMap, .readOnly) }
-
-            let width = CVPixelBufferGetWidth(instanceMap)
-            let height = CVPixelBufferGetHeight(instanceMap)
-
+        for instanceId in allInstances {
+            guard let mask = try? observation.generateMaskedImage(
+                ofInstances: IndexSet([instanceId]),
+                from: handler,
+                croppedToInstancesExtent: false
+            ) else {
 #if DEBUG
-            print("[Segmentation] Instance map size: \(width)x\(height)")
+                print("[Segmentation] Failed to generate mask for instance \(instanceId)")
 #endif
-
-            // Convert normalized point to pixel coordinates
-            let x = Int(point.x * CGFloat(width))
-            let y = Int(point.y * CGFloat(height))
-
-#if DEBUG
-            print("[Segmentation] Looking for instance at pixel: (\(x), \(y))")
-#endif
-
-            guard x >= 0 && x < width && y >= 0 && y < height else {
-#if DEBUG
-                print("[Segmentation] Point out of bounds: (\(x), \(y)) in \(width)x\(height)")
-#endif
-                return nil
+                continue
             }
 
-            guard let baseAddress = CVPixelBufferGetBaseAddress(instanceMap) else {
-                return nil
-            }
+            CVPixelBufferLockBaseAddress(mask, .readOnly)
+            defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
 
-            let bytesPerRow = CVPixelBufferGetBytesPerRow(instanceMap)
-            let buffer = baseAddress.assumingMemoryBound(to: UInt8.self)
-            let instanceId = Int(buffer[y * bytesPerRow + x])
+            let width = CVPixelBufferGetWidth(mask)
+            let height = CVPixelBufferGetHeight(mask)
 
-#if DEBUG
-            print("[Segmentation] Instance ID at (\(x), \(y)): \(instanceId)")
-#endif
+            guard let base = CVPixelBufferGetBaseAddress(mask) else { continue }
+            let bytesPerRow = CVPixelBufferGetBytesPerRow(mask)
+            let pixelFormat = CVPixelBufferGetPixelFormatType(mask)
+            let buffer = base.assumingMemoryBound(to: UInt8.self)
 
-            // Also check surrounding area in case tap is slightly off
-            if instanceId == 0 {
-#if DEBUG
-                print("[Segmentation] Checking surrounding pixels for nearby instances...")
-#endif
-                let searchRadius = 50
-                var foundInstances: [(id: Int, dist: Int)] = []
-                for dy in Swift.stride(from: -searchRadius, through: searchRadius, by: 5) {
-                    for dx in Swift.stride(from: -searchRadius, through: searchRadius, by: 5) {
-                        let sx = x + dx
-                        let sy = y + dy
-                        if sx >= 0 && sx < width && sy >= 0 && sy < height {
-                            let sId = Int(buffer[sy * bytesPerRow + sx])
-                            if sId > 0 {
-                                let dist = abs(dx) + abs(dy)
-                                if !foundInstances.contains(where: { $0.id == sId }) {
-                                    foundInstances.append((id: sId, dist: dist))
-                                }
-                            }
-                        }
+            let bytesPerPixel = (pixelFormat == kCVPixelFormatType_32BGRA ||
+                                 pixelFormat == kCVPixelFormatType_32ARGB) ? 4 : 1
+
+            let cx = Int(point.x * CGFloat(width))
+            let cy = Int(point.y * CGFloat(height))
+
+            // Search radius proportional to mask size (~5%)
+            let searchRadius = max(10, max(width, height) / 20)
+            let step = max(1, searchRadius / 15)
+            var score = 0
+
+            for dy in Swift.stride(from: -searchRadius, through: searchRadius, by: step) {
+                for dx in Swift.stride(from: -searchRadius, through: searchRadius, by: step) {
+                    let px = cx + dx
+                    let py = cy + dy
+                    guard px >= 0 && px < width && py >= 0 && py < height else { continue }
+
+                    let value: UInt8
+                    if bytesPerPixel == 4 {
+                        value = buffer[py * bytesPerRow + px * 4 + 3]
+                    } else {
+                        value = buffer[py * bytesPerRow + px]
+                    }
+
+                    if value > 0 {
+                        // Weight closer pixels higher (inverse Manhattan distance)
+                        let dist = max(1, abs(dx) + abs(dy))
+                        score += searchRadius / dist
                     }
                 }
-                // Use the closest found instance
-                if let closest = foundInstances.min(by: { $0.dist < $1.dist }), allInstances.contains(closest.id) {
-#if DEBUG
-                    print("[Segmentation] Using nearby instance \(closest.id) at distance \(closest.dist)")
-#endif
-                    return closest.id
-                }
             }
 
-            // Instance ID 0 is background
-            if instanceId > 0 && allInstances.contains(instanceId) {
-                return instanceId
-            }
-        } catch {
 #if DEBUG
-            print("[Segmentation] Error generating scaled mask: \(error)")
+            print("[Segmentation] Instance \(instanceId): score=\(score) near tap (\(cx), \(cy)) in \(width)x\(height)")
 #endif
+
+            if score > bestScore {
+                bestScore = score
+                bestInstance = instanceId
+            }
         }
 
-        return nil
+#if DEBUG
+        if let best = bestInstance {
+            print("[Segmentation] Selected instance \(best) with score \(bestScore)")
+        } else {
+            print("[Segmentation] No instance found near tap point")
+        }
+#endif
+
+        return bestInstance
     }
 }
 
