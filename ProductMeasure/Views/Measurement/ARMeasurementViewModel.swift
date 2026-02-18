@@ -26,6 +26,7 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var showDebugMask = false
     @Published var showDebugDepth = false
     @Published var debugMaskImage: UIImage?
+    @Published var debugMaskImage2: UIImage?
     @Published var debugDepthImage: UIImage?
     var showMaskPreviewSetting = false
     #endif
@@ -382,6 +383,7 @@ class ARMeasurementViewModel: ObservableObject {
         currentMeasurement = nil
         #if DEBUG
         debugMaskImage = nil
+        debugMaskImage2 = nil
         debugDepthImage = nil
         #endif
         animationContext = nil
@@ -527,8 +529,9 @@ class ARMeasurementViewModel: ObservableObject {
                 mergedResult.debugMaskImage = firstResult.debugMaskImage
                 mergedResult.debugDepthImage = firstResult.debugDepthImage
 
-                // Store debug images
+                // Store debug images (both taps)
                 debugMaskImage = firstResult.debugMaskImage
+                debugMaskImage2 = refinement.debugMaskImage
                 debugDepthImage = firstResult.debugDepthImage
                 if showMaskPreviewSetting {
                     showDebugMask = true
@@ -578,6 +581,7 @@ class ARMeasurementViewModel: ObservableObject {
         // Store debug images
         #if DEBUG
         debugMaskImage = firstResult.debugMaskImage
+        debugMaskImage2 = nil
         debugDepthImage = firstResult.debugDepthImage
         if showMaskPreviewSetting {
             showDebugMask = true
@@ -644,6 +648,7 @@ class ARMeasurementViewModel: ObservableObject {
         currentMeasurement = nil
         #if DEBUG
         debugMaskImage = nil
+        debugMaskImage2 = nil
         debugDepthImage = nil
         #endif
         animationContext = nil
@@ -680,6 +685,7 @@ class ARMeasurementViewModel: ObservableObject {
 
                 #if DEBUG
                 debugMaskImage = result.debugMaskImage
+                debugMaskImage2 = nil
                 debugDepthImage = result.debugDepthImage
                 if showMaskPreviewSetting {
                     showDebugMask = true
@@ -1078,6 +1084,7 @@ class ARMeasurementViewModel: ObservableObject {
         storedPointCloud = nil
         #if DEBUG
         debugMaskImage = nil
+        debugMaskImage2 = nil
         debugDepthImage = nil
         #endif
         animationPhase = .showingTargetBrackets

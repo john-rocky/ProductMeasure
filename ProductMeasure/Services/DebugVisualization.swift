@@ -671,4 +671,60 @@ struct DebugImageView: View {
         }
     }
 }
+
+// MARK: - Debug Mask Compare View (Side-by-Side)
+
+struct DebugMaskCompareView: View {
+    let image1: UIImage
+    let image2: UIImage?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 8) {
+                if let image2 = image2 {
+                    // Two-tap: show both masks side by side
+                    HStack(spacing: 8) {
+                        VStack(spacing: 4) {
+                            Text("Tap 1")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Image(uiImage: image1)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        }
+                        VStack(spacing: 4) {
+                            Text("Tap 2")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Image(uiImage: image2)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        }
+                    }
+                    .padding()
+                } else {
+                    // Single tap or box selection: show one image
+                    Image(uiImage: image1)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .padding()
+                }
+
+                Text("Segmentation Mask (Green) + Tap Point (Red)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .navigationTitle("Mask Preview")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
 #endif

@@ -679,6 +679,9 @@ class MeasurementCalculator {
     struct RefinementPointCloud {
         let points: [SIMD3<Float>]
         let quality: MeasurementQuality
+        #if DEBUG
+        var debugMaskImage: UIImage?
+        #endif
     }
 
     /// Perform a refinement measurement: segment + point cloud only (no bounding box estimation).
@@ -721,6 +724,14 @@ class MeasurementCalculator {
                 mask: segmentation.mask, imageSize: imageSize
             )
             guard !maskedPixels.isEmpty else { return nil }
+
+            #if DEBUG
+            let debugMaskImage = DebugVisualization.visualizeMask(
+                mask: segmentation.mask,
+                cameraImage: frame.capturedImage,
+                tapPoint: normalizedTap
+            )
+            #endif
 
             // 3. Depth filtering
             let filteredPixels = filterMaskedPixelsByDepth(
@@ -785,7 +796,11 @@ class MeasurementCalculator {
                 return nil
             }
 
-            return RefinementPointCloud(points: pointCloud.points, quality: pointCloud.quality)
+            var result = RefinementPointCloud(points: pointCloud.points, quality: pointCloud.quality)
+            #if DEBUG
+            result.debugMaskImage = debugMaskImage
+            #endif
+            return result
         }.value
     }
 

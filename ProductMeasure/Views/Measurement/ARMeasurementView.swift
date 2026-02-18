@@ -189,7 +189,10 @@ struct ARMeasurementView: View {
                 #if DEBUG
                 .sheet(isPresented: $viewModel.showDebugMask) {
                     if let image = viewModel.debugMaskImage {
-                        DebugImageView(image: image, title: "Segmentation Mask (Green) + Tap Point (Red)")
+                        DebugMaskCompareView(
+                            image1: image,
+                            image2: viewModel.debugMaskImage2
+                        )
                     }
                 }
                 .sheet(isPresented: $viewModel.showDebugDepth) {
