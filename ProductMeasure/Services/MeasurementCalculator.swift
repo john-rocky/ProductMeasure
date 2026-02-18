@@ -299,10 +299,8 @@ class MeasurementCalculator {
             // Store point cloud for Fit functionality
             result.pointCloud = pointCloud.points
 
-            // Enhanced pipeline: detect floor from horizontal plane
-            if AppConstants.currentPipelineVersion == .enhanced {
-                result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
-            }
+            // Detect floor from horizontal plane
+            result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
 
             // Attach debug info (images only, not point cloud to save memory)
             #if DEBUG
@@ -546,10 +544,8 @@ class MeasurementCalculator {
             result.debugMaskImage = debugMaskImage
             #endif
 
-            // Enhanced pipeline: detect floor from horizontal plane
-            if AppConstants.currentPipelineVersion == .enhanced {
-                result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
-            }
+            // Detect floor from horizontal plane
+            result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
 
             return result
         }.value
@@ -1217,7 +1213,8 @@ class MeasurementCalculator {
         return distances[distances.count / 2]
     }
 
-    /// Detect floor Y from nearest horizontal ARPlaneAnchor (enhanced pipeline)
+    /// Detect floor Y from horizontal ARPlaneAnchor below the object
+    /// Filters to planes below the bounding box center and picks the lowest Y (actual floor)
     static func detectHorizontalPlaneFloorY(frame: ARFrame, nearPoint: SIMD3<Float>) -> Float? {
         let horizontalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
             guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .horizontal else { return nil }
@@ -1225,29 +1222,27 @@ class MeasurementCalculator {
         }
         guard !horizontalPlanes.isEmpty else { return nil }
 
-        // Find nearest horizontal plane by XZ distance
-        var bestPlane: ARPlaneAnchor?
-        var bestDist: Float = .infinity
+        // Filter to planes below the bounding box center (floor is below the object)
+        // and within 3m XZ distance
+        var candidatePlanes: [(plane: ARPlaneAnchor, y: Float, xzDist: Float)] = []
         for plane in horizontalPlanes {
-            let planePos = SIMD3<Float>(
-                plane.transform.columns.3.x,
-                plane.transform.columns.3.y,
-                plane.transform.columns.3.z
-            )
+            let planeY = plane.transform.columns.3.y
+            // Only consider planes below the object center
+            guard planeY < nearPoint.y else { continue }
+
             let xzDist = simd_distance(
                 SIMD2<Float>(nearPoint.x, nearPoint.z),
-                SIMD2<Float>(planePos.x, planePos.z)
+                SIMD2<Float>(plane.transform.columns.3.x, plane.transform.columns.3.z)
             )
-            if xzDist < bestDist {
-                bestDist = xzDist
-                bestPlane = plane
-            }
+            guard xzDist < 3.0 else { continue }
+            candidatePlanes.append((plane: plane, y: planeY, xzDist: xzDist))
         }
 
-        guard let plane = bestPlane, bestDist < 3.0 else { return nil }
-        let floorY = plane.transform.columns.3.y
+        // Pick the lowest Y plane (actual floor, not table)
+        guard let best = candidatePlanes.min(by: { $0.y < $1.y }) else { return nil }
+        let floorY = best.y
 #if DEBUG
-        print("[Calculator] Horizontal plane floor detected: y=\(floorY) (dist=\(bestDist)m)")
+        print("[Calculator] Horizontal plane floor detected: y=\(floorY) (xzDist=\(best.xzDist)m, candidates=\(candidatePlanes.count))")
 #endif
         return floorY
     }

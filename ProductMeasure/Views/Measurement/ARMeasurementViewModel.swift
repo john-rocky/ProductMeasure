@@ -65,14 +65,11 @@ class ARMeasurementViewModel: ObservableObject {
     // Enhanced pipeline: floor plane backing flag
     private var isFloorPlaneBacked = false
 
-    /// Floor snap threshold: wider when backed by a detected horizontal plane (enhanced mode)
+    /// Floor snap threshold: wider when backed by a detected horizontal plane
     private var floorSnapThreshold: Float {
-        switch AppConstants.currentPipelineVersion {
-        case .standard:
-            return AppConstants.floorSnapThresholdDefault
-        case .enhanced:
-            return isFloorPlaneBacked ? AppConstants.floorSnapThresholdWithPlane : AppConstants.floorSnapThresholdDefault
-        }
+        return isFloorPlaneBacked
+            ? AppConstants.floorSnapThresholdWithPlane
+            : AppConstants.floorSnapThresholdDefault
     }
 
     // Label reader state

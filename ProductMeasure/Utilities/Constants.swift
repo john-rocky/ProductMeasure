@@ -51,8 +51,8 @@ enum AppConstants {
     static let mabrFineSearchStepEnhanced: Float = 0.2 * .pi / 180.0
 
     // MARK: - Enhanced Pipeline
-    static let floorSnapThresholdDefault: Float = 0.05
-    static let floorSnapThresholdWithPlane: Float = 0.08
+    static let floorSnapThresholdDefault: Float = 0.15
+    static let floorSnapThresholdWithPlane: Float = 0.25
     static let clusteringMinThreshold: Float = 0.02
     static let clusteringMaxThreshold: Float = 0.045
     static let clusteringDepthScale: Float = 0.015
