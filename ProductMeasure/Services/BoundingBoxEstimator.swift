@@ -210,7 +210,13 @@ class BoundingBoxEstimator {
         var bestArea = computeRotatedArea(hull: hull, angle: baseAngle)
 
         let range = AppConstants.mabrFineSearchRange
-        let step = AppConstants.mabrFineSearchStep
+        let step: Float
+        switch AppConstants.currentPipelineVersion {
+        case .standard:
+            step = AppConstants.mabrFineSearchStep
+        case .enhanced:
+            step = AppConstants.mabrFineSearchStepEnhanced
+        }
 
         var testAngle = baseAngle - range
         while testAngle <= baseAngle + range {

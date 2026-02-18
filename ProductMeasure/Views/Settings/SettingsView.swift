@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage("roundingPrecision") private var roundingPrecision: RoundingPrecision = .millimeter1
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("showQualityIndicators") private var showQualityIndicators = true
+    @AppStorage("pipelineVersion") private var pipelineVersion: PipelineVersion = .standard
 
     var body: some View {
         NavigationStack {
@@ -67,6 +68,23 @@ struct SettingsView: View {
                         .foregroundColor(PMTheme.textSecondary)
                 } header: {
                     Text("MEASUREMENT MODE")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
+                }
+
+                // Pipeline version section
+                Section {
+                    Picker("Pipeline", selection: $pipelineVersion) {
+                        ForEach(PipelineVersion.allCases, id: \.self) { version in
+                            Text(version.displayName).tag(version)
+                        }
+                    }
+
+                    Text(pipelineVersion.description)
+                        .font(PMTheme.mono(11))
+                        .foregroundColor(PMTheme.textSecondary)
+                } header: {
+                    Text("PIPELINE VERSION")
                         .font(PMTheme.mono(11, weight: .bold))
                         .foregroundColor(PMTheme.cyan)
                 }
@@ -236,6 +254,16 @@ extension MeasurementMode: RawRepresentable {
         switch rawValue {
         case "box": self = .boxPriority
         case "free": self = .freeObject
+        default: return nil
+        }
+    }
+}
+
+extension PipelineVersion: RawRepresentable {
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "standard": self = .standard
+        case "enhanced": self = .enhanced
         default: return nil
         }
     }

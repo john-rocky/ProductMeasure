@@ -810,6 +810,20 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var hasPendingFirstTap = false
     private var pendingFirstTapResult: MeasurementCalculator.MeasurementResult?
     private var pendingFirstTapFloorY: Float?
+    private var pendingFirstTapFloorPlaneBacked = false
+
+    // Enhanced pipeline: floor plane backing flag
+    private var isFloorPlaneBacked = false
+
+    /// Floor snap threshold: wider when backed by a detected horizontal plane (enhanced mode)
+    private var floorSnapThreshold: Float {
+        switch AppConstants.currentPipelineVersion {
+        case .standard:
+            return AppConstants.floorSnapThresholdDefault
+        case .enhanced:
+            return isFloorPlaneBacked ? AppConstants.floorSnapThresholdWithPlane : AppConstants.floorSnapThresholdDefault
+        }
+    }
 
     // Label reader state
     @Published var isReadingLabel = false
@@ -1073,7 +1087,8 @@ class ARMeasurementViewModel: ObservableObject {
 
                 // Store as pending first-tap result (no animation, no box display)
                 pendingFirstTapResult = result
-                pendingFirstTapFloorY = raycastHitPosition?.y
+                pendingFirstTapFloorY = result.detectedFloorY ?? raycastHitPosition?.y
+                pendingFirstTapFloorPlaneBacked = result.detectedFloorY != nil
                 hasPendingFirstTap = true
 
                 // Start guided workflow: label scan (warehouse) or skip to second tap (shipping)
@@ -1144,8 +1159,9 @@ class ARMeasurementViewModel: ObservableObject {
                 // Apply floor extension
                 var adjustedBox = newBox
                 let floorY = pendingFirstTapFloorY ?? raycastHitPosition?.y
+                isFloorPlaneBacked = pendingFirstTapFloorPlaneBacked
                 if let floorY = floorY {
-                    adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                    adjustedBox.extendBottomToFloor(floorY: floorY, threshold: floorSnapThreshold)
                 }
 
                 // Recalculate with original axis mapping
@@ -1164,6 +1180,7 @@ class ARMeasurementViewModel: ObservableObject {
                 // Clear pending state
                 pendingFirstTapResult = nil
                 pendingFirstTapFloorY = nil
+                pendingFirstTapFloorPlaneBacked = false
                 hasPendingFirstTap = false
                 originalFloorY = floorY
 
@@ -1192,6 +1209,7 @@ class ARMeasurementViewModel: ObservableObject {
     private func showFirstTapResultWithAnimation(at location: CGPoint, firstResult: MeasurementCalculator.MeasurementResult, frame: ARFrame) {
         let viewSize = sessionManager.arView.bounds.size
         let floorY = pendingFirstTapFloorY
+        isFloorPlaneBacked = pendingFirstTapFloorPlaneBacked
 
         // Store debug images
         debugMaskImage = firstResult.debugMaskImage
@@ -1200,6 +1218,7 @@ class ARMeasurementViewModel: ObservableObject {
         // Clear pending state
         pendingFirstTapResult = nil
         pendingFirstTapFloorY = nil
+        pendingFirstTapFloorPlaneBacked = false
         hasPendingFirstTap = false
         originalFloorY = floorY
 
@@ -1275,7 +1294,8 @@ class ARMeasurementViewModel: ObservableObject {
                 debugMaskImage = result.debugMaskImage
                 debugDepthImage = result.debugDepthImage
 
-                let floorY = raycastHitPosition?.y
+                let floorY = result.detectedFloorY ?? raycastHitPosition?.y
+                isFloorPlaneBacked = result.detectedFloorY != nil
 
                 startBoxAnimation(
                     at: boxCenter,
@@ -1353,7 +1373,7 @@ class ARMeasurementViewModel: ObservableObject {
                         // Prepare adjusted box and result for callout display
                         var adjustedBox = boundingBox
                         if let floorY = floorY {
-                            adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                            adjustedBox.extendBottomToFloor(floorY: floorY, threshold: self.floorSnapThreshold)
                         }
 
                         var adjustedResult = self.measurementCalculator.recalculate(
@@ -1639,6 +1659,7 @@ class ARMeasurementViewModel: ObservableObject {
         accumulatedQualities = []
         originalAxisMapping = nil
         originalFloorY = nil
+        isFloorPlaneBacked = false
 
         // Reset pending first-tap state
         clearPendingFirstTap()
@@ -1858,7 +1879,7 @@ class ARMeasurementViewModel: ObservableObject {
         ) {
             // Apply bottom extension if within threshold of floor
             if let floorY = boxVisualization?.floorY {
-                fittedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                fittedBox.extendBottomToFloor(floorY: floorY, threshold: floorSnapThreshold)
             }
 
             // Update measurement result using the original axis mapping
@@ -1963,6 +1984,7 @@ class ARMeasurementViewModel: ObservableObject {
     private func clearPendingFirstTap() {
         pendingFirstTapResult = nil
         pendingFirstTapFloorY = nil
+        pendingFirstTapFloorPlaneBacked = false
         hasPendingFirstTap = false
     }
 
@@ -2009,7 +2031,7 @@ class ARMeasurementViewModel: ObservableObject {
                 // Apply floor extension
                 var adjustedBox = newBox
                 if let floorY = originalFloorY {
-                    adjustedBox.extendBottomToFloor(floorY: floorY, threshold: 0.05)
+                    adjustedBox.extendBottomToFloor(floorY: floorY, threshold: floorSnapThreshold)
                 }
 
                 // Recalculate with original axis mapping

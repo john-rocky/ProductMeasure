@@ -48,6 +48,21 @@ enum AppConstants {
     // MARK: - MABR Fine Angle Search
     static let mabrFineSearchRange: Float = 5.0 * .pi / 180.0
     static let mabrFineSearchStep: Float = 0.5 * .pi / 180.0
+    static let mabrFineSearchStepEnhanced: Float = 0.2 * .pi / 180.0
+
+    // MARK: - Enhanced Pipeline
+    static let floorSnapThresholdDefault: Float = 0.05
+    static let floorSnapThresholdWithPlane: Float = 0.08
+    static let clusteringMinThreshold: Float = 0.03
+    static let clusteringMaxThreshold: Float = 0.06
+    static let clusteringDepthScale: Float = 0.015
+    static let clusteringBaseOffset: Float = 0.02
+
+    // MARK: - Pipeline Version
+    static var currentPipelineVersion: PipelineVersion {
+        let raw = UserDefaults.standard.string(forKey: "pipelineVersion") ?? PipelineVersion.standard.rawValue
+        return PipelineVersion(rawValue: raw) ?? .standard
+    }
 
     // MARK: - Vertical Plane Snap
     static let planeSnapProximityWeight: Float = 0.5
@@ -81,6 +96,25 @@ enum AppMode: String, CaseIterable, Codable {
         switch self {
         case .warehouse: return "Full measurement workflow with label scanning and WMS registration."
         case .shipping: return "Find the best-fit shipping box for a measured object."
+        }
+    }
+}
+
+enum PipelineVersion: String, CaseIterable, Codable {
+    case standard = "standard"
+    case enhanced = "enhanced"
+
+    var displayName: String {
+        switch self {
+        case .standard: return "Standard"
+        case .enhanced: return "Enhanced"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .standard: return "Default pipeline. Fixed 4cm clustering, 0.5° MABR step, raycast floor."
+        case .enhanced: return "Depth-adaptive clustering (3-6cm), 0.2° MABR step, plane-based floor detection."
         }
     }
 }
