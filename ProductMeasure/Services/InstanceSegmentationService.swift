@@ -38,11 +38,15 @@ class InstanceSegmentationService {
         in pixelBuffer: CVPixelBuffer,
         at tapPoint: CGPoint
     ) async throws -> SegmentationResult? {
+#if DEBUG
         print("[Segmentation] Starting segmentation at point: \(tapPoint)")
+#endif
 
         let imageWidth = CVPixelBufferGetWidth(pixelBuffer)
         let imageHeight = CVPixelBufferGetHeight(pixelBuffer)
+#if DEBUG
         print("[Segmentation] Input image size: \(imageWidth)x\(imageHeight)")
+#endif
 
         // Create the foreground instance mask request (iOS 17+)
         let request = VNGenerateForegroundInstanceMaskRequest()
@@ -53,20 +57,28 @@ class InstanceSegmentationService {
         try handler.perform([request])
 
         guard let observation = request.results?.first else {
+#if DEBUG
             print("[Segmentation] No observation results")
+#endif
             return nil
         }
 
         let allInstances = observation.allInstances
+#if DEBUG
         print("[Segmentation] Found \(allInstances.count) instances")
+#endif
 
         guard !allInstances.isEmpty else {
+#if DEBUG
             print("[Segmentation] No instances found")
+#endif
             return nil
         }
 
         // Use ALL instances - the 3D filtering will isolate the correct one based on raycast hit
+#if DEBUG
         print("[Segmentation] Using ALL \(allInstances.count) instances (3D filtering will select correct one)")
+#endif
 
         // Generate combined mask for all instances
         do {
@@ -80,8 +92,10 @@ class InstanceSegmentationService {
                 width: CVPixelBufferGetWidth(instanceMask),
                 height: CVPixelBufferGetHeight(instanceMask)
             )
+#if DEBUG
             print("[Segmentation] Generated mask size: \(maskSize)")
             print("[Segmentation] Mask is in portrait orientation (rotated from camera)")
+#endif
 
             return SegmentationResult(
                 mask: instanceMask,
@@ -89,7 +103,9 @@ class InstanceSegmentationService {
                 maskSize: maskSize
             )
         } catch {
+#if DEBUG
             print("[Segmentation] Failed to generate mask: \(error)")
+#endif
             throw error
         }
     }
@@ -103,11 +119,15 @@ class InstanceSegmentationService {
         in pixelBuffer: CVPixelBuffer,
         regionOfInterest: CGRect
     ) async throws -> SegmentationResult? {
+#if DEBUG
         print("[Segmentation] Starting segmentation with ROI: \(regionOfInterest)")
+#endif
 
         let imageWidth = CVPixelBufferGetWidth(pixelBuffer)
         let imageHeight = CVPixelBufferGetHeight(pixelBuffer)
+#if DEBUG
         print("[Segmentation] Input image size: \(imageWidth)x\(imageHeight)")
+#endif
 
         // Create the foreground instance mask request with ROI
         let request = VNGenerateForegroundInstanceMaskRequest()
@@ -119,19 +139,27 @@ class InstanceSegmentationService {
         try handler.perform([request])
 
         guard let observation = request.results?.first else {
+#if DEBUG
             print("[Segmentation] No observation results with ROI")
+#endif
             return nil
         }
 
         let allInstances = observation.allInstances
+#if DEBUG
         print("[Segmentation] Found \(allInstances.count) instances in ROI")
+#endif
 
         guard !allInstances.isEmpty else {
+#if DEBUG
             print("[Segmentation] No instances found in ROI")
+#endif
             return nil
         }
 
+#if DEBUG
         print("[Segmentation] Using ALL \(allInstances.count) instances from ROI")
+#endif
 
         do {
             let instanceMask = try observation.generateMaskedImage(
@@ -144,7 +172,9 @@ class InstanceSegmentationService {
                 width: CVPixelBufferGetWidth(instanceMask),
                 height: CVPixelBufferGetHeight(instanceMask)
             )
+#if DEBUG
             print("[Segmentation] Generated mask size: \(maskSize)")
+#endif
 
             return SegmentationResult(
                 mask: instanceMask,
@@ -152,7 +182,9 @@ class InstanceSegmentationService {
                 maskSize: maskSize
             )
         } catch {
+#if DEBUG
             print("[Segmentation] Failed to generate mask with ROI: \(error)")
+#endif
             throw error
         }
     }
@@ -169,10 +201,12 @@ class InstanceSegmentationService {
         let imageWidth = CVPixelBufferGetWidth(pixelBuffer)
         let imageHeight = CVPixelBufferGetHeight(pixelBuffer)
 
+#if DEBUG
         print("[Segmentation] Finding instance at normalized point: \(point)")
         print("[Segmentation] Expected image pixel: (\(Int(point.x * CGFloat(imageWidth))), \(Int(point.y * CGFloat(imageHeight))))")
         print("[Segmentation] Original image size: \(imageWidth)x\(imageHeight)")
         print("[Segmentation] All instances found: \(Array(allInstances))")
+#endif
 
         // Try to get the scaled mask using .up orientation (same as segmentation request)
         do {
@@ -188,16 +222,22 @@ class InstanceSegmentationService {
             let width = CVPixelBufferGetWidth(instanceMap)
             let height = CVPixelBufferGetHeight(instanceMap)
 
+#if DEBUG
             print("[Segmentation] Instance map size: \(width)x\(height)")
+#endif
 
             // Convert normalized point to pixel coordinates
             let x = Int(point.x * CGFloat(width))
             let y = Int(point.y * CGFloat(height))
 
+#if DEBUG
             print("[Segmentation] Looking for instance at pixel: (\(x), \(y))")
+#endif
 
             guard x >= 0 && x < width && y >= 0 && y < height else {
+#if DEBUG
                 print("[Segmentation] Point out of bounds: (\(x), \(y)) in \(width)x\(height)")
+#endif
                 return nil
             }
 
@@ -209,11 +249,15 @@ class InstanceSegmentationService {
             let buffer = baseAddress.assumingMemoryBound(to: UInt8.self)
             let instanceId = Int(buffer[y * bytesPerRow + x])
 
+#if DEBUG
             print("[Segmentation] Instance ID at (\(x), \(y)): \(instanceId)")
+#endif
 
             // Also check surrounding area in case tap is slightly off
             if instanceId == 0 {
+#if DEBUG
                 print("[Segmentation] Checking surrounding pixels for nearby instances...")
+#endif
                 let searchRadius = 50
                 var foundInstances: [(id: Int, dist: Int)] = []
                 for dy in Swift.stride(from: -searchRadius, through: searchRadius, by: 5) {
@@ -233,7 +277,9 @@ class InstanceSegmentationService {
                 }
                 // Use the closest found instance
                 if let closest = foundInstances.min(by: { $0.dist < $1.dist }), allInstances.contains(closest.id) {
+#if DEBUG
                     print("[Segmentation] Using nearby instance \(closest.id) at distance \(closest.dist)")
+#endif
                     return closest.id
                 }
             }
@@ -243,7 +289,9 @@ class InstanceSegmentationService {
                 return instanceId
             }
         } catch {
+#if DEBUG
             print("[Segmentation] Error generating scaled mask: \(error)")
+#endif
         }
 
         return nil
@@ -267,12 +315,16 @@ extension InstanceSegmentationService {
         let maskHeight = CVPixelBufferGetHeight(mask)
         let pixelFormat = CVPixelBufferGetPixelFormatType(mask)
 
+#if DEBUG
         print("[Segmentation] Mask size: \(maskWidth)x\(maskHeight)")
         print("[Segmentation] Mask pixel format: \(pixelFormat)")
         print("[Segmentation] Camera image size: \(imageSize)")
+#endif
 
         guard let baseAddress = CVPixelBufferGetBaseAddress(mask) else {
+#if DEBUG
             print("[Segmentation] No base address for mask")
+#endif
             return []
         }
 
@@ -296,10 +348,14 @@ extension InstanceSegmentationService {
         let bytesPerPixel: Int
         if pixelFormat == kCVPixelFormatType_32BGRA || pixelFormat == kCVPixelFormatType_32ARGB {
             bytesPerPixel = 4
+#if DEBUG
             print("[Segmentation] Using 4 bytes per pixel (BGRA/ARGB format)")
+#endif
         } else {
             bytesPerPixel = 1
+#if DEBUG
             print("[Segmentation] Using 1 byte per pixel")
+#endif
         }
 
         outerLoop: for y in Swift.stride(from: 0, to: maskHeight, by: step) {
@@ -328,7 +384,9 @@ extension InstanceSegmentationService {
             }
         }
 
+#if DEBUG
         print("[Segmentation] Found \(pixels.count) masked pixels")
+#endif
 
         // Debug: print bounds of masked region
         if !pixels.isEmpty {
@@ -336,14 +394,18 @@ extension InstanceSegmentationService {
             let maxX = pixels.map { $0.x }.max()!
             let minY = pixels.map { $0.y }.min()!
             let maxY = pixels.map { $0.y }.max()!
+#if DEBUG
             print("[Segmentation] Mask bounds in image coords: x=\(minX)-\(maxX), y=\(minY)-\(maxY)")
             print("[Segmentation] Mask center: (\((minX+maxX)/2), \((minY+maxY)/2))")
             print("[Segmentation] Mask size: \(maxX-minX) x \(maxY-minY) pixels")
+#endif
 
             // Also show as normalized coordinates for comparison with tap point
             let normalizedCenterX = Float(minX + maxX) / 2.0 / Float(imageSize.width)
             let normalizedCenterY = Float(minY + maxY) / 2.0 / Float(imageSize.height)
+#if DEBUG
             print("[Segmentation] Mask center (normalized): (\(normalizedCenterX), \(normalizedCenterY))")
+#endif
         }
 
         return pixels
@@ -367,12 +429,16 @@ extension InstanceSegmentationService {
         let maskHeight = CVPixelBufferGetHeight(mask)
         let pixelFormat = CVPixelBufferGetPixelFormatType(mask)
 
+#if DEBUG
         print("[Segmentation] Mask size: \(maskWidth)x\(maskHeight)")
         print("[Segmentation] Vision ROI: \(visionROI)")
         print("[Segmentation] Camera image size: \(imageSize)")
+#endif
 
         guard let baseAddress = CVPixelBufferGetBaseAddress(mask) else {
+#if DEBUG
             print("[Segmentation] No base address for mask")
+#endif
             return []
         }
 
@@ -394,7 +460,9 @@ extension InstanceSegmentationService {
         // Full-size: mask dimensions match image dimensions (within tolerance)
         let isFullSizeMask = abs(CGFloat(maskWidth) - imageSize.width) < 10 &&
                              abs(CGFloat(maskHeight) - imageSize.height) < 10
+#if DEBUG
         print("[Segmentation] Mask is full-size: \(isFullSizeMask)")
+#endif
 
         let step = max(2, min(maskWidth, maskHeight) / 160)
         let maxPixels = 20000
@@ -444,14 +512,18 @@ extension InstanceSegmentationService {
             }
         }
 
+#if DEBUG
         print("[Segmentation] Found \(pixels.count) masked pixels")
+#endif
 
         if !pixels.isEmpty {
             let minX = pixels.map { $0.x }.min()!
             let maxX = pixels.map { $0.x }.max()!
             let minY = pixels.map { $0.y }.min()!
             let maxY = pixels.map { $0.y }.max()!
+#if DEBUG
             print("[Segmentation] Mask bounds in image coords: x=\(minX)-\(maxX), y=\(minY)-\(maxY)")
+#endif
         }
 
         return pixels

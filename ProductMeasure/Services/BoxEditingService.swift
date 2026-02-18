@@ -294,11 +294,15 @@ class BoxEditingService {
         let pointsInBox = allPoints.filter { currentBox.contains($0) }
 
         guard pointsInBox.count >= 10 else {
+#if DEBUG
             print("[BoxEditingService] Not enough points in box: \(pointsInBox.count)")
+#endif
             return nil
         }
 
+#if DEBUG
         print("[BoxEditingService] Fitting to \(pointsInBox.count) points")
+#endif
 
         // Use BoundingBoxEstimator to compute new OBB
         let estimator = BoundingBoxEstimator()

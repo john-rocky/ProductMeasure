@@ -312,7 +312,9 @@ class BoundingBoxEstimator {
 
             currentBox = BoundingBox3D(center: center, extents: extents, rotation: rotation)
 
+#if DEBUG
             print("[BBoxEstimator] Refinement iteration \(iteration + 1): angle=\(angle * 180 / .pi)°")
+#endif
         }
 
         return currentBox
@@ -387,7 +389,9 @@ class BoundingBoxEstimator {
         }
 
         if let snapped = bestPlaneAngle {
+#if DEBUG
             print("[BBoxEstimator] Snapped angle to vertical plane: \(angle * 180 / .pi)° -> \(snapped * 180 / .pi)° (score: \(bestScore))")
+#endif
             return snapped
         }
 

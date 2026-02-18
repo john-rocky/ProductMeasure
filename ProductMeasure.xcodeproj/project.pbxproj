@@ -10,6 +10,8 @@
 		001000001 /* ProductMeasureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000002 /* ProductMeasureApp.swift */; };
 		001000003 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000004 /* MainTabView.swift */; };
 		001000005 /* ARMeasurementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000006 /* ARMeasurementView.swift */; };
+		001000138 /* ARMeasurementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000139 /* ARMeasurementViewModel.swift */; };
+		001000140 /* ARMeasurementHelperViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000141 /* ARMeasurementHelperViews.swift */; };
 		001000007 /* ARViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000008 /* ARViewContainer.swift */; };
 		001000009 /* BoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000010 /* BoxVisualization.swift */; };
 		001000011 /* MeasurementOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000012 /* MeasurementOverlay.swift */; };
@@ -26,7 +28,6 @@
 		001000033 /* PointCloudGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000034 /* PointCloudGenerator.swift */; };
 		001000035 /* BoundingBoxEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000036 /* BoundingBoxEstimator.swift */; };
 		001000037 /* MeasurementCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000038 /* MeasurementCalculator.swift */; };
-		001000039 /* MeasurementStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000040 /* MeasurementStore.swift */; };
 		001000041 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000042 /* ExportService.swift */; };
 		001000043 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000044 /* Constants.swift */; };
 		001000045 /* LiDARChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000046 /* LiDARChecker.swift */; };
@@ -69,6 +70,8 @@
 		001000002 /* ProductMeasureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductMeasureApp.swift; sourceTree = "<group>"; };
 		001000004 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		001000006 /* ARMeasurementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementView.swift; sourceTree = "<group>"; };
+		001000139 /* ARMeasurementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementViewModel.swift; sourceTree = "<group>"; };
+		001000141 /* ARMeasurementHelperViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementHelperViews.swift; sourceTree = "<group>"; };
 		001000008 /* ARViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARViewContainer.swift; sourceTree = "<group>"; };
 		001000010 /* BoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxVisualization.swift; sourceTree = "<group>"; };
 		001000012 /* MeasurementOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementOverlay.swift; sourceTree = "<group>"; };
@@ -85,7 +88,6 @@
 		001000034 /* PointCloudGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointCloudGenerator.swift; sourceTree = "<group>"; };
 		001000036 /* BoundingBoxEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundingBoxEstimator.swift; sourceTree = "<group>"; };
 		001000038 /* MeasurementCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementCalculator.swift; sourceTree = "<group>"; };
-		001000040 /* MeasurementStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementStore.swift; sourceTree = "<group>"; };
 		001000042 /* ExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportService.swift; sourceTree = "<group>"; };
 		001000044 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		001000046 /* LiDARChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiDARChecker.swift; sourceTree = "<group>"; };
@@ -216,7 +218,6 @@
 		001000062 /* Persistence */ = {
 			isa = PBXGroup;
 			children = (
-				001000040 /* MeasurementStore.swift */,
 				001000042 /* ExportService.swift */,
 			);
 			path = Persistence;
@@ -237,6 +238,8 @@
 			isa = PBXGroup;
 			children = (
 				001000006 /* ARMeasurementView.swift */,
+				001000139 /* ARMeasurementViewModel.swift */,
+				001000141 /* ARMeasurementHelperViews.swift */,
 				001000008 /* ARViewContainer.swift */,
 				001000010 /* BoxVisualization.swift */,
 				001000097 /* CompletedBoxVisualization.swift */,
@@ -363,6 +366,8 @@
 				001000001 /* ProductMeasureApp.swift in Sources */,
 				001000003 /* MainTabView.swift in Sources */,
 				001000005 /* ARMeasurementView.swift in Sources */,
+				001000138 /* ARMeasurementViewModel.swift in Sources */,
+				001000140 /* ARMeasurementHelperViews.swift in Sources */,
 				001000007 /* ARViewContainer.swift in Sources */,
 				001000009 /* BoxVisualization.swift in Sources */,
 				001000011 /* MeasurementOverlay.swift in Sources */,
@@ -379,7 +384,6 @@
 				001000033 /* PointCloudGenerator.swift in Sources */,
 				001000035 /* BoundingBoxEstimator.swift in Sources */,
 				001000037 /* MeasurementCalculator.swift in Sources */,
-				001000039 /* MeasurementStore.swift in Sources */,
 				001000041 /* ExportService.swift in Sources */,
 				001000043 /* Constants.swift in Sources */,
 				001000045 /* LiDARChecker.swift in Sources */,

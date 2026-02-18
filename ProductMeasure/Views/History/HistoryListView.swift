@@ -199,11 +199,15 @@ struct MeasurementRow: View {
         }
     }
 
-    private var formattedDate: String {
+    private static let rowDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
-        return formatter.string(from: measurement.timestamp)
+        return formatter
+    }()
+
+    private var formattedDate: String {
+        Self.rowDateFormatter.string(from: measurement.timestamp)
     }
 }
 
@@ -299,7 +303,9 @@ struct ExportSheet: View {
                 topVC.present(activityVC, animated: true)
             }
         } catch {
+#if DEBUG
             print("Export failed: \(error)")
+#endif
             isExporting = false
         }
     }

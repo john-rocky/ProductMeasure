@@ -44,7 +44,9 @@ class LabelReaderService {
             }
         }
         guard let cgImage = uiImage.cgImage else {
+#if DEBUG
             print("[LabelReader] Warmup: failed to create dummy image")
+#endif
             return
         }
 
@@ -55,7 +57,9 @@ class LabelReaderService {
             let req = VNDetectRectanglesRequest()
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             try? handler.perform([req])
+#if DEBUG
             print("[LabelReader] Rectangle detection warmed up (\(String(format: "%.1f", CFAbsoluteTimeGetCurrent() - start))s)")
+#endif
         }
 
         // OCR warmup (heaviest — accurate level loads ~100MB model)
@@ -66,7 +70,9 @@ class LabelReaderService {
             req.usesLanguageCorrection = true
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             try? handler.perform([req])
+#if DEBUG
             print("[LabelReader] OCR warmed up (\(String(format: "%.1f", CFAbsoluteTimeGetCurrent() - start))s)")
+#endif
         }
 
         // Barcode detection warmup
@@ -75,14 +81,18 @@ class LabelReaderService {
             req.symbologies = [.qr, .ean13, .code128, .code39, .dataMatrix, .itf14]
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
             try? handler.perform([req])
+#if DEBUG
             print("[LabelReader] Barcode detection warmed up (\(String(format: "%.1f", CFAbsoluteTimeGetCurrent() - start))s)")
+#endif
         }
 
         // CIContext GPU warmup — first render initializes Metal pipeline
         DispatchQueue.global(qos: .utility).async {
             let ci = CIImage(cgImage: cgImage)
             _ = ciContext.createCGImage(ci, from: ci.extent)
+#if DEBUG
             print("[LabelReader] CIContext warmed up (\(String(format: "%.1f", CFAbsoluteTimeGetCurrent() - start))s)")
+#endif
         }
     }
 
@@ -109,7 +119,9 @@ class LabelReaderService {
             tapPoint: tapPoint,
             viewSize: viewSize
         ) else {
+#if DEBUG
             print("[LabelReader] No rectangle detected near tap point")
+#endif
             return nil
         }
 
@@ -118,7 +130,9 @@ class LabelReaderService {
             pixelBuffer: pixelBuffer,
             rectangle: rectangle
         ) else {
+#if DEBUG
             print("[LabelReader] Perspective correction failed")
+#endif
             return nil
         }
 
@@ -283,7 +297,9 @@ class LabelReaderService {
             let dy = center.y - visionTap.y
             let rawDist = sqrt(dx * dx + dy * dy)
             if rawDist > 0.3 {
+#if DEBUG
                 print("[LabelReader] Best rectangle too far from tap: \(rawDist)")
+#endif
                 return nil
             }
         }
@@ -932,7 +948,9 @@ class LabelReaderService {
             worldCorners.append(SIMD3<Float>(worldPoint.x, worldPoint.y, worldPoint.z))
         }
 
+#if DEBUG
         print("[LabelReader] World corners from depth map (fallback)")
+#endif
         return worldCorners
     }
 

@@ -3,6 +3,8 @@
 //  ProductMeasure
 //
 
+#if DEBUG
+
 import UIKit
 import ARKit
 import RealityKit
@@ -669,3 +671,4 @@ struct DebugImageView: View {
         }
     }
 }
+#endif

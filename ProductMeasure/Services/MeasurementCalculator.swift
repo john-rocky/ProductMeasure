@@ -37,9 +37,11 @@ class MeasurementCalculator {
         var pointCloud: [SIMD3<Float>]?
 
         // Debug info
+        #if DEBUG
         var debugMaskImage: UIImage?
         var debugDepthImage: UIImage?
         var debugPointCloud: [SIMD3<Float>]?
+        #endif
 
         var formattedDimensions: String {
             String(format: "%.1f × %.1f × %.1f cm",
@@ -79,8 +81,10 @@ class MeasurementCalculator {
         mode: MeasurementMode,
         raycastHitPosition: SIMD3<Float>? = nil
     ) async throws -> MeasurementResult? {
+#if DEBUG
         print("[Calculator] Starting measurement")
         print("[Calculator] Tap point: \(tapPoint), View size: \(viewSize)")
+#endif
 
         // Convert tap point to normalized image coordinates (0-1)
         // Note: ARKit camera image is in landscape orientation
@@ -88,7 +92,9 @@ class MeasurementCalculator {
             width: CVPixelBufferGetWidth(frame.capturedImage),
             height: CVPixelBufferGetHeight(frame.capturedImage)
         )
+#if DEBUG
         print("[Calculator] Image size: \(imageSize)")
+#endif
 
         // Convert screen coordinates to image coordinates
         // The AR view displays the camera in portrait, but the pixel buffer is landscape
@@ -97,17 +103,23 @@ class MeasurementCalculator {
             viewSize: viewSize,
             imageSize: imageSize
         )
+#if DEBUG
         print("[Calculator] Normalized tap point: \(normalizedTap)")
+#endif
 
         // 1. Perform instance segmentation
         guard let segmentation = try await segmentationService.segmentInstance(
             in: frame.capturedImage,
             at: normalizedTap
         ) else {
+#if DEBUG
             print("[Calculator] Segmentation failed - no instance found")
+#endif
             return nil
         }
+#if DEBUG
         print("[Calculator] Segmentation successful, mask size: \(segmentation.maskSize)")
+#endif
 
         // Offload CPU-heavy processing (depth filter, point cloud, clustering, bbox) off main thread
         return await Task.detached(priority: .userInitiated) { [self] in
@@ -118,10 +130,14 @@ class MeasurementCalculator {
             )
 
             guard !maskedPixels.isEmpty else {
+#if DEBUG
                 print("[Calculator] No masked pixels found")
+#endif
                 return nil
             }
+#if DEBUG
             print("[Calculator] Found \(maskedPixels.count) masked pixels before depth filtering")
+#endif
 
             // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
             let filteredPixels = filterMaskedPixelsByDepth(
@@ -132,12 +148,17 @@ class MeasurementCalculator {
             )
 
             guard !filteredPixels.isEmpty else {
+#if DEBUG
                 print("[Calculator] No pixels after depth filtering")
+#endif
                 return nil
             }
+#if DEBUG
             print("[Calculator] Found \(filteredPixels.count) masked pixels after depth filtering")
+#endif
 
             // Create debug mask image (memory-optimized version)
+            #if DEBUG
             let debugMaskImage = DebugVisualization.visualizeMask(
                 mask: segmentation.mask,
                 cameraImage: frame.capturedImage,
@@ -146,6 +167,7 @@ class MeasurementCalculator {
 
             // Skip depth image to save memory
             let debugDepthImage: UIImage? = nil
+            #endif
 
             // 4. Generate point cloud from filtered pixels
             var pointCloud = pointCloudGenerator.generatePointCloud(
@@ -155,10 +177,14 @@ class MeasurementCalculator {
             )
 
             guard !pointCloud.isEmpty else {
+#if DEBUG
                 print("[Calculator] Point cloud is empty")
+#endif
                 return nil
             }
+#if DEBUG
             print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
+#endif
 
             // 5. Filter point cloud by 3D distance from raycast hit position
             // This is CRITICAL - if no points are near the tap, the mask is wrong
@@ -168,11 +194,15 @@ class MeasurementCalculator {
                 for p in pointCloud.points {
                     nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
                 }
+#if DEBUG
                 print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
+#endif
 
                 // If the nearest point is more than 2m away, the mask is completely wrong
                 if nearestDistance > 2.0 {
+#if DEBUG
                     print("[Calculator] ERROR: Mask does not contain tapped location. Nearest point is \(nearestDistance)m away.")
+#endif
                     return nil
                 }
 
@@ -184,13 +214,17 @@ class MeasurementCalculator {
                     center: hitPosition,
                     maxDistance: initialRadius
                 )
+#if DEBUG
                 print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
+#endif
 
                 // Use clustering to find the connected object - this separates the tapped object from others
                 if filteredPoints.count >= 30 {
                     let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
+#if DEBUG
                     print("[Calculator] After clustering: \(filteredPoints.count) points")
+#endif
 
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
@@ -202,7 +236,9 @@ class MeasurementCalculator {
                         quality: pointCloud.quality
                     )
                 } else {
+#if DEBUG
                     print("[Calculator] Too few points near tap location (\(filteredPoints.count))")
+#endif
                     return nil
                 }
             }
@@ -218,21 +254,27 @@ class MeasurementCalculator {
                 mode: mode,
                 verticalPlaneAnchors: verticalPlanes
             ) else {
+#if DEBUG
                 print("[Calculator] Failed to estimate bounding box")
+#endif
                 return nil
             }
+#if DEBUG
             print("[Calculator] Bounding box estimated")
             print("[Calculator] Box center: \(boundingBox.center)")
             print("[Calculator] Box extents: \(boundingBox.extents)")
+#endif
 
             // 7. Calculate dimensions using camera-based axis mapping
             let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
             let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
             let volume = boundingBox.volume
 
+#if DEBUG
             print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
             print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
             print("[Calculator] Volume: \(volume * 1_000_000) cm³")
+#endif
 
             var result = MeasurementResult(
                 boundingBox: boundingBox,
@@ -255,8 +297,10 @@ class MeasurementCalculator {
             }
 
             // Attach debug info (images only, not point cloud to save memory)
+            #if DEBUG
             result.debugMaskImage = debugMaskImage
             result.debugDepthImage = debugDepthImage
+            #endif
 
             return result
         }.value
@@ -277,31 +321,41 @@ class MeasurementCalculator {
         mode: MeasurementMode,
         raycastHitPosition: SIMD3<Float>? = nil
     ) async throws -> MeasurementResult? {
+#if DEBUG
         print("[Calculator] Starting ROI measurement")
         print("[Calculator] Screen ROI: \(regionOfInterest), View size: \(viewSize)")
+#endif
 
         let imageSize = CGSize(
             width: CVPixelBufferGetWidth(frame.capturedImage),
             height: CVPixelBufferGetHeight(frame.capturedImage)
         )
+#if DEBUG
         print("[Calculator] Image size: \(imageSize)")
+#endif
 
         // Convert screen ROI to Vision normalized coordinates
         let visionROI = convertScreenRectToVisionCoordinates(
             screenRect: regionOfInterest,
             viewSize: viewSize
         )
+#if DEBUG
         print("[Calculator] Vision ROI: \(visionROI)")
+#endif
 
         // 1. Perform instance segmentation with ROI
         guard let segmentation = try await segmentationService.segmentInstanceWithROI(
             in: frame.capturedImage,
             regionOfInterest: visionROI
         ) else {
+#if DEBUG
             print("[Calculator] Segmentation with ROI failed - no instance found")
+#endif
             return nil
         }
+#if DEBUG
         print("[Calculator] Segmentation successful, mask size: \(segmentation.maskSize)")
+#endif
 
         // Pre-compute normalized center on calling thread (cheap)
         let boxCenter = CGPoint(x: regionOfInterest.midX, y: regionOfInterest.midY)
@@ -321,10 +375,14 @@ class MeasurementCalculator {
             )
 
             guard !maskedPixels.isEmpty else {
+#if DEBUG
                 print("[Calculator] No masked pixels found")
+#endif
                 return nil
             }
+#if DEBUG
             print("[Calculator] Found \(maskedPixels.count) masked pixels")
+#endif
 
             // 4. Apply depth filtering based on box center
             let depthFilteredPixels = filterMaskedPixelsByDepth(
@@ -335,12 +393,17 @@ class MeasurementCalculator {
             )
 
             guard !depthFilteredPixels.isEmpty else {
+#if DEBUG
                 print("[Calculator] No pixels after depth filtering")
+#endif
                 return nil
             }
+#if DEBUG
             print("[Calculator] Found \(depthFilteredPixels.count) masked pixels after depth filtering")
+#endif
 
             // Create debug mask image with ROI
+            #if DEBUG
             let debugMaskImage = DebugVisualization.visualizeMaskWithROI(
                 mask: segmentation.mask,
                 cameraImage: frame.capturedImage,
@@ -349,6 +412,7 @@ class MeasurementCalculator {
                 viewSize: viewSize,
                 tapPoint: normalizedCenter
             )
+            #endif
 
             // 5. Generate point cloud
             var pointCloud = pointCloudGenerator.generatePointCloud(
@@ -358,10 +422,14 @@ class MeasurementCalculator {
             )
 
             guard !pointCloud.isEmpty else {
+#if DEBUG
                 print("[Calculator] Point cloud is empty")
+#endif
                 return nil
             }
+#if DEBUG
             print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
+#endif
 
             // 6. Filter by proximity if raycast hit available
             if let hitPosition = raycastHitPosition {
@@ -369,10 +437,14 @@ class MeasurementCalculator {
                 for p in pointCloud.points {
                     nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
                 }
+#if DEBUG
                 print("[Calculator] Nearest point cloud distance to raycast hit: \(nearestDistance)m")
+#endif
 
                 if nearestDistance > 2.0 {
+#if DEBUG
                     print("[Calculator] ERROR: Point cloud too far from raycast hit")
+#endif
                     return nil
                 }
 
@@ -383,12 +455,16 @@ class MeasurementCalculator {
                     center: hitPosition,
                     maxDistance: initialRadius
                 )
+#if DEBUG
                 print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
+#endif
 
                 if filteredPoints.count >= 30 {
                     let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
+#if DEBUG
                     print("[Calculator] After clustering: \(filteredPoints.count) points")
+#endif
 
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
@@ -400,7 +476,9 @@ class MeasurementCalculator {
                         quality: pointCloud.quality
                     )
                 } else {
+#if DEBUG
                     print("[Calculator] Too few points near box center (\(filteredPoints.count))")
+#endif
                     return nil
                 }
             }
@@ -416,18 +494,24 @@ class MeasurementCalculator {
                 mode: mode,
                 verticalPlaneAnchors: verticalPlanes
             ) else {
+#if DEBUG
                 print("[Calculator] Failed to estimate bounding box")
+#endif
                 return nil
             }
+#if DEBUG
             print("[Calculator] Bounding box estimated")
+#endif
 
             // 8. Calculate dimensions using camera-based axis mapping
             let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
             let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
             let volume = boundingBox.volume
 
+#if DEBUG
             print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
             print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
+#endif
 
             var result = MeasurementResult(
                 boundingBox: boundingBox,
@@ -442,7 +526,9 @@ class MeasurementCalculator {
             )
 
             result.pointCloud = pointCloud.points
+            #if DEBUG
             result.debugMaskImage = debugMaskImage
+            #endif
 
             // Enhanced pipeline: detect floor from horizontal plane
             if AppConstants.currentPipelineVersion == .enhanced {
@@ -478,9 +564,11 @@ class MeasurementCalculator {
         let normalizedWidth = screenRect.height / viewSize.height
         let normalizedHeight = screenRect.width / viewSize.width
 
+#if DEBUG
         print("[Coords] Screen rect: \(screenRect)")
         print("[Coords] View size: \(viewSize)")
         print("[Coords] Vision ROI: x=\(normalizedX), y=\(normalizedY), w=\(normalizedWidth), h=\(normalizedHeight)")
+#endif
 
         return CGRect(
             x: normalizedX,
@@ -512,7 +600,9 @@ class MeasurementCalculator {
         let imageMinY = Int(screenRect.minX / viewSize.width * imageSize.height)
         let imageMaxY = Int(screenRect.maxX / viewSize.width * imageSize.height)
 
+#if DEBUG
         print("[ROIFilter] Image ROI bounds: x=\(imageMinX)-\(imageMaxX), y=\(imageMinY)-\(imageMaxY)")
+#endif
 
         var filtered: [(x: Int, y: Int)] = []
         filtered.reserveCapacity(pixels.count)
@@ -524,7 +614,9 @@ class MeasurementCalculator {
             }
         }
 
+#if DEBUG
         print("[ROIFilter] Filtered from \(pixels.count) to \(filtered.count) pixels")
+#endif
         return filtered
     }
 
@@ -544,11 +636,13 @@ class MeasurementCalculator {
         let normalizedX = screenPoint.y / viewSize.height
         let normalizedY = 1.0 - (screenPoint.x / viewSize.width)
 
+#if DEBUG
         print("[Coords] Screen point: \(screenPoint)")
         print("[Coords] View size: \(viewSize)")
         print("[Coords] Image size: \(imageSize)")
         print("[Coords] Normalized tap (landscape image): (\(normalizedX), \(normalizedY))")
         print("[Coords] Image pixel: (\(normalizedX * imageSize.width), \(normalizedY * imageSize.height))")
+#endif
 
         return CGPoint(x: normalizedX, y: normalizedY)
     }
@@ -597,7 +691,9 @@ class MeasurementCalculator {
         existingBox: BoundingBox3D,
         raycastHitPosition: SIMD3<Float>? = nil
     ) async throws -> RefinementPointCloud? {
+#if DEBUG
         print("[Refine] Starting refinement measurement")
+#endif
 
         let imageSize = CGSize(
             width: CVPixelBufferGetWidth(frame.capturedImage),
@@ -612,7 +708,9 @@ class MeasurementCalculator {
         guard let segmentation = try await segmentationService.segmentInstance(
             in: frame.capturedImage, at: normalizedTap
         ) else {
+#if DEBUG
             print("[Refine] Segmentation failed")
+#endif
             return nil
         }
 
@@ -636,7 +734,9 @@ class MeasurementCalculator {
                 frame: frame, maskedPixels: filteredPixels, imageSize: imageSize
             )
             guard !pointCloud.isEmpty else { return nil }
+#if DEBUG
             print("[Refine] Generated \(pointCloud.points.count) points")
+#endif
 
             // 5. Proximity filter + clustering (same as measure())
             if let hitPosition = raycastHitPosition {
@@ -663,7 +763,9 @@ class MeasurementCalculator {
                         points: filteredPoints, quality: pointCloud.quality
                     )
                 } else {
+#if DEBUG
                     print("[Refine] Too few points near tap (\(filteredPoints.count))")
+#endif
                     return nil
                 }
             }
@@ -672,10 +774,14 @@ class MeasurementCalculator {
             let expandedBox = Self.expandedBoundingBox(existingBox, scale: AppConstants.refinementProximityScale)
             let insideCount = pointCloud.points.filter { expandedBox.contains($0) }.count
             let overlapRatio = Float(insideCount) / Float(pointCloud.points.count)
+#if DEBUG
             print("[Refine] Overlap ratio: \(overlapRatio) (\(insideCount)/\(pointCloud.points.count))")
+#endif
 
             guard overlapRatio >= AppConstants.refinementOverlapThreshold else {
+#if DEBUG
                 print("[Refine] Overlap too low – object not matched")
+#endif
                 return nil
             }
 
@@ -704,7 +810,9 @@ class MeasurementCalculator {
         imageSize: CGSize
     ) -> [(x: Int, y: Int)] {
         guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
+#if DEBUG
             print("[DepthFilter] No depth map available, returning all pixels")
+#endif
             return maskedPixels
         }
 
@@ -730,17 +838,23 @@ class MeasurementCalculator {
         let tapDepthY = Int(tapPoint.y * imageSize.height * scaleY)
 
         guard tapDepthX >= 0 && tapDepthX < depthWidth && tapDepthY >= 0 && tapDepthY < depthHeight else {
+#if DEBUG
             print("[DepthFilter] Tap point out of depth map bounds")
+#endif
             return maskedPixels
         }
 
         let tapDepthIndex = tapDepthY * (depthBytesPerRow / MemoryLayout<Float32>.size) + tapDepthX
         let tapDepth = depthPtr[tapDepthIndex]
 
+#if DEBUG
         print("[DepthFilter] Tap depth: \(tapDepth)m at depth pixel (\(tapDepthX), \(tapDepthY))")
+#endif
 
         guard tapDepth.isFinite && tapDepth > 0 else {
+#if DEBUG
             print("[DepthFilter] Invalid tap depth, returning all pixels")
+#endif
             return maskedPixels
         }
 
@@ -749,7 +863,9 @@ class MeasurementCalculator {
         let percentTolerance = tapDepth * AppConstants.depthFilterPercentTolerance
         let depthTolerance = min(max(percentTolerance, AppConstants.depthFilterMinTolerance), AppConstants.depthFilterMaxTolerance)
 
+#if DEBUG
         print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m")
+#endif
 
         var filteredPixels: [(x: Int, y: Int)] = []
         filteredPixels.reserveCapacity(maskedPixels.count / 2)
@@ -773,11 +889,15 @@ class MeasurementCalculator {
             }
         }
 
+#if DEBUG
         print("[DepthFilter] Filtered from \(maskedPixels.count) to \(filteredPixels.count) pixels")
+#endif
 
         // If filtering removed too many pixels, return original
         if filteredPixels.count < 100 {
+#if DEBUG
             print("[DepthFilter] Too few pixels after filtering, returning original")
+#endif
             return maskedPixels
         }
 
@@ -796,8 +916,10 @@ class MeasurementCalculator {
         center: SIMD3<Float>,
         maxDistance: Float
     ) -> [SIMD3<Float>] {
+#if DEBUG
         print("[ProximityFilter] Filtering \(points.count) points around center: \(center)")
         print("[ProximityFilter] Max distance: \(maxDistance)m")
+#endif
 
         var filteredPoints: [SIMD3<Float>] = []
         filteredPoints.reserveCapacity(points.count)
@@ -812,9 +934,13 @@ class MeasurementCalculator {
         }
 
         if !points.isEmpty {
+#if DEBUG
             print("[ProximityFilter] Distance stats - min: \(minDist)m, max: \(maxDist)m, avg: \(totalDist / Float(points.count))m")
+#endif
         }
+#if DEBUG
         print("[ProximityFilter] Kept \(filteredPoints.count) of \(points.count) points")
+#endif
 
         return filteredPoints
     }
@@ -824,7 +950,9 @@ class MeasurementCalculator {
     private func extractMainCluster(points: [SIMD3<Float>], center: SIMD3<Float>, cameraPosition: SIMD3<Float>? = nil) -> [SIMD3<Float>] {
         guard points.count > 20 else { return points }
 
+#if DEBUG
         print("[Clustering] Starting with \(points.count) points")
+#endif
 
         // Determine clustering threshold based on pipeline version
         let neighborThreshold: Float
@@ -835,7 +963,9 @@ class MeasurementCalculator {
             let medianDepth = estimateMedianDepth(points: points, cameraPosition: cameraPosition)
             let adaptive = AppConstants.clusteringBaseOffset + medianDepth * AppConstants.clusteringDepthScale
             neighborThreshold = min(max(adaptive, AppConstants.clusteringMinThreshold), AppConstants.clusteringMaxThreshold)
+#if DEBUG
             print("[Clustering] Depth-adaptive threshold: \(neighborThreshold * 100)cm (medianDepth=\(medianDepth)m)")
+#endif
         }
         let cellSize = neighborThreshold
 
@@ -857,7 +987,9 @@ class MeasurementCalculator {
             let d = simd_distance(p, center)
             if d < minDist { minDist = d; seedIdx = i }
         }
+#if DEBUG
         print("[Clustering] Seed point at distance \(minDist)m from center")
+#endif
 
         // Flood-fill using grid neighbors only (DFS with stack)
         var inCluster = [Bool](repeating: false, count: points.count)
@@ -894,11 +1026,15 @@ class MeasurementCalculator {
         }
 
         let clusterPoints = (0..<points.count).compactMap { inCluster[$0] ? points[$0] : nil }
+#if DEBUG
         print("[Clustering] Extracted cluster with \(clusterPoints.count) points")
+#endif
 
         // If cluster is too small, return original
         if clusterPoints.count < 20 {
+#if DEBUG
             print("[Clustering] Cluster too small, returning original points")
+#endif
             return points
         }
 
@@ -943,7 +1079,9 @@ class MeasurementCalculator {
 
         guard let plane = bestPlane, bestDist < 3.0 else { return nil }
         let floorY = plane.transform.columns.3.y
+#if DEBUG
         print("[Calculator] Horizontal plane floor detected: y=\(floorY) (dist=\(bestDist)m)")
+#endif
         return floorY
     }
 

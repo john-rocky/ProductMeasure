@@ -49,7 +49,9 @@ class DepthProcessor {
     ) -> [DepthData] {
         guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap,
               let confidenceMap = frame.smoothedSceneDepth?.confidenceMap ?? frame.sceneDepth?.confidenceMap else {
+#if DEBUG
             print("[Depth] No depth or confidence map available")
+#endif
             return []
         }
 
@@ -63,8 +65,10 @@ class DepthProcessor {
         let depthWidth = CVPixelBufferGetWidth(depthMap)
         let depthHeight = CVPixelBufferGetHeight(depthMap)
 
+#if DEBUG
         print("[Depth] Depth map size: \(depthWidth)x\(depthHeight)")
         print("[Depth] Image size: \(imageSize)")
+#endif
 
         guard let depthBase = CVPixelBufferGetBaseAddress(depthMap),
               let confBase = CVPixelBufferGetBaseAddress(confidenceMap) else {
@@ -74,7 +78,9 @@ class DepthProcessor {
         let depthBytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
         let confBytesPerRow = CVPixelBufferGetBytesPerRow(confidenceMap)
 
+#if DEBUG
         print("[Depth] Depth bytes per row: \(depthBytesPerRow) (elements per row: \(depthBytesPerRow / 4))")
+#endif
 
         let depthPtr = depthBase.assumingMemoryBound(to: Float32.self)
         let confPtr = confBase.assumingMemoryBound(to: UInt8.self)
@@ -83,10 +89,14 @@ class DepthProcessor {
         let scaleX = CGFloat(depthWidth) / imageSize.width
         let scaleY = CGFloat(depthHeight) / imageSize.height
 
+#if DEBUG
         print("[Depth] Scale factors (image to depth): \(scaleX), \(scaleY)")
+#endif
 
         var results: [DepthData] = []
+#if DEBUG
         var debugCount = 0
+#endif
         var rejectedCount = 0
 
         for pixel in maskedPixels {
@@ -104,11 +114,13 @@ class DepthProcessor {
             let confValue = confPtr[confIndex]
             let confidence = ARConfidenceLevel(rawValue: Int(confValue)) ?? .low
 
+#if DEBUG
             // Debug first few samples
             if debugCount < 5 {
                 print("[Depth] Sample \(debugCount): imagePx=(\(pixel.x),\(pixel.y)) -> depthPx=(\(depthX),\(depthY)), depth=\(depth)m, conf=\(confValue)")
                 debugCount += 1
             }
+#endif
 
             if depth.isFinite && depth > 0 && confidence.rawValue >= ARConfidenceLevel.medium.rawValue {
                 results.append(DepthData(
@@ -122,7 +134,9 @@ class DepthProcessor {
             }
         }
 
+#if DEBUG
         print("[Depth] Accepted: \(results.count), Rejected: \(rejectedCount)")
+#endif
 
         return results
     }

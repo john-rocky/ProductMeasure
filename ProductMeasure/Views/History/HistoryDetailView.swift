@@ -127,7 +127,7 @@ struct HistoryDetailView: View {
             Text(label)
                 .font(PMTheme.mono(11))
                 .foregroundColor(PMTheme.cyan)
-            Text(formatDimension(value))
+            Text(measurementUnit.formatDimension(meters: value))
                 .font(PMTheme.mono(16, weight: .semibold))
                 .foregroundColor(PMTheme.textPrimary)
         }
@@ -279,22 +279,15 @@ struct HistoryDetailView: View {
             .padding(.horizontal, 4)
     }
 
-    private var formattedDate: String {
+    private static let detailDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .long
         formatter.timeStyle = .medium
-        return formatter.string(from: measurement.timestamp)
-    }
+        return formatter
+    }()
 
-    private func formatDimension(_ meters: Float) -> String {
-        let value = measurementUnit.convert(meters: meters)
-        if value >= 100 {
-            return String(format: "%.0f %@", value, measurementUnit.rawValue)
-        } else if value >= 10 {
-            return String(format: "%.1f %@", value, measurementUnit.rawValue)
-        } else {
-            return String(format: "%.2f %@", value, measurementUnit.rawValue)
-        }
+    private var formattedDate: String {
+        Self.detailDateFormatter.string(from: measurement.timestamp)
     }
 
     private func deleteMeasurement() {

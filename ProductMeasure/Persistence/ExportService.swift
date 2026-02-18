@@ -147,7 +147,9 @@ class ExportService {
         do {
             return try encoder.encode(exportData)
         } catch {
+#if DEBUG
             print("JSON encoding failed: \(error)")
+#endif
             return Data()
         }
     }

@@ -42,7 +42,9 @@ class PointCloudGenerator {
         maskedPixels: [(x: Int, y: Int)],
         imageSize: CGSize
     ) -> PointCloud {
+        #if DEBUG
         print("[PointCloud] Starting with \(maskedPixels.count) masked pixels")
+        #endif
 
         // Extract depth data for masked pixels
         var depthData = depthProcessor.extractDepthForMask(
@@ -52,7 +54,9 @@ class PointCloudGenerator {
         )
 
         let totalMaskedPixels = maskedPixels.count
+        #if DEBUG
         print("[PointCloud] Extracted \(depthData.count) depth points")
+        #endif
 
         guard !depthData.isEmpty else {
             return PointCloud(
@@ -68,17 +72,23 @@ class PointCloudGenerator {
 
         // Remove outliers
         depthData = depthProcessor.removeOutliers(depthData)
+        #if DEBUG
         print("[PointCloud] After outlier removal: \(depthData.count) points")
+        #endif
 
         // Downsample if too many points
         if depthData.count > AppConstants.maxPointCloudSize {
             depthData = depthProcessor.downsample(depthData, gridSize: 4)
+            #if DEBUG
             print("[PointCloud] After downsampling: \(depthData.count) points")
+            #endif
         }
 
         // Get depth stats
         let stats = depthProcessor.getDepthStats(depthData: depthData)
+        #if DEBUG
         print("[PointCloud] Depth range: \(stats.minDepth)m - \(stats.maxDepth)m")
+        #endif
 
         // Get depth map size
         guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
@@ -95,7 +105,9 @@ class PointCloudGenerator {
 
         let depthWidth = CVPixelBufferGetWidth(depthMap)
         let depthHeight = CVPixelBufferGetHeight(depthMap)
+        #if DEBUG
         print("[PointCloud] Depth map size: \(depthWidth)x\(depthHeight)")
+        #endif
 
         // Unproject to 3D world coordinates
         let points = unprojectToWorld(
@@ -104,19 +116,27 @@ class PointCloudGenerator {
             depthWidth: depthWidth,
             depthHeight: depthHeight
         )
+        #if DEBUG
         print("[PointCloud] Unprojected \(points.count) points")
+        #endif
 
         // Filter outliers in 3D space
         let filteredPoints = filter3DOutliers(points)
+        #if DEBUG
         print("[PointCloud] After 3D outlier filter: \(filteredPoints.count) points")
+        #endif
 
         // Grid-based downsampling in 3D
         let downsampledPoints = downsample3D(filteredPoints, gridSize: AppConstants.pointCloudGridSize)
+        #if DEBUG
         print("[PointCloud] Final point count: \(downsampledPoints.count)")
+        #endif
 
+        #if DEBUG
         if let first = downsampledPoints.first {
             print("[PointCloud] Sample point: \(first)")
         }
+        #endif
 
         let quality = MeasurementQuality(
             depthCoverage: Float(depthData.count) / Float(max(totalMaskedPixels, 1)),
@@ -171,17 +191,21 @@ class PointCloudGenerator {
             fy *= scaleIntrinsicsY
             cx *= scaleIntrinsicsX
             cy *= scaleIntrinsicsY
+            #if DEBUG
             print("[Unproject] WARNING: Scaling intrinsics by \(scaleIntrinsicsX), \(scaleIntrinsicsY)")
+            #endif
         }
 
         // Debug: Print camera info once
         if depthData.count > 0 {
+            #if DEBUG
             print("[Unproject] Image size: \(imageWidth)x\(imageHeight)")
             print("[Unproject] Camera image resolution: \(cameraImageWidth)x\(cameraImageHeight)")
             print("[Unproject] Depth map size: \(depthWidth)x\(depthHeight)")
             print("[Unproject] Scale factors (depth to image): \(scaleX), \(scaleY)")
             print("[Unproject] Intrinsics: fx=\(fx), fy=\(fy), cx=\(cx), cy=\(cy)")
             print("[Unproject] Camera position: \(cameraTransform.columns.3)")
+            #endif
         }
 
         var points: [SIMD3<Float>] = []
@@ -210,9 +234,11 @@ class PointCloudGenerator {
 
             // Debug first few points
             if debugCount < 3 {
+                #if DEBUG
                 print("[Unproject] Point \(debugCount): depth=\(depth)m, depthPx=(\(data.pixelX),\(data.pixelY)), imagePx=(\(imageX),\(imageY))")
                 print("[Unproject]   -> camera local: (\(localX), \(-localY), \(-depth))")
                 print("[Unproject]   -> world: (\(worldPoint.x), \(worldPoint.y), \(worldPoint.z))")
+                #endif
                 debugCount += 1
             }
 
@@ -226,10 +252,12 @@ class PointCloudGenerator {
                 minP = SIMD3(min(minP.x, p.x), min(minP.y, p.y), min(minP.z, p.z))
                 maxP = SIMD3(max(maxP.x, p.x), max(maxP.y, p.y), max(maxP.z, p.z))
             }
+            #if DEBUG
             print("[Unproject] Point cloud bounds:")
             print("[Unproject]   X: \(minP.x) to \(maxP.x) (range: \((maxP.x - minP.x) * 100)cm)")
             print("[Unproject]   Y: \(minP.y) to \(maxP.y) (range: \((maxP.y - minP.y) * 100)cm)")
             print("[Unproject]   Z: \(minP.z) to \(maxP.z) (range: \((maxP.z - minP.z) * 100)cm)")
+            #endif
         }
 
         return points

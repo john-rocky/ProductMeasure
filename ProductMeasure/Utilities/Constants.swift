@@ -162,6 +162,20 @@ enum MeasurementUnit: String, CaseIterable, Codable {
         }
     }
 
+    /// Format a dimension value with adaptive decimal places
+    func formatDimension(meters: Float) -> String {
+        let value = convert(meters: meters)
+        let numStr: String
+        if value >= 100 {
+            numStr = String(format: "%.0f", value)
+        } else if value >= 10 {
+            numStr = String(format: "%.1f", value)
+        } else {
+            numStr = String(format: "%.2f", value)
+        }
+        return "\(numStr) \(rawValue)"
+    }
+
     /// Volumetric weight: (L_cm x W_cm x H_cm) / 5000 = kg
     /// Equivalent to cubicMeters * 1e6 / 5000 = cubicMeters * 200
     func formatVolumetricWeight(cubicMeters: Float) -> String {
@@ -268,6 +282,63 @@ enum SelectionMode: String, CaseIterable, Codable {
         case .tap: return "hand.tap"
         case .box: return "rectangle.dashed"
         case .label: return "doc.text.viewfinder"
+        }
+    }
+}
+
+// MARK: - AppStorage Conformances
+
+extension AppMode: RawRepresentable {
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "warehouse": self = .warehouse
+        case "shipping": self = .shipping
+        case "measure": self = .measure
+        case "labelOnly": self = .labelOnly
+        default: return nil
+        }
+    }
+}
+
+extension MeasurementUnit: RawRepresentable {
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "mm": self = .millimeters
+        case "cm": self = .centimeters
+        case "in": self = .inches
+        default: return nil
+        }
+    }
+}
+
+extension RoundingPrecision: RawRepresentable {
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "1mm": self = .millimeter1
+        case "5mm": self = .millimeter5
+        case "0.1cm": self = .centimeter01
+        case "1cm": self = .centimeter1
+        default: return nil
+        }
+    }
+}
+
+extension MeasurementMode: RawRepresentable {
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "box": self = .boxPriority
+        case "free": self = .freeObject
+        default: return nil
+        }
+    }
+}
+
+extension PipelineVersion: RawRepresentable {
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "standard": self = .standard
+        case "enhanced": self = .enhanced
+        default: return nil
         }
     }
 }
