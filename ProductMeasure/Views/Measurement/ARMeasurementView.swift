@@ -14,6 +14,8 @@ struct ARMeasurementView: View {
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
+    @AppStorage("showScanningTips") private var showScanningTips = true
+    @State private var showScanningTipsSheet = false
 
     /// When workflow is active, derives selection mode from workflow step
     private var activeSelectionMode: SelectionMode {
@@ -55,8 +57,20 @@ struct ARMeasurementView: View {
                 // Overlay UI (on top)
                 GeometryReader { geometry in
                     VStack {
-                        // Top bar: only clear button
+                        // Top bar
                         HStack {
+                            if showScanningTips && !viewModel.isWorkflowActive {
+                                Button(action: { showScanningTipsSheet = true }) {
+                                    Image(systemName: "questionmark.circle")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(PMTheme.cyan)
+                                        .frame(width: 36, height: 36)
+                                        .background(PMTheme.surfaceDark.opacity(0.85))
+                                        .clipShape(Circle())
+                                        .overlay(Circle().strokeBorder(PMTheme.cyan.opacity(0.20), lineWidth: 0.5))
+                                }
+                            }
+
                             Spacer()
 
                             // Clear all button (visible when completed boxes exist)
@@ -159,6 +173,9 @@ struct ARMeasurementView: View {
                     if let image = viewModel.debugDepthImage {
                         DebugImageView(image: image, title: "Depth Map (Bright=Close) + Masked Pixels (Green)")
                     }
+                }
+                .sheet(isPresented: $showScanningTipsSheet) {
+                    ScanningTipsView()
                 }
 
                 // Barcode scan effect overlay

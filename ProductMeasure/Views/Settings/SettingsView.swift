@@ -12,6 +12,7 @@ struct SettingsView: View {
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("showQualityIndicators") private var showQualityIndicators = true
     @AppStorage("pipelineVersion") private var pipelineVersion: PipelineVersion = .standard
+    @AppStorage("showScanningTips") private var showScanningTips = true
 
     var body: some View {
         NavigationStack {
@@ -94,6 +95,15 @@ struct SettingsView: View {
                     Toggle("Show Quality Indicators", isOn: $showQualityIndicators)
                 } header: {
                     Text("DISPLAY")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
+                }
+
+                // Scanning tips section
+                Section {
+                    Toggle(String(localized: "setting.showScanningTips"), isOn: $showScanningTips)
+                } header: {
+                    Text("SCANNING TIPS")
                         .font(PMTheme.mono(11, weight: .bold))
                         .foregroundColor(PMTheme.cyan)
                 }

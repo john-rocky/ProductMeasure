@@ -61,6 +61,8 @@
 		001000128 /* ShippingBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000129 /* ShippingBox.swift */; };
 		001000130 /* ShippingBoxSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000131 /* ShippingBoxSelector.swift */; };
 		001000132 /* ShippingBoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000133 /* ShippingBoxVisualization.swift */; };
+		001000134 /* ScanningTipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000135 /* ScanningTipsView.swift */; };
+		001000136 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 001000137 /* Localizable.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -120,6 +122,8 @@
 		001000129 /* ShippingBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShippingBox.swift; sourceTree = "<group>"; };
 		001000131 /* ShippingBoxSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShippingBoxSelector.swift; sourceTree = "<group>"; };
 		001000133 /* ShippingBoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShippingBoxVisualization.swift; sourceTree = "<group>"; };
+		001000135 /* ScanningTipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanningTipsView.swift; sourceTree = "<group>"; };
+		001000137 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -147,6 +151,7 @@
 				001000002 /* ProductMeasureApp.swift */,
 				001000053 /* Info.plist */,
 				001000052 /* Assets.xcassets */,
+				001000137 /* Localizable.xcstrings */,
 				001000059 /* Models */,
 				001000060 /* Views */,
 				001000061 /* Services */,
@@ -270,6 +275,7 @@
 			isa = PBXGroup;
 			children = (
 				001000020 /* SettingsView.swift */,
+				001000135 /* ScanningTipsView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -324,6 +330,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				ja,
 				Base,
 			);
 			mainGroup = 001000056;
@@ -342,6 +349,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				001000051 /* Assets.xcassets in Resources */,
+				001000136 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -405,6 +413,7 @@
 				001000128 /* ShippingBox.swift in Sources */,
 				001000130 /* ShippingBoxSelector.swift in Sources */,
 				001000132 /* ShippingBoxVisualization.swift in Sources */,
+				001000134 /* ScanningTipsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
