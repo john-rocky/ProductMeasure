@@ -36,9 +36,9 @@ enum AppConstants {
     static let refinementOverlapThreshold: Float = 0.30 // Minimum overlap ratio for new point cloud
 
     // MARK: - Depth Filtering
-    static let depthFilterPercentTolerance: Float = 0.20
-    static let depthFilterMinTolerance: Float = 0.07
-    static let depthFilterMaxTolerance: Float = 0.25
+    static let depthFilterPercentTolerance: Float = 0.15
+    static let depthFilterMinTolerance: Float = 0.05
+    static let depthFilterMaxTolerance: Float = 0.15
 
     // MARK: - Box Refinement
     static let boxRefinementMargin: Float = 0.015
@@ -53,8 +53,8 @@ enum AppConstants {
     // MARK: - Enhanced Pipeline
     static let floorSnapThresholdDefault: Float = 0.05
     static let floorSnapThresholdWithPlane: Float = 0.08
-    static let clusteringMinThreshold: Float = 0.03
-    static let clusteringMaxThreshold: Float = 0.06
+    static let clusteringMinThreshold: Float = 0.02
+    static let clusteringMaxThreshold: Float = 0.045
     static let clusteringDepthScale: Float = 0.015
     static let clusteringBaseOffset: Float = 0.02
 
@@ -68,6 +68,12 @@ enum AppConstants {
     static let planeSnapProximityWeight: Float = 0.5
     static let planeSnapAlignmentWeight: Float = 0.3
     static let planeSnapAreaWeight: Float = 0.2
+
+    // MARK: - Depth Connectivity Refinement
+    static let depthConnectivitySeedTolerance: Float = 0.10   // ±10% of seed depth
+    static let depthConnectivityLocalTolerance: Float = 0.05  // ±5% local continuity
+    static let depthConnectivityMinRetainRatio: Float = 0.05  // Minimum 5% retention
+    static let depthConnectivityCellSize: Int = 15             // Spatial hash cell size (px)
 
     // MARK: - Extent Trimming
     static let extentsTrimPercent: Float = 0.01

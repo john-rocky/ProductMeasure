@@ -139,9 +139,17 @@ class MeasurementCalculator {
             print("[Calculator] Found \(maskedPixels.count) masked pixels before depth filtering")
 #endif
 
+            // 2b. Refine mask by depth connectivity — separate touching objects
+            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
+                maskedPixels: maskedPixels,
+                frame: frame,
+                seedPoint: normalizedTap,
+                imageSize: imageSize
+            )
+
             // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
             let filteredPixels = filterMaskedPixelsByDepth(
-                maskedPixels: maskedPixels,
+                maskedPixels: connectedPixels,
                 frame: frame,
                 tapPoint: normalizedTap,
                 imageSize: imageSize
@@ -208,7 +216,7 @@ class MeasurementCalculator {
 
                 // Use adaptive radius based on point cloud spread, minimum 1m
                 let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
-                let initialRadius: Float = max(1.0, pointSpread)
+                let initialRadius: Float = max(0.5, pointSpread * 0.8)
                 var filteredPoints = filterPointsByProximity(
                     points: pointCloud.points,
                     center: hitPosition,
@@ -219,7 +227,7 @@ class MeasurementCalculator {
 #endif
 
                 // Use clustering to find the connected object - this separates the tapped object from others
-                if filteredPoints.count >= 30 {
+                if filteredPoints.count >= 15 {
                     let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
 #if DEBUG
@@ -230,7 +238,7 @@ class MeasurementCalculator {
                         points: filteredPoints,
                         quality: pointCloud.quality
                     )
-                } else if filteredPoints.count >= 10 {
+                } else if filteredPoints.count >= 8 {
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
                         quality: pointCloud.quality
@@ -384,9 +392,17 @@ class MeasurementCalculator {
             print("[Calculator] Found \(maskedPixels.count) masked pixels")
 #endif
 
+            // 3b. Refine mask by depth connectivity — separate touching objects
+            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
+                maskedPixels: maskedPixels,
+                frame: frame,
+                seedPoint: normalizedCenter,
+                imageSize: imageSize
+            )
+
             // 4. Apply depth filtering based on box center
             let depthFilteredPixels = filterMaskedPixelsByDepth(
-                maskedPixels: maskedPixels,
+                maskedPixels: connectedPixels,
                 frame: frame,
                 tapPoint: normalizedCenter,
                 imageSize: imageSize
@@ -449,7 +465,7 @@ class MeasurementCalculator {
                 }
 
                 let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
-                let initialRadius: Float = max(1.0, pointSpread)
+                let initialRadius: Float = max(0.5, pointSpread * 0.8)
                 var filteredPoints = filterPointsByProximity(
                     points: pointCloud.points,
                     center: hitPosition,
@@ -459,7 +475,7 @@ class MeasurementCalculator {
                 print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
 #endif
 
-                if filteredPoints.count >= 30 {
+                if filteredPoints.count >= 15 {
                     let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
 #if DEBUG
@@ -470,7 +486,7 @@ class MeasurementCalculator {
                         points: filteredPoints,
                         quality: pointCloud.quality
                     )
-                } else if filteredPoints.count >= 10 {
+                } else if filteredPoints.count >= 8 {
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
                         quality: pointCloud.quality
@@ -733,9 +749,15 @@ class MeasurementCalculator {
             )
             #endif
 
+            // 2b. Refine mask by depth connectivity
+            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
+                maskedPixels: maskedPixels, frame: frame,
+                seedPoint: normalizedTap, imageSize: imageSize
+            )
+
             // 3. Depth filtering
             let filteredPixels = filterMaskedPixelsByDepth(
-                maskedPixels: maskedPixels, frame: frame,
+                maskedPixels: connectedPixels, frame: frame,
                 tapPoint: normalizedTap, imageSize: imageSize
             )
             guard !filteredPixels.isEmpty else { return nil }
@@ -758,18 +780,18 @@ class MeasurementCalculator {
                 if nearestDistance > 2.0 { return nil }
 
                 let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
-                let initialRadius: Float = max(1.0, pointSpread)
+                let initialRadius: Float = max(0.5, pointSpread * 0.8)
                 var filteredPoints = filterPointsByProximity(
                     points: pointCloud.points, center: hitPosition, maxDistance: initialRadius
                 )
 
-                if filteredPoints.count >= 30 {
+                if filteredPoints.count >= 15 {
                     let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints, quality: pointCloud.quality
                     )
-                } else if filteredPoints.count >= 10 {
+                } else if filteredPoints.count >= 8 {
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints, quality: pointCloud.quality
                     )
@@ -874,7 +896,7 @@ class MeasurementCalculator {
         }
 
         // Filter pixels by depth - keep those within a tolerance of tap depth
-        // Use 15% of tap depth, clamped to [5cm, 25cm]
+        // Use configured percent tolerance, clamped to [minTolerance, maxTolerance]
         let percentTolerance = tapDepth * AppConstants.depthFilterPercentTolerance
         let depthTolerance = min(max(percentTolerance, AppConstants.depthFilterMinTolerance), AppConstants.depthFilterMaxTolerance)
 
@@ -908,15 +930,145 @@ class MeasurementCalculator {
         print("[DepthFilter] Filtered from \(maskedPixels.count) to \(filteredPixels.count) pixels")
 #endif
 
-        // If filtering removed too many pixels, return original
-        if filteredPixels.count < 100 {
+        // Proportional minimum: at least 5% of original, but no fewer than 20 pixels
+        let minRequired = max(20, maskedPixels.count / 20)
+        if filteredPixels.count < minRequired {
 #if DEBUG
-            print("[DepthFilter] Too few pixels after filtering, returning original")
+            print("[DepthFilter] Too few pixels after filtering (\(filteredPixels.count) < \(minRequired)), returning empty")
+#endif
+            return []
+        }
+
+        return filteredPixels
+    }
+
+    /// Refine masked pixels by depth-based connected-component analysis.
+    /// Keeps only the connected region around the seed pixel where depth is continuous.
+    /// This separates objects that Vision grouped into a single instance but differ in depth.
+    private func refineMaskedPixelsByDepthConnectivity(
+        maskedPixels: [(x: Int, y: Int)],
+        frame: ARFrame,
+        seedPoint: CGPoint,
+        imageSize: CGSize
+    ) -> [(x: Int, y: Int)] {
+        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
+            return maskedPixels
+        }
+
+        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
+
+        let depthWidth = CVPixelBufferGetWidth(depthMap)
+        let depthHeight = CVPixelBufferGetHeight(depthMap)
+
+        guard let depthBase = CVPixelBufferGetBaseAddress(depthMap) else {
+            return maskedPixels
+        }
+
+        let depthBytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
+        let depthPtr = depthBase.assumingMemoryBound(to: Float32.self)
+        let depthStride = depthBytesPerRow / MemoryLayout<Float32>.size
+
+        let scaleX = CGFloat(depthWidth) / imageSize.width
+        let scaleY = CGFloat(depthHeight) / imageSize.height
+
+        // Build spatial hash for fast neighbor lookup (cell size in image pixels)
+        let cellSize = AppConstants.depthConnectivityCellSize
+        struct Cell: Hashable { let x, y: Int }
+        var grid: [Cell: [Int]] = [:]
+        grid.reserveCapacity(maskedPixels.count / 4)
+        for (i, px) in maskedPixels.enumerated() {
+            let cell = Cell(x: px.x / cellSize, y: px.y / cellSize)
+            grid[cell, default: []].append(i)
+        }
+
+        // Find seed: closest masked pixel to seedPoint (in image coordinates)
+        let seedImgX = Int(seedPoint.x * imageSize.width)
+        let seedImgY = Int(seedPoint.y * imageSize.height)
+        var seedIdx = 0
+        var minDist = Int.max
+        for (i, px) in maskedPixels.enumerated() {
+            let d = abs(px.x - seedImgX) + abs(px.y - seedImgY)
+            if d < minDist { minDist = d; seedIdx = i }
+        }
+
+        // Get seed depth
+        let seedPx = maskedPixels[seedIdx]
+        let seedDX = Int(CGFloat(seedPx.x) * scaleX)
+        let seedDY = Int(CGFloat(seedPx.y) * scaleY)
+        guard seedDX >= 0 && seedDX < depthWidth && seedDY >= 0 && seedDY < depthHeight else {
+            return maskedPixels
+        }
+        let seedDepth = depthPtr[seedDY * depthStride + seedDX]
+        guard seedDepth.isFinite && seedDepth > 0 else { return maskedPixels }
+
+        let seedTolerance = seedDepth * AppConstants.depthConnectivitySeedTolerance
+        let localTolerance = AppConstants.depthConnectivityLocalTolerance
+
+        // Helper: get depth for a masked pixel
+        func depthAt(_ px: (x: Int, y: Int)) -> Float? {
+            let dx = Int(CGFloat(px.x) * scaleX)
+            let dy = Int(CGFloat(px.y) * scaleY)
+            guard dx >= 0 && dx < depthWidth && dy >= 0 && dy < depthHeight else { return nil }
+            let d = depthPtr[dy * depthStride + dx]
+            return (d.isFinite && d > 0) ? d : nil
+        }
+
+        // Flood-fill through spatial hash neighbors
+        var visited = [Bool](repeating: false, count: maskedPixels.count)
+        var frontier: [Int] = [seedIdx]
+        visited[seedIdx] = true
+        var result: [Int] = [seedIdx]
+
+        while !frontier.isEmpty {
+            let idx = frontier.removeLast()
+            let px = maskedPixels[idx]
+            guard let currentDepth = depthAt(px) else { continue }
+
+            let cx = px.x / cellSize
+            let cy = px.y / cellSize
+
+            // Check 3x3 neighboring cells
+            for dx in -1...1 {
+                for dy in -1...1 {
+                    guard let neighbors = grid[Cell(x: cx + dx, y: cy + dy)] else { continue }
+                    for ni in neighbors {
+                        if visited[ni] { continue }
+                        guard let neighborDepth = depthAt(maskedPixels[ni]) else { continue }
+
+                        // (a) Within seed depth tolerance (global)
+                        let seedDiff = abs(neighborDepth - seedDepth)
+                        guard seedDiff <= seedTolerance else { continue }
+
+                        // (b) Within local continuity tolerance
+                        let localDiff = abs(neighborDepth - currentDepth)
+                        guard localDiff <= currentDepth * localTolerance else { continue }
+
+                        visited[ni] = true
+                        frontier.append(ni)
+                        result.append(ni)
+                    }
+                }
+            }
+        }
+
+        let refined = result.map { maskedPixels[$0] }
+
+#if DEBUG
+        print("[DepthConnectivity] Seed depth: \(seedDepth)m, tolerance: ±\(seedTolerance)m")
+        print("[DepthConnectivity] Refined from \(maskedPixels.count) to \(refined.count) pixels")
+#endif
+
+        // Safety: if too few pixels remain, skip refinement
+        let minRetain = Int(Float(maskedPixels.count) * AppConstants.depthConnectivityMinRetainRatio)
+        if refined.count < minRetain {
+#if DEBUG
+            print("[DepthConnectivity] Too few pixels retained (\(refined.count) < \(minRetain)), skipping refinement")
 #endif
             return maskedPixels
         }
 
-        return filteredPixels
+        return refined
     }
 
     /// Calculate volume from dimensions
@@ -963,7 +1115,7 @@ class MeasurementCalculator {
     /// Extract the main cluster of points around the center using spatial-hash flood-fill
     /// This helps isolate the tapped object from other nearby objects
     private func extractMainCluster(points: [SIMD3<Float>], center: SIMD3<Float>, cameraPosition: SIMD3<Float>? = nil) -> [SIMD3<Float>] {
-        guard points.count > 20 else { return points }
+        guard points.count > 12 else { return points }
 
 #if DEBUG
         print("[Clustering] Starting with \(points.count) points")
@@ -1046,7 +1198,7 @@ class MeasurementCalculator {
 #endif
 
         // If cluster is too small, return original
-        if clusterPoints.count < 20 {
+        if clusterPoints.count < 12 {
 #if DEBUG
             print("[Clustering] Cluster too small, returning original points")
 #endif
