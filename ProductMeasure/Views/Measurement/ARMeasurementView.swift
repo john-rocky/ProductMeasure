@@ -15,6 +15,9 @@ struct ARMeasurementView: View {
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
     @AppStorage("showScanningTips") private var showScanningTips = true
+    #if DEBUG
+    @AppStorage("showMaskPreview") private var showMaskPreview = false
+    #endif
     @State private var showScanningTipsSheet = false
 
     /// When workflow is active or in label-only mode, derives selection mode from ViewModel
@@ -332,6 +335,9 @@ struct ARMeasurementView: View {
             viewModel.currentUnit = measurementUnit
             viewModel.currentMeasurementMode = measurementMode
             viewModel.appMode = appMode
+            #if DEBUG
+            viewModel.showMaskPreviewSetting = showMaskPreview
+            #endif
         }
         .onDisappear {
             viewModel.pauseSession()
@@ -345,6 +351,11 @@ struct ARMeasurementView: View {
         .onChange(of: appMode) { _, newMode in
             viewModel.appMode = newMode
         }
+        #if DEBUG
+        .onChange(of: showMaskPreview) { _, newValue in
+            viewModel.showMaskPreviewSetting = newValue
+        }
+        #endif
     }
 
 }

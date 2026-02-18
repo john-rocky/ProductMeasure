@@ -13,6 +13,9 @@ struct SettingsView: View {
     @AppStorage("showQualityIndicators") private var showQualityIndicators = true
     @AppStorage("pipelineVersion") private var pipelineVersion: PipelineVersion = .standard
     @AppStorage("showScanningTips") private var showScanningTips = true
+    #if DEBUG
+    @AppStorage("showMaskPreview") private var showMaskPreview = false
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -107,6 +110,17 @@ struct SettingsView: View {
                         .font(PMTheme.mono(11, weight: .bold))
                         .foregroundColor(PMTheme.cyan)
                 }
+
+                #if DEBUG
+                // Debug section
+                Section {
+                    Toggle("Show Mask Preview", isOn: $showMaskPreview)
+                } header: {
+                    Text("DEBUG")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
+                }
+                #endif
 
                 // Device info section
                 Section {

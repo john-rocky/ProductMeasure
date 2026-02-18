@@ -27,6 +27,7 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var showDebugDepth = false
     @Published var debugMaskImage: UIImage?
     @Published var debugDepthImage: UIImage?
+    var showMaskPreviewSetting = false
     #endif
 
     // Selected completed box for action icons
@@ -468,6 +469,9 @@ class ARMeasurementViewModel: ObservableObject {
                 // Store debug images
                 debugMaskImage = firstResult.debugMaskImage
                 debugDepthImage = firstResult.debugDepthImage
+                if showMaskPreviewSetting {
+                    showDebugMask = true
+                }
                 #endif
 
                 // Clear pending state
@@ -514,6 +518,9 @@ class ARMeasurementViewModel: ObservableObject {
         #if DEBUG
         debugMaskImage = firstResult.debugMaskImage
         debugDepthImage = firstResult.debugDepthImage
+        if showMaskPreviewSetting {
+            showDebugMask = true
+        }
         #endif
 
         // Clear pending state
@@ -613,6 +620,9 @@ class ARMeasurementViewModel: ObservableObject {
                 #if DEBUG
                 debugMaskImage = result.debugMaskImage
                 debugDepthImage = result.debugDepthImage
+                if showMaskPreviewSetting {
+                    showDebugMask = true
+                }
                 #endif
 
                 let floorY = result.detectedFloorY ?? raycastHitPosition?.y
