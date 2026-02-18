@@ -130,24 +130,29 @@ enum PMTheme {
 
     static func bracketInset(for level: StabilityLevel) -> CGFloat {
         switch level {
-        case .moving:   return 60
-        case .settling: return 52
+        case .moving:   return 70
+        case .settling: return 56
         case .stable:   return 44
-        case .locked:   return 36
+        case .locked:   return 34
         }
     }
 
     static func crosshairOpacity(for level: StabilityLevel) -> Double {
         switch level {
-        case .moving:   return 0.40
-        case .settling: return 0.55
+        case .moving:   return 0.30
+        case .settling: return 0.50
         case .stable:   return 0.75
         case .locked:   return 1.0
         }
     }
 
     static func bracketLineWidth(for level: StabilityLevel) -> CGFloat {
-        level == .locked ? 4.0 : 3.0
+        switch level {
+        case .moving:   return 2.0
+        case .settling: return 2.5
+        case .stable:   return 3.0
+        case .locked:   return 4.0
+        }
     }
 
     static let stabilitySettleTransition: Double = 0.6

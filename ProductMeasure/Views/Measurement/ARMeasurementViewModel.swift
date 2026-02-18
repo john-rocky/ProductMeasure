@@ -182,9 +182,16 @@ class ARMeasurementViewModel: ObservableObject {
         }
     }
 
-    /// Last camera position/forward for delta check (skip updates when stationary)
+    /// Last camera position/forward for billboard delta check (skip updates when stationary)
     private var lastFrameCameraPosition: SIMD3<Float> = .zero
     private var lastFrameCameraForward: SIMD3<Float> = .init(0, 0, -1)
+
+    /// Dedicated stability tracking (updated every frame, not gated by billboard guard)
+    private var lastStabilityCameraPosition: SIMD3<Float> = .zero
+    private var lastStabilityCameraForward: SIMD3<Float> = .init(0, 0, -1)
+    private var smoothedPosDelta: Float = 0
+    private var smoothedDirDelta: Float = 0
+    private var violationCount: Int = 0
 
     /// Called on each AR frame update
     private func onFrameUpdate(frame: ARFrame) {
@@ -199,13 +206,17 @@ class ARMeasurementViewModel: ObservableObject {
             frame.camera.transform.columns.2.z
         )
 
-        // Stability detection (runs every frame, before billboard guard)
-        let posDelta = simd_distance(cameraPosition, lastFrameCameraPosition)
-        let dirDelta = simd_distance(cameraForward, lastFrameCameraForward)
-        updateStabilityLevel(posDelta: posDelta, dirDelta: dirDelta)
+        // Stability detection (runs every frame with dedicated tracking, before billboard guard)
+        let rawPosDelta = simd_distance(cameraPosition, lastStabilityCameraPosition)
+        let rawDirDelta = simd_distance(cameraForward, lastStabilityCameraForward)
+        lastStabilityCameraPosition = cameraPosition
+        lastStabilityCameraForward = cameraForward
+        updateStabilityLevel(rawPosDelta: rawPosDelta, rawDirDelta: rawDirDelta)
 
         // Skip billboard updates when camera is nearly stationary
-        guard posDelta > 0.005 || dirDelta > 0.01 else { return }
+        let billboardPosDelta = simd_distance(cameraPosition, lastFrameCameraPosition)
+        let billboardDirDelta = simd_distance(cameraForward, lastFrameCameraForward)
+        guard billboardPosDelta > 0.005 || billboardDirDelta > 0.01 else { return }
         lastFrameCameraPosition = cameraPosition
         lastFrameCameraForward = cameraForward
 
@@ -261,20 +272,42 @@ class ARMeasurementViewModel: ObservableObject {
 
     // MARK: - Stability Detection
 
-    private func updateStabilityLevel(posDelta: Float, dirDelta: Float) {
-        let isStill = posDelta < AppConstants.stabilityPositionThreshold
-            && dirDelta < AppConstants.stabilityRotationThreshold
+    private func updateStabilityLevel(rawPosDelta: Float, rawDirDelta: Float) {
+        // EMA smoothing to filter sensor noise
+        let alpha = AppConstants.stabilityEMAAlpha
+        smoothedPosDelta = alpha * rawPosDelta + (1.0 - alpha) * smoothedPosDelta
+        smoothedDirDelta = alpha * rawDirDelta + (1.0 - alpha) * smoothedDirDelta
+
+        let isStill = smoothedPosDelta < AppConstants.stabilityPositionThreshold
+            && smoothedDirDelta < AppConstants.stabilityRotationThreshold
 
         if !isStill {
-            stabilityWindowStart = nil
-            if stabilityLevel != .moving {
-                stabilityLevel = .moving
-                lastHapticLevel = .moving
+            // Hysteresis: allow a few violation frames before demoting
+            violationCount += 1
+            if violationCount >= AppConstants.stabilityViolationTolerance {
+                // Gradual demotion: drop one level at a time
+                let demoted: StabilityLevel
+                switch stabilityLevel {
+                case .locked:   demoted = .stable
+                case .stable:   demoted = .settling
+                case .settling: demoted = .moving
+                case .moving:   demoted = .moving
+                }
+                if demoted != stabilityLevel {
+                    stabilityLevel = demoted
+                    lastHapticLevel = demoted
+                    // Reset window to allow re-progression from new level
+                    if demoted == .moving {
+                        stabilityWindowStart = nil
+                    }
+                }
+                violationCount = 0
             }
             return
         }
 
-        // Device is still — start or continue timing
+        // Device is still — reset violation counter, start or continue timing
+        violationCount = 0
         let now = Date()
         if stabilityWindowStart == nil {
             stabilityWindowStart = now
@@ -353,6 +386,9 @@ class ARMeasurementViewModel: ObservableObject {
         stabilityLevel = .moving
         stabilityWindowStart = nil
         lastHapticLevel = .moving
+        smoothedPosDelta = 0
+        smoothedDirDelta = 0
+        violationCount = 0
 
         // Two-tap flow: if we have a pending first-tap result, this is the second tap
         if let firstResult = pendingFirstTapResult {

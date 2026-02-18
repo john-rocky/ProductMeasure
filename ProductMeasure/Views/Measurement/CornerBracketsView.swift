@@ -17,7 +17,14 @@ struct CornerBracketsView: View {
     private var currentInset: CGFloat { PMTheme.bracketInset(for: stabilityLevel) }
     private var currentLineWidth: CGFloat { PMTheme.bracketLineWidth(for: stabilityLevel) }
     private var currentCrosshairOpacity: Double { PMTheme.crosshairOpacity(for: stabilityLevel) }
-    private var currentColor: Color { stabilityLevel == .locked ? PMTheme.stabilityLockedColor : PMTheme.cyan }
+    private var currentColor: Color {
+        switch stabilityLevel {
+        case .moving:   return PMTheme.cyan.opacity(0.55)
+        case .settling: return PMTheme.cyan.opacity(0.75)
+        case .stable:   return PMTheme.cyan.opacity(0.95)
+        case .locked:   return PMTheme.stabilityLockedColor
+        }
+    }
     private var isPulsing: Bool { stabilityLevel != .locked }
 
     @State private var pulseScale: CGFloat = 1.0

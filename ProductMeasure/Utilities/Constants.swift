@@ -79,11 +79,13 @@ enum AppConstants {
     static let extentsTrimPercent: Float = 0.01
 
     // MARK: - Stability Detection
-    static let stabilityPositionThreshold: Float = 0.004  // 4mm
-    static let stabilityRotationThreshold: Float = 0.008  // ~0.5°
-    static let stabilitySettlingTime: Double = 0.4
-    static let stabilityStableTime: Double = 0.9
-    static let stabilityLockedTime: Double = 1.6
+    static let stabilityPositionThreshold: Float = 0.007  // 7mm (accommodates hand tremor)
+    static let stabilityRotationThreshold: Float = 0.012  // ~0.7°
+    static let stabilitySettlingTime: Double = 0.3
+    static let stabilityStableTime: Double = 0.7
+    static let stabilityLockedTime: Double = 1.3
+    static let stabilityEMAAlpha: Float = 0.15            // Smooth over ~7 frames
+    static let stabilityViolationTolerance: Int = 4       // Frames before demotion
 
     // MARK: - Label Reader
     static let labelMinConfidence: Float = 0.6
