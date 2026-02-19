@@ -76,23 +76,30 @@ class InstanceSegmentationService {
             return nil
         }
 
-        // Sample tap depth for depth-aware instance selection
-        let tapDepth: Float? = depthMap.flatMap { Self.sampleDepthFromFrame(at: tapPoint, depthMap: $0) }
-
-        // Try to isolate the specific instance the user tapped (uses instanceMask label map)
-        let tappedInstanceId = findInstance(at: tapPoint, in: observation, depthMap: depthMap, tapDepth: tapDepth)
-
         let instancesToMask: IndexSet
-        if let instanceId = tappedInstanceId {
-            instancesToMask = IndexSet([instanceId])
+        let pipeline = AppConstants.currentPipelineVersion
+        if pipeline.useInstanceMaskLookup {
+            // Current behavior: instanceMask direct lookup + depth penalty
+            let tapDepth: Float? = depthMap.flatMap { Self.sampleDepthFromFrame(at: tapPoint, depthMap: $0) }
+            let tappedInstanceId = findInstance(at: tapPoint, in: observation, depthMap: depthMap, tapDepth: tapDepth)
+
+            if let instanceId = tappedInstanceId {
+                instancesToMask = IndexSet([instanceId])
 #if DEBUG
-            print("[Segmentation] Using tapped instance \(instanceId)")
+                print("[Segmentation] Using tapped instance \(instanceId)")
 #endif
+            } else {
+                // Fallback: use all instances — downstream depth/CC refinement will separate objects
+                instancesToMask = IndexSet(allInstances)
+#if DEBUG
+                print("[Segmentation] No instance matched tap point, falling back to ALL \(allInstances.count) instances")
+#endif
+            }
         } else {
-            // Fallback: use all instances — downstream depth/CC refinement will separate objects
+            // Legacy: use ALL instances, skip findInstance entirely
             instancesToMask = IndexSet(allInstances)
 #if DEBUG
-            print("[Segmentation] No instance matched tap point, falling back to ALL \(allInstances.count) instances")
+            print("[Segmentation] Legacy pipeline: using ALL \(allInstances.count) instances")
 #endif
         }
 

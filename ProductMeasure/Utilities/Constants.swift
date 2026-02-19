@@ -122,11 +122,15 @@ enum AppMode: String, CaseIterable, Codable {
 }
 
 enum PipelineVersion: String, CaseIterable, Codable {
+    case originalWarehouse = "originalWarehouse"  // 64c52d0^ (Feb 6-15)
+    case preSplit = "preSplit"                    // 32b7342 (Feb 17)
     case standard = "standard"
     case enhanced = "enhanced"
 
     var displayName: String {
         switch self {
+        case .originalWarehouse: return "v1 Original"
+        case .preSplit: return "v2 Pre-Split"
         case .standard: return "Standard"
         case .enhanced: return "Enhanced"
         }
@@ -134,8 +138,172 @@ enum PipelineVersion: String, CaseIterable, Codable {
 
     var description: String {
         switch self {
+        case .originalWarehouse: return "Original warehouse pipeline (Feb 6-15). Wide depth filter, area-only plane snap, no fine angle search."
+        case .preSplit: return "Post-accuracy-fix, pre-split (Feb 17). Tighter depth, fine angle search, weighted plane snap."
         case .standard: return "Default pipeline. Fixed 4cm clustering, 0.5° MABR step, raycast floor."
         case .enhanced: return "Depth-adaptive clustering (3-6cm), 0.2° MABR step, plane-based floor detection."
+        }
+    }
+
+    // MARK: - Segmentation
+
+    var useInstanceMaskLookup: Bool {
+        switch self {
+        case .originalWarehouse, .preSplit: return false
+        case .standard, .enhanced: return true
+        }
+    }
+
+    // MARK: - Pre-3D Refinement
+
+    var use2DConnectedComponent: Bool {
+        switch self {
+        case .originalWarehouse, .preSplit: return false
+        case .standard, .enhanced: return true
+        }
+    }
+
+    var useDepthConnectivity: Bool {
+        switch self {
+        case .originalWarehouse, .preSplit: return false
+        case .standard, .enhanced: return true
+        }
+    }
+
+    // MARK: - Depth Filter
+
+    var depthFilterPercent: Float {
+        switch self {
+        case .originalWarehouse: return 0.25
+        case .preSplit: return 0.20
+        case .standard, .enhanced: return 0.15
+        }
+    }
+
+    var depthFilterMin: Float {
+        switch self {
+        case .originalWarehouse: return 0.10
+        case .preSplit: return 0.07
+        case .standard, .enhanced: return 0.05
+        }
+    }
+
+    /// Max depth tolerance. nil = no upper clamp (v1 original behavior)
+    var depthFilterMax: Float? {
+        switch self {
+        case .originalWarehouse: return nil
+        case .preSplit: return 0.25
+        case .standard, .enhanced: return 0.15
+        }
+    }
+
+    /// When too few pixels pass depth filter: true = return original pixels, false = return empty
+    var depthFilterReturnsOriginalOnTooFew: Bool {
+        switch self {
+        case .originalWarehouse, .preSplit: return true
+        case .standard, .enhanced: return false
+        }
+    }
+
+    // MARK: - Proximity Filter
+
+    var proximityMinRadius: Float {
+        switch self {
+        case .originalWarehouse, .preSplit: return 1.0
+        case .standard, .enhanced: return 0.5
+        }
+    }
+
+    var proximitySpreadScale: Float {
+        switch self {
+        case .originalWarehouse, .preSplit: return 1.0
+        case .standard, .enhanced: return 0.8
+        }
+    }
+
+    // MARK: - Clustering
+
+    /// Fixed clustering threshold. nil = adaptive (enhanced only)
+    var clusteringFixedThreshold: Float? {
+        switch self {
+        case .originalWarehouse, .preSplit, .standard: return 0.04
+        case .enhanced: return nil
+        }
+    }
+
+    var clusteringMinPoints: Int {
+        switch self {
+        case .originalWarehouse, .preSplit: return 30
+        case .standard, .enhanced: return 15
+        }
+    }
+
+    var clusteringFallbackMinPoints: Int {
+        switch self {
+        case .originalWarehouse, .preSplit: return 10
+        case .standard, .enhanced: return 8
+        }
+    }
+
+    var clusteringGuardMinPoints: Int {
+        switch self {
+        case .originalWarehouse, .preSplit: return 20
+        case .standard, .enhanced: return 12
+        }
+    }
+
+    // MARK: - Bounding Box Estimation
+
+    var useFineAngleSearch: Bool {
+        switch self {
+        case .originalWarehouse: return false
+        case .preSplit, .standard, .enhanced: return true
+        }
+    }
+
+    var mabrStep: Float {
+        switch self {
+        case .originalWarehouse, .preSplit, .standard:
+            return 0.5 * .pi / 180.0
+        case .enhanced:
+            return 0.2 * .pi / 180.0
+        }
+    }
+
+    var useWeightedPlaneSnap: Bool {
+        switch self {
+        case .originalWarehouse: return false
+        case .preSplit, .standard, .enhanced: return true
+        }
+    }
+
+    var boxRefinementIterations: Int {
+        switch self {
+        case .originalWarehouse: return 1
+        case .preSplit, .standard, .enhanced: return 2
+        }
+    }
+
+    // MARK: - Floor Detection
+
+    var useARPlaneFloor: Bool {
+        switch self {
+        case .originalWarehouse, .preSplit: return false
+        case .standard, .enhanced: return true
+        }
+    }
+
+    var floorSnapDefault: Float {
+        switch self {
+        case .originalWarehouse, .preSplit: return 0.05
+        case .standard, .enhanced: return 0.15
+        }
+    }
+
+    var floorSnapWithPlane: Float {
+        switch self {
+        case .originalWarehouse, .preSplit: return 0.05
+        case .standard, .enhanced: return 0.25
         }
     }
 }
@@ -362,6 +530,8 @@ extension MeasurementMode: RawRepresentable {
 extension PipelineVersion: RawRepresentable {
     public init?(rawValue: String) {
         switch rawValue {
+        case "originalWarehouse": self = .originalWarehouse
+        case "preSplit": self = .preSplit
         case "standard": self = .standard
         case "enhanced": self = .enhanced
         default: return nil

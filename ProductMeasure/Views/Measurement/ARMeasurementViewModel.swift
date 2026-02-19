@@ -67,9 +67,10 @@ class ARMeasurementViewModel: ObservableObject {
 
     /// Floor snap threshold: wider when backed by a detected horizontal plane
     private var floorSnapThreshold: Float {
+        let pipeline = AppConstants.currentPipelineVersion
         return isFloorPlaneBacked
-            ? AppConstants.floorSnapThresholdWithPlane
-            : AppConstants.floorSnapThresholdDefault
+            ? pipeline.floorSnapWithPlane
+            : pipeline.floorSnapDefault
     }
 
     // Label reader state

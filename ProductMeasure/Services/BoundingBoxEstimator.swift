@@ -49,17 +49,22 @@ class BoundingBoxEstimator {
         let xAxis: SIMD3<Float>
         let zAxis: SIMD3<Float>
 
+        let pipeline = AppConstants.currentPipelineVersion
+
         if horizontalPoints.count >= 20 {
             let hull = convexHull2D(horizontalPoints)
             if hull.count >= 3 {
                 var mabrAngle = minimumAreaBoundingRect(hull: hull)
-                mabrAngle = fineAngleSearch(baseAngle: mabrAngle, hull: hull)
+                if pipeline.useFineAngleSearch {
+                    mabrAngle = fineAngleSearch(baseAngle: mabrAngle, hull: hull)
+                }
 
                 // Snap to vertical plane if one is nearby and aligned
                 mabrAngle = snapToVerticalPlane(
                     angle: mabrAngle,
                     boxCenter: centroid,
-                    verticalPlaneAnchors: verticalPlaneAnchors
+                    verticalPlaneAnchors: verticalPlaneAnchors,
+                    useWeightedScoring: pipeline.useWeightedPlaneSnap
                 )
 
                 let cosA = cos(mabrAngle)
@@ -210,13 +215,7 @@ class BoundingBoxEstimator {
         var bestArea = computeRotatedArea(hull: hull, angle: baseAngle)
 
         let range = AppConstants.mabrFineSearchRange
-        let step: Float
-        switch AppConstants.currentPipelineVersion {
-        case .standard:
-            step = AppConstants.mabrFineSearchStep
-        case .enhanced:
-            step = AppConstants.mabrFineSearchStepEnhanced
-        }
+        let step = AppConstants.currentPipelineVersion.mabrStep
 
         var testAngle = baseAngle - range
         while testAngle <= baseAngle + range {
@@ -260,7 +259,8 @@ class BoundingBoxEstimator {
     ) -> BoundingBox3D {
         let margin = AppConstants.boxRefinementMargin
         let minRetainRatio = AppConstants.boxRefinementMinRetainRatio
-        let iterations = AppConstants.boxRefinementIterations
+        let pipeline = AppConstants.currentPipelineVersion
+        let iterations = pipeline.boxRefinementIterations
 
         var currentBox = initialBox
 
@@ -290,11 +290,14 @@ class BoundingBoxEstimator {
 
             // Use filtered points for angle refinement only
             var angle = minimumAreaBoundingRect(hull: hull)
-            angle = fineAngleSearch(baseAngle: angle, hull: hull)
+            if pipeline.useFineAngleSearch {
+                angle = fineAngleSearch(baseAngle: angle, hull: hull)
+            }
             angle = snapToVerticalPlane(
                 angle: angle,
                 boxCenter: centroid,
-                verticalPlaneAnchors: verticalPlaneAnchors
+                verticalPlaneAnchors: verticalPlaneAnchors,
+                useWeightedScoring: pipeline.useWeightedPlaneSnap
             )
 
             let cosA = cos(angle)
@@ -323,11 +326,13 @@ class BoundingBoxEstimator {
     // MARK: - AR Plane-Assisted Orientation Snap
 
     /// Snap MABR angle to a nearby vertical plane's orientation if closely aligned
-    /// Uses weighted scoring: proximity (50%) + alignment (30%) + area (20%)
+    /// Uses weighted scoring: proximity (50%) + alignment (30%) + area (20%) when useWeightedScoring is true
+    /// Falls back to area-only scoring when useWeightedScoring is false (v1 original behavior)
     private func snapToVerticalPlane(
         angle: Float,
         boxCenter: SIMD3<Float>,
-        verticalPlaneAnchors: [ARPlaneAnchor]
+        verticalPlaneAnchors: [ARPlaneAnchor],
+        useWeightedScoring: Bool = true
     ) -> Float {
         guard !verticalPlaneAnchors.isEmpty else { return angle }
 
@@ -337,7 +342,7 @@ class BoundingBoxEstimator {
         var bestPlaneAngle: Float?
         var bestScore: Float = 0
 
-        // Find maximum plane area for normalization
+        // Find maximum plane area for normalization (used in weighted mode)
         let maxPlaneArea = verticalPlaneAnchors.map { $0.extent.x * $0.extent.z }.max() ?? 1.0
 
         for anchor in verticalPlaneAnchors {
@@ -363,10 +368,6 @@ class BoundingBoxEstimator {
 
             let planeArea = anchor.extent.x * anchor.extent.z
 
-            // Score components
-            let proximityScore = 1.0 - (dist / maxDistance)
-            let areaScore = planeArea / maxPlaneArea
-
             for offset in [Float(0), .pi / 2, -.pi / 2, .pi] {
                 var diff = (angle + offset) - planeAngle
                 // Normalize to [-pi, pi]
@@ -375,11 +376,20 @@ class BoundingBoxEstimator {
 
                 guard abs(diff) < snapThreshold else { continue }
 
-                let alignmentScore = 1.0 - abs(diff) / snapThreshold
+                let score: Float
+                if useWeightedScoring {
+                    // Current: weighted scoring (proximity + alignment + area)
+                    let proximityScore = 1.0 - (dist / maxDistance)
+                    let alignmentScore = 1.0 - abs(diff) / snapThreshold
+                    let areaScore = planeArea / maxPlaneArea
 
-                let score = proximityScore * AppConstants.planeSnapProximityWeight +
+                    score = proximityScore * AppConstants.planeSnapProximityWeight +
                             alignmentScore * AppConstants.planeSnapAlignmentWeight +
                             areaScore * AppConstants.planeSnapAreaWeight
+                } else {
+                    // v1 original: pick by largest plane area only
+                    score = planeArea
+                }
 
                 if score > bestScore {
                     bestPlaneAngle = planeAngle - offset

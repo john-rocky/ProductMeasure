@@ -140,20 +140,32 @@ class MeasurementCalculator {
             print("[Calculator] Found \(maskedPixels.count) masked pixels before depth filtering")
 #endif
 
+            let pipeline = AppConstants.currentPipelineVersion
+
             // 2b. Extract 2D connected component around tap point (separate non-touching objects)
-            let ccPixels = extractConnectedComponent(
-                maskedPixels: maskedPixels,
-                seedPoint: normalizedTap,
-                imageSize: imageSize
-            )
+            let ccPixels: [(x: Int, y: Int)]
+            if pipeline.use2DConnectedComponent {
+                ccPixels = extractConnectedComponent(
+                    maskedPixels: maskedPixels,
+                    seedPoint: normalizedTap,
+                    imageSize: imageSize
+                )
+            } else {
+                ccPixels = maskedPixels
+            }
 
             // 2c. Refine mask by depth connectivity — separate touching objects
-            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
-                maskedPixels: ccPixels,
-                frame: frame,
-                seedPoint: normalizedTap,
-                imageSize: imageSize
-            )
+            let connectedPixels: [(x: Int, y: Int)]
+            if pipeline.useDepthConnectivity {
+                connectedPixels = refineMaskedPixelsByDepthConnectivity(
+                    maskedPixels: ccPixels,
+                    frame: frame,
+                    seedPoint: normalizedTap,
+                    imageSize: imageSize
+                )
+            } else {
+                connectedPixels = ccPixels
+            }
 
             // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
             let filteredPixels = filterMaskedPixelsByDepth(
@@ -222,9 +234,9 @@ class MeasurementCalculator {
                     return nil
                 }
 
-                // Use adaptive radius based on point cloud spread, minimum 1m
+                // Use adaptive radius based on point cloud spread
                 let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
-                let initialRadius: Float = max(0.5, pointSpread * 0.8)
+                let initialRadius: Float = max(pipeline.proximityMinRadius, pointSpread * pipeline.proximitySpreadScale)
                 var filteredPoints = filterPointsByProximity(
                     points: pointCloud.points,
                     center: hitPosition,
@@ -235,7 +247,9 @@ class MeasurementCalculator {
 #endif
 
                 // Use clustering to find the connected object - this separates the tapped object from others
-                if filteredPoints.count >= 15 {
+                let clusterMin = pipeline.clusteringMinPoints
+                let fallbackMin = pipeline.clusteringFallbackMinPoints
+                if filteredPoints.count >= clusterMin {
                     let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
 #if DEBUG
@@ -246,7 +260,7 @@ class MeasurementCalculator {
                         points: filteredPoints,
                         quality: pointCloud.quality
                     )
-                } else if filteredPoints.count >= 8 {
+                } else if filteredPoints.count >= fallbackMin {
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
                         quality: pointCloud.quality
@@ -307,8 +321,10 @@ class MeasurementCalculator {
             // Store point cloud for Fit functionality
             result.pointCloud = pointCloud.points
 
-            // Detect floor from horizontal plane
-            result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
+            // Detect floor from horizontal plane (current pipelines only)
+            if pipeline.useARPlaneFloor {
+                result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
+            }
 
             // Attach debug info (images only, not point cloud to save memory)
             #if DEBUG
@@ -398,20 +414,32 @@ class MeasurementCalculator {
             print("[Calculator] Found \(maskedPixels.count) masked pixels")
 #endif
 
+            let pipeline = AppConstants.currentPipelineVersion
+
             // 3b. Extract 2D connected component around box center
-            let ccPixels = extractConnectedComponent(
-                maskedPixels: maskedPixels,
-                seedPoint: normalizedCenter,
-                imageSize: imageSize
-            )
+            let ccPixels: [(x: Int, y: Int)]
+            if pipeline.use2DConnectedComponent {
+                ccPixels = extractConnectedComponent(
+                    maskedPixels: maskedPixels,
+                    seedPoint: normalizedCenter,
+                    imageSize: imageSize
+                )
+            } else {
+                ccPixels = maskedPixels
+            }
 
             // 3c. Refine mask by depth connectivity — separate touching objects
-            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
-                maskedPixels: ccPixels,
-                frame: frame,
-                seedPoint: normalizedCenter,
-                imageSize: imageSize
-            )
+            let connectedPixels: [(x: Int, y: Int)]
+            if pipeline.useDepthConnectivity {
+                connectedPixels = refineMaskedPixelsByDepthConnectivity(
+                    maskedPixels: ccPixels,
+                    frame: frame,
+                    seedPoint: normalizedCenter,
+                    imageSize: imageSize
+                )
+            } else {
+                connectedPixels = ccPixels
+            }
 
             // 4. Apply depth filtering based on box center
             let depthFilteredPixels = filterMaskedPixelsByDepth(
@@ -478,7 +506,7 @@ class MeasurementCalculator {
                 }
 
                 let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
-                let initialRadius: Float = max(0.5, pointSpread * 0.8)
+                let initialRadius: Float = max(pipeline.proximityMinRadius, pointSpread * pipeline.proximitySpreadScale)
                 var filteredPoints = filterPointsByProximity(
                     points: pointCloud.points,
                     center: hitPosition,
@@ -488,7 +516,9 @@ class MeasurementCalculator {
                 print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
 #endif
 
-                if filteredPoints.count >= 15 {
+                let clusterMin = pipeline.clusteringMinPoints
+                let fallbackMin = pipeline.clusteringFallbackMinPoints
+                if filteredPoints.count >= clusterMin {
                     let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
 #if DEBUG
@@ -499,7 +529,7 @@ class MeasurementCalculator {
                         points: filteredPoints,
                         quality: pointCloud.quality
                     )
-                } else if filteredPoints.count >= 8 {
+                } else if filteredPoints.count >= fallbackMin {
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
                         quality: pointCloud.quality
@@ -559,8 +589,10 @@ class MeasurementCalculator {
             result.debugMaskImage = debugMaskImage
             #endif
 
-            // Detect floor from horizontal plane
-            result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
+            // Detect floor from horizontal plane (current pipelines only)
+            if pipeline.useARPlaneFloor {
+                result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
+            }
 
             return result
         }.value
@@ -762,18 +794,30 @@ class MeasurementCalculator {
             )
             #endif
 
+            let pipeline = AppConstants.currentPipelineVersion
+
             // 2b. Extract 2D connected component around tap point
-            let ccPixels = extractConnectedComponent(
-                maskedPixels: maskedPixels,
-                seedPoint: normalizedTap,
-                imageSize: imageSize
-            )
+            let ccPixels: [(x: Int, y: Int)]
+            if pipeline.use2DConnectedComponent {
+                ccPixels = extractConnectedComponent(
+                    maskedPixels: maskedPixels,
+                    seedPoint: normalizedTap,
+                    imageSize: imageSize
+                )
+            } else {
+                ccPixels = maskedPixels
+            }
 
             // 2c. Refine mask by depth connectivity
-            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
-                maskedPixels: ccPixels, frame: frame,
-                seedPoint: normalizedTap, imageSize: imageSize
-            )
+            let connectedPixels: [(x: Int, y: Int)]
+            if pipeline.useDepthConnectivity {
+                connectedPixels = refineMaskedPixelsByDepthConnectivity(
+                    maskedPixels: ccPixels, frame: frame,
+                    seedPoint: normalizedTap, imageSize: imageSize
+                )
+            } else {
+                connectedPixels = ccPixels
+            }
 
             // 3. Depth filtering
             let filteredPixels = filterMaskedPixelsByDepth(
@@ -800,18 +844,20 @@ class MeasurementCalculator {
                 if nearestDistance > 2.0 { return nil }
 
                 let pointSpread = Self.estimatePointSpread(points: pointCloud.points)
-                let initialRadius: Float = max(0.5, pointSpread * 0.8)
+                let initialRadius: Float = max(pipeline.proximityMinRadius, pointSpread * pipeline.proximitySpreadScale)
                 var filteredPoints = filterPointsByProximity(
                     points: pointCloud.points, center: hitPosition, maxDistance: initialRadius
                 )
 
-                if filteredPoints.count >= 15 {
+                let clusterMin = pipeline.clusteringMinPoints
+                let fallbackMin = pipeline.clusteringFallbackMinPoints
+                if filteredPoints.count >= clusterMin {
                     let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints, quality: pointCloud.quality
                     )
-                } else if filteredPoints.count >= 8 {
+                } else if filteredPoints.count >= fallbackMin {
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints, quality: pointCloud.quality
                     )
@@ -916,12 +962,17 @@ class MeasurementCalculator {
         }
 
         // Filter pixels by depth - keep those within a tolerance of tap depth
-        // Use configured percent tolerance, clamped to [minTolerance, maxTolerance]
-        let percentTolerance = tapDepth * AppConstants.depthFilterPercentTolerance
-        let depthTolerance = min(max(percentTolerance, AppConstants.depthFilterMinTolerance), AppConstants.depthFilterMaxTolerance)
+        let pipeline = AppConstants.currentPipelineVersion
+        let percentTolerance = tapDepth * pipeline.depthFilterPercent
+        let depthTolerance: Float
+        if let maxTol = pipeline.depthFilterMax {
+            depthTolerance = min(max(percentTolerance, pipeline.depthFilterMin), maxTol)
+        } else {
+            depthTolerance = max(percentTolerance, pipeline.depthFilterMin)  // v1: no max clamp
+        }
 
 #if DEBUG
-        print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m")
+        print("[DepthFilter] Depth tolerance: ±\(depthTolerance)m (percent=\(pipeline.depthFilterPercent), min=\(pipeline.depthFilterMin), max=\(pipeline.depthFilterMax as Any))")
 #endif
 
         var filteredPixels: [(x: Int, y: Int)] = []
@@ -950,13 +1001,24 @@ class MeasurementCalculator {
         print("[DepthFilter] Filtered from \(maskedPixels.count) to \(filteredPixels.count) pixels")
 #endif
 
-        // Proportional minimum: at least 5% of original, but no fewer than 20 pixels
-        let minRequired = max(20, maskedPixels.count / 20)
-        if filteredPixels.count < minRequired {
+        // Safety valve: behavior differs by pipeline version
+        if pipeline.depthFilterReturnsOriginalOnTooFew {
+            // Legacy: if too few pass filter, return original pixels
+            if filteredPixels.count < 100 {
 #if DEBUG
-            print("[DepthFilter] Too few pixels after filtering (\(filteredPixels.count) < \(minRequired)), returning empty")
+                print("[DepthFilter] Too few pixels after filtering (\(filteredPixels.count) < 100), returning original \(maskedPixels.count) pixels")
 #endif
-            return []
+                return maskedPixels
+            }
+        } else {
+            // Current: proportional minimum, return empty on failure
+            let minRequired = max(20, maskedPixels.count / 20)
+            if filteredPixels.count < minRequired {
+#if DEBUG
+                print("[DepthFilter] Too few pixels after filtering (\(filteredPixels.count) < \(minRequired)), returning empty")
+#endif
+                return []
+            }
         }
 
         return filteredPixels
@@ -1135,7 +1197,8 @@ class MeasurementCalculator {
     /// Extract the main cluster of points around the center using spatial-hash flood-fill
     /// This helps isolate the tapped object from other nearby objects
     private func extractMainCluster(points: [SIMD3<Float>], center: SIMD3<Float>, cameraPosition: SIMD3<Float>? = nil) -> [SIMD3<Float>] {
-        guard points.count > 12 else { return points }
+        let pipeline = AppConstants.currentPipelineVersion
+        guard points.count > pipeline.clusteringGuardMinPoints else { return points }
 
 #if DEBUG
         print("[Clustering] Starting with \(points.count) points")
@@ -1143,10 +1206,10 @@ class MeasurementCalculator {
 
         // Determine clustering threshold based on pipeline version
         let neighborThreshold: Float
-        switch AppConstants.currentPipelineVersion {
-        case .standard:
-            neighborThreshold = 0.04
-        case .enhanced:
+        if let fixed = pipeline.clusteringFixedThreshold {
+            neighborThreshold = fixed
+        } else {
+            // Adaptive (enhanced only)
             let medianDepth = estimateMedianDepth(points: points, cameraPosition: cameraPosition)
             let adaptive = AppConstants.clusteringBaseOffset + medianDepth * AppConstants.clusteringDepthScale
             neighborThreshold = min(max(adaptive, AppConstants.clusteringMinThreshold), AppConstants.clusteringMaxThreshold)
@@ -1218,9 +1281,9 @@ class MeasurementCalculator {
 #endif
 
         // If cluster is too small, return original
-        if clusterPoints.count < 12 {
+        if clusterPoints.count < pipeline.clusteringGuardMinPoints {
 #if DEBUG
-            print("[Clustering] Cluster too small, returning original points")
+            print("[Clustering] Cluster too small (\(clusterPoints.count) < \(pipeline.clusteringGuardMinPoints)), returning original points")
 #endif
             return points
         }
