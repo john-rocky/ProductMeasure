@@ -110,7 +110,8 @@ class MeasurementCalculator {
         // 1. Perform instance segmentation
         guard let segmentation = try await segmentationService.segmentInstance(
             in: frame.capturedImage,
-            at: normalizedTap
+            at: normalizedTap,
+            depthMap: frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
         ) else {
 #if DEBUG
             print("[Calculator] Segmentation failed - no instance found")
@@ -139,9 +140,16 @@ class MeasurementCalculator {
             print("[Calculator] Found \(maskedPixels.count) masked pixels before depth filtering")
 #endif
 
-            // 2b. Refine mask by depth connectivity — separate touching objects
-            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
+            // 2b. Extract 2D connected component around tap point (separate non-touching objects)
+            let ccPixels = extractConnectedComponent(
                 maskedPixels: maskedPixels,
+                seedPoint: normalizedTap,
+                imageSize: imageSize
+            )
+
+            // 2c. Refine mask by depth connectivity — separate touching objects
+            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
+                maskedPixels: ccPixels,
                 frame: frame,
                 seedPoint: normalizedTap,
                 imageSize: imageSize
@@ -390,9 +398,16 @@ class MeasurementCalculator {
             print("[Calculator] Found \(maskedPixels.count) masked pixels")
 #endif
 
-            // 3b. Refine mask by depth connectivity — separate touching objects
-            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
+            // 3b. Extract 2D connected component around box center
+            let ccPixels = extractConnectedComponent(
                 maskedPixels: maskedPixels,
+                seedPoint: normalizedCenter,
+                imageSize: imageSize
+            )
+
+            // 3c. Refine mask by depth connectivity — separate touching objects
+            let connectedPixels = refineMaskedPixelsByDepthConnectivity(
+                maskedPixels: ccPixels,
                 frame: frame,
                 seedPoint: normalizedCenter,
                 imageSize: imageSize
@@ -721,7 +736,9 @@ class MeasurementCalculator {
 
         // 1. Segmentation
         guard let segmentation = try await segmentationService.segmentInstance(
-            in: frame.capturedImage, at: normalizedTap
+            in: frame.capturedImage,
+            at: normalizedTap,
+            depthMap: frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
         ) else {
 #if DEBUG
             print("[Refine] Segmentation failed")
@@ -745,9 +762,16 @@ class MeasurementCalculator {
             )
             #endif
 
-            // 2b. Refine mask by depth connectivity
+            // 2b. Extract 2D connected component around tap point
+            let ccPixels = extractConnectedComponent(
+                maskedPixels: maskedPixels,
+                seedPoint: normalizedTap,
+                imageSize: imageSize
+            )
+
+            // 2c. Refine mask by depth connectivity
             let connectedPixels = refineMaskedPixelsByDepthConnectivity(
-                maskedPixels: maskedPixels, frame: frame,
+                maskedPixels: ccPixels, frame: frame,
                 seedPoint: normalizedTap, imageSize: imageSize
             )
 
@@ -1245,6 +1269,77 @@ class MeasurementCalculator {
         print("[Calculator] Horizontal plane floor detected: y=\(floorY) (xzDist=\(best.xzDist)m, candidates=\(candidatePlanes.count))")
 #endif
         return floorY
+    }
+
+    /// Extract the 2D connected component containing the seed point from the mask.
+    /// Uses spatial-hash flood-fill (no depth checks) to separate non-touching objects
+    /// that Vision may have merged into a single instance.
+    private func extractConnectedComponent(
+        maskedPixels: [(x: Int, y: Int)],
+        seedPoint: CGPoint,
+        imageSize: CGSize
+    ) -> [(x: Int, y: Int)] {
+        guard maskedPixels.count > 10 else { return maskedPixels }
+
+        let cellSize = AppConstants.depthConnectivityCellSize
+        struct Cell: Hashable { let x, y: Int }
+        var grid: [Cell: [Int]] = [:]
+        grid.reserveCapacity(maskedPixels.count / 4)
+        for (i, px) in maskedPixels.enumerated() {
+            let cell = Cell(x: px.x / cellSize, y: px.y / cellSize)
+            grid[cell, default: []].append(i)
+        }
+
+        // Find seed: closest masked pixel to seedPoint (in image coordinates)
+        let seedImgX = Int(seedPoint.x * imageSize.width)
+        let seedImgY = Int(seedPoint.y * imageSize.height)
+        var seedIdx = 0
+        var minDist = Int.max
+        for (i, px) in maskedPixels.enumerated() {
+            let d = abs(px.x - seedImgX) + abs(px.y - seedImgY)
+            if d < minDist { minDist = d; seedIdx = i }
+        }
+
+        // Flood-fill through spatial hash neighbors (pure 2D, no depth)
+        var visited = [Bool](repeating: false, count: maskedPixels.count)
+        var frontier: [Int] = [seedIdx]
+        visited[seedIdx] = true
+        var result: [Int] = [seedIdx]
+
+        while !frontier.isEmpty {
+            let idx = frontier.removeLast()
+            let px = maskedPixels[idx]
+            let cx = px.x / cellSize
+            let cy = px.y / cellSize
+
+            for dx in -1...1 {
+                for dy in -1...1 {
+                    guard let neighbors = grid[Cell(x: cx + dx, y: cy + dy)] else { continue }
+                    for ni in neighbors {
+                        if visited[ni] { continue }
+                        visited[ni] = true
+                        frontier.append(ni)
+                        result.append(ni)
+                    }
+                }
+            }
+        }
+
+        let connected = result.map { maskedPixels[$0] }
+
+#if DEBUG
+        print("[2DCC] Connected component: \(connected.count) of \(maskedPixels.count) pixels")
+#endif
+
+        // Safety: if less than 5% retained, skip (mask might be sparse)
+        if connected.count < maskedPixels.count / 20 {
+#if DEBUG
+            print("[2DCC] Too few pixels retained (\(connected.count)), skipping 2D CC")
+#endif
+            return maskedPixels
+        }
+
+        return connected
     }
 
     /// Estimate the spatial spread (max extent) of a point cloud

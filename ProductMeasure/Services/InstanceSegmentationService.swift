@@ -36,7 +36,8 @@ class InstanceSegmentationService {
     /// - Returns: SegmentationResult if an instance is found at the tap point
     func segmentInstance(
         in pixelBuffer: CVPixelBuffer,
-        at tapPoint: CGPoint
+        at tapPoint: CGPoint,
+        depthMap: CVPixelBuffer? = nil
     ) async throws -> SegmentationResult? {
 #if DEBUG
         print("[Segmentation] Starting segmentation at point: \(tapPoint)")
@@ -75,8 +76,11 @@ class InstanceSegmentationService {
             return nil
         }
 
+        // Sample tap depth for depth-aware instance selection
+        let tapDepth: Float? = depthMap.flatMap { Self.sampleDepthFromFrame(at: tapPoint, depthMap: $0) }
+
         // Try to isolate the specific instance the user tapped
-        let tappedInstanceId = findInstance(at: tapPoint, in: observation, from: handler)
+        let tappedInstanceId = findInstance(at: tapPoint, in: observation, from: handler, depthMap: depthMap, tapDepth: tapDepth)
 
         let instancesToMask: IndexSet
         if let instanceId = tappedInstanceId {
@@ -84,12 +88,17 @@ class InstanceSegmentationService {
 #if DEBUG
             print("[Segmentation] Using tapped instance \(instanceId)")
 #endif
-        } else {
-            // Fallback: use all instances — depth connectivity refinement will separate objects
-            instancesToMask = IndexSet(allInstances)
+        } else if let nearestId = findNearestInstance(to: tapPoint, in: observation, from: handler) {
+            // Fallback: select the instance whose centroid is closest to the tap point
+            instancesToMask = IndexSet([nearestId])
 #if DEBUG
-            print("[Segmentation] No instance at tap point, falling back to ALL \(allInstances.count) instances")
+            print("[Segmentation] No instance at tap point, using nearest instance \(nearestId)")
 #endif
+        } else {
+#if DEBUG
+            print("[Segmentation] No instances could be matched to tap point")
+#endif
+            return nil
         }
 
         // Generate mask for selected instance(s)
@@ -206,21 +215,24 @@ class InstanceSegmentationService {
     /// Find which instance the user tapped by generating per-instance masks
     /// and checking coverage near the tap point.
     /// Uses generateMaskedImage (proven reliable) instead of generateScaledMaskForImage.
+    /// Optionally applies depth penalty when tapDepth is available.
     private func findInstance(
         at point: CGPoint,
         in observation: VNInstanceMaskObservation,
-        from handler: VNImageRequestHandler
+        from handler: VNImageRequestHandler,
+        depthMap: CVPixelBuffer? = nil,
+        tapDepth: Float? = nil
     ) -> Int? {
         let allInstances = observation.allInstances
         guard !allInstances.isEmpty else { return nil }
 
 #if DEBUG
-        print("[Segmentation] Finding instance at normalized point: \(point)")
+        print("[Segmentation] Finding instance at normalized point: \(point), tapDepth: \(tapDepth ?? -1)")
         print("[Segmentation] All instances: \(Array(allInstances))")
 #endif
 
         var bestInstance: Int? = nil
-        var bestScore = 0
+        var bestScore: Float = 0
 
         for instanceId in allInstances {
             guard let mask = try? observation.generateMaskedImage(
@@ -254,7 +266,7 @@ class InstanceSegmentationService {
             // Search radius proportional to mask size (~5%)
             let searchRadius = max(10, max(width, height) / 20)
             let step = max(1, searchRadius / 15)
-            var score = 0
+            var proximityScore: Float = 0
 
             for dy in Swift.stride(from: -searchRadius, through: searchRadius, by: step) {
                 for dx in Swift.stride(from: -searchRadius, through: searchRadius, by: step) {
@@ -272,17 +284,32 @@ class InstanceSegmentationService {
                     if value > 0 {
                         // Weight closer pixels higher (inverse Manhattan distance)
                         let dist = max(1, abs(dx) + abs(dy))
-                        score += searchRadius / dist
+                        proximityScore += Float(searchRadius) / Float(dist)
                     }
                 }
             }
 
+            // Apply depth penalty: reduce score if instance median depth differs from tap depth
+            var depthPenalty: Float = 1.0
+            if let tapD = tapDepth, tapD > 0, let dm = depthMap {
+                let instanceDepth = Self.sampleInstanceMedianDepth(
+                    mask: mask, depthMap: dm, point: point
+                )
+                if let instD = instanceDepth, instD > 0 {
+                    let relDiff = abs(instD - tapD) / tapD
+                    // Up to 30% penalty for depth mismatch (1.0 at 0% diff, 0.7 at 30%+ diff)
+                    depthPenalty = max(0.7, 1.0 - relDiff)
+                }
+            }
+
+            let finalScore = proximityScore * depthPenalty
+
 #if DEBUG
-            print("[Segmentation] Instance \(instanceId): score=\(score) near tap (\(cx), \(cy)) in \(width)x\(height)")
+            print("[Segmentation] Instance \(instanceId): proximityScore=\(proximityScore), depthPenalty=\(depthPenalty), finalScore=\(finalScore) near tap (\(cx), \(cy)) in \(width)x\(height)")
 #endif
 
-            if score > bestScore {
-                bestScore = score
+            if finalScore > bestScore {
+                bestScore = finalScore
                 bestInstance = instanceId
             }
         }
@@ -297,6 +324,166 @@ class InstanceSegmentationService {
 
         return bestInstance
     }
+
+    /// Find the instance whose coarse mask centroid is closest to the given point.
+    /// Used as a fallback when findInstance() fails to find any instance near the tap.
+    private func findNearestInstance(
+        to point: CGPoint,
+        in observation: VNInstanceMaskObservation,
+        from handler: VNImageRequestHandler
+    ) -> Int? {
+        let allInstances = observation.allInstances
+        guard !allInstances.isEmpty else { return nil }
+
+        var bestInstance: Int? = nil
+        var bestDistance = CGFloat.infinity
+
+        for instanceId in allInstances {
+            guard let mask = try? observation.generateMaskedImage(
+                ofInstances: IndexSet([instanceId]),
+                from: handler,
+                croppedToInstancesExtent: false
+            ) else { continue }
+
+            CVPixelBufferLockBaseAddress(mask, .readOnly)
+            defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
+
+            let width = CVPixelBufferGetWidth(mask)
+            let height = CVPixelBufferGetHeight(mask)
+            guard let base = CVPixelBufferGetBaseAddress(mask) else { continue }
+            let bytesPerRow = CVPixelBufferGetBytesPerRow(mask)
+            let pixelFormat = CVPixelBufferGetPixelFormatType(mask)
+            let buffer = base.assumingMemoryBound(to: UInt8.self)
+            let bytesPerPixel = (pixelFormat == kCVPixelFormatType_32BGRA ||
+                                 pixelFormat == kCVPixelFormatType_32ARGB) ? 4 : 1
+
+            // Coarse centroid: sample every size/40 pixels
+            let step = max(1, max(width, height) / 40)
+            var sumX: Double = 0, sumY: Double = 0, count: Double = 0
+            for y in Swift.stride(from: 0, to: height, by: step) {
+                for x in Swift.stride(from: 0, to: width, by: step) {
+                    let value: UInt8
+                    if bytesPerPixel == 4 {
+                        value = buffer[y * bytesPerRow + x * 4 + 3]
+                    } else {
+                        value = buffer[y * bytesPerRow + x]
+                    }
+                    if value > 0 {
+                        sumX += Double(x)
+                        sumY += Double(y)
+                        count += 1
+                    }
+                }
+            }
+
+            guard count > 0 else { continue }
+            let centroidX = CGFloat(sumX / count) / CGFloat(width)
+            let centroidY = CGFloat(sumY / count) / CGFloat(height)
+
+            let dx = centroidX - point.x
+            let dy = centroidY - point.y
+            let dist = dx * dx + dy * dy
+
+#if DEBUG
+            print("[Segmentation] Instance \(instanceId) centroid: (\(centroidX), \(centroidY)), dist²=\(dist)")
+#endif
+
+            if dist < bestDistance {
+                bestDistance = dist
+                bestInstance = instanceId
+            }
+        }
+
+#if DEBUG
+        if let best = bestInstance {
+            print("[Segmentation] Nearest instance: \(best) (dist²=\(bestDistance))")
+        }
+#endif
+
+        return bestInstance
+    }
+
+    // MARK: - Depth Helpers
+
+    /// Sample depth at a normalized point from an ARFrame's depth map
+    static func sampleDepthFromFrame(at point: CGPoint, depthMap: CVPixelBuffer) -> Float? {
+        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
+
+        let width = CVPixelBufferGetWidth(depthMap)
+        let height = CVPixelBufferGetHeight(depthMap)
+        guard let base = CVPixelBufferGetBaseAddress(depthMap) else { return nil }
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
+        let ptr = base.assumingMemoryBound(to: Float32.self)
+        let stride = bytesPerRow / MemoryLayout<Float32>.size
+
+        let px = Int(point.x * CGFloat(width))
+        let py = Int(point.y * CGFloat(height))
+        guard px >= 0 && px < width && py >= 0 && py < height else { return nil }
+
+        let depth = ptr[py * stride + px]
+        return (depth.isFinite && depth > 0) ? depth : nil
+    }
+
+    /// Sample the median depth of an instance mask near the tap point area.
+    /// Uses a coarse grid over the mask to collect depth values and returns the median.
+    private static func sampleInstanceMedianDepth(
+        mask: CVPixelBuffer,
+        depthMap: CVPixelBuffer,
+        point: CGPoint
+    ) -> Float? {
+        // mask is already locked by the caller
+
+        let maskWidth = CVPixelBufferGetWidth(mask)
+        let maskHeight = CVPixelBufferGetHeight(mask)
+        guard let maskBase = CVPixelBufferGetBaseAddress(mask) else { return nil }
+        let maskBytesPerRow = CVPixelBufferGetBytesPerRow(mask)
+        let maskFormat = CVPixelBufferGetPixelFormatType(mask)
+        let maskBuffer = maskBase.assumingMemoryBound(to: UInt8.self)
+        let maskBpp = (maskFormat == kCVPixelFormatType_32BGRA ||
+                       maskFormat == kCVPixelFormatType_32ARGB) ? 4 : 1
+
+        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
+
+        let depthWidth = CVPixelBufferGetWidth(depthMap)
+        let depthHeight = CVPixelBufferGetHeight(depthMap)
+        guard let depthBase = CVPixelBufferGetBaseAddress(depthMap) else { return nil }
+        let depthBytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
+        let depthPtr = depthBase.assumingMemoryBound(to: Float32.self)
+        let depthStride = depthBytesPerRow / MemoryLayout<Float32>.size
+
+        let scaleX = Float(depthWidth) / Float(maskWidth)
+        let scaleY = Float(depthHeight) / Float(maskHeight)
+
+        // Coarse sampling: step = mask size / 30
+        let step = max(2, max(maskWidth, maskHeight) / 30)
+        var depths: [Float] = []
+        depths.reserveCapacity(100)
+
+        for my in Swift.stride(from: 0, to: maskHeight, by: step) {
+            for mx in Swift.stride(from: 0, to: maskWidth, by: step) {
+                let maskVal: UInt8
+                if maskBpp == 4 {
+                    maskVal = maskBuffer[my * maskBytesPerRow + mx * 4 + 3]
+                } else {
+                    maskVal = maskBuffer[my * maskBytesPerRow + mx]
+                }
+                guard maskVal > 0 else { continue }
+
+                let dx = Int(Float(mx) * scaleX)
+                let dy = Int(Float(my) * scaleY)
+                guard dx >= 0 && dx < depthWidth && dy >= 0 && dy < depthHeight else { continue }
+
+                let d = depthPtr[dy * depthStride + dx]
+                if d.isFinite && d > 0 { depths.append(d) }
+            }
+        }
+
+        guard !depths.isEmpty else { return nil }
+        depths.sort()
+        return depths[depths.count / 2]
+    }
 }
 
 // MARK: - Mask Utilities
@@ -307,7 +494,8 @@ extension InstanceSegmentationService {
     /// (regardless of the orientation parameter used for detection)
     func getMaskedPixels(
         mask: CVPixelBuffer,
-        imageSize: CGSize  // This is the original camera image size
+        imageSize: CGSize,  // This is the original camera image size
+        erode: Bool = false
     ) -> [(x: Int, y: Int)] {
         CVPixelBufferLockBaseAddress(mask, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
@@ -359,20 +547,32 @@ extension InstanceSegmentationService {
 #endif
         }
 
+        // Helper to read mask value at a pixel coordinate
+        func maskValue(atX mx: Int, atY my: Int) -> UInt8 {
+            guard mx >= 0 && mx < maskWidth && my >= 0 && my < maskHeight else { return 0 }
+            if bytesPerPixel == 4 {
+                return buffer[my * bytesPerRow + mx * 4 + 3]
+            } else {
+                return buffer[my * bytesPerRow + mx]
+            }
+        }
+
         outerLoop: for y in Swift.stride(from: 0, to: maskHeight, by: step) {
             for x in Swift.stride(from: 0, to: maskWidth, by: step) {
-                let pixelOffset = y * bytesPerRow + x * bytesPerPixel
-                // For BGRA, check alpha channel (offset +3) or any non-zero channel
-                // For single channel, just check the value
-                let pixelValue: UInt8
-                if bytesPerPixel == 4 {
-                    // Check alpha channel (BGRA: B=0, G=1, R=2, A=3)
-                    pixelValue = buffer[pixelOffset + 3]
-                } else {
-                    pixelValue = buffer[pixelOffset]
-                }
+                let pixelValue = maskValue(atX: x, atY: y)
 
                 if pixelValue > 0 {
+                    // Erosion: require all 4 cardinal neighbors (at step distance) to also be masked
+                    if erode {
+                        let up    = maskValue(atX: x, atY: y - step)
+                        let down  = maskValue(atX: x, atY: y + step)
+                        let left  = maskValue(atX: x - step, atY: y)
+                        let right = maskValue(atX: x + step, atY: y)
+                        if up == 0 || down == 0 || left == 0 || right == 0 {
+                            continue
+                        }
+                    }
+
                     let imageX = Int(CGFloat(x) * scaleX)
                     let imageY = Int(CGFloat(y) * scaleY)
                     pixels.append((imageX, imageY))
@@ -421,7 +621,8 @@ extension InstanceSegmentationService {
     func getMaskedPixelsWithROI(
         mask: CVPixelBuffer,
         imageSize: CGSize,
-        visionROI: CGRect
+        visionROI: CGRect,
+        erode: Bool = false
     ) -> [(x: Int, y: Int)] {
         CVPixelBufferLockBaseAddress(mask, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
@@ -468,17 +669,31 @@ extension InstanceSegmentationService {
         let step = max(2, min(maskWidth, maskHeight) / 160)
         let maxPixels = 20000
 
+        // Helper to read mask value at a pixel coordinate
+        func roiMaskValue(atX mx: Int, atY my: Int) -> UInt8 {
+            guard mx >= 0 && mx < maskWidth && my >= 0 && my < maskHeight else { return 0 }
+            if bytesPerPixel == 4 {
+                return buffer[my * bytesPerRow + mx * 4 + 3]
+            } else {
+                return buffer[my * bytesPerRow + mx]
+            }
+        }
+
         outerLoop: for my in Swift.stride(from: 0, to: maskHeight, by: step) {
             for mx in Swift.stride(from: 0, to: maskWidth, by: step) {
-                let pixelOffset = my * bytesPerRow + mx * bytesPerPixel
-                let pixelValue: UInt8
-                if bytesPerPixel == 4 {
-                    pixelValue = buffer[pixelOffset + 3]  // Alpha channel
-                } else {
-                    pixelValue = buffer[pixelOffset]
-                }
+                let pixelValue = roiMaskValue(atX: mx, atY: my)
 
                 if pixelValue > 0 {
+                    // Erosion: require all 4 cardinal neighbors to also be masked
+                    if erode {
+                        let up    = roiMaskValue(atX: mx, atY: my - step)
+                        let down  = roiMaskValue(atX: mx, atY: my + step)
+                        let left  = roiMaskValue(atX: mx - step, atY: my)
+                        let right = roiMaskValue(atX: mx + step, atY: my)
+                        if up == 0 || down == 0 || left == 0 || right == 0 {
+                            continue
+                        }
+                    }
                     let imageX: Int
                     let imageY: Int
 
