@@ -79,8 +79,8 @@ class InstanceSegmentationService {
         // Sample tap depth for depth-aware instance selection
         let tapDepth: Float? = depthMap.flatMap { Self.sampleDepthFromFrame(at: tapPoint, depthMap: $0) }
 
-        // Try to isolate the specific instance the user tapped
-        let tappedInstanceId = findInstance(at: tapPoint, in: observation, from: handler, depthMap: depthMap, tapDepth: tapDepth)
+        // Try to isolate the specific instance the user tapped (uses instanceMask label map)
+        let tappedInstanceId = findInstance(at: tapPoint, in: observation, depthMap: depthMap, tapDepth: tapDepth)
 
         let instancesToMask: IndexSet
         if let instanceId = tappedInstanceId {
@@ -88,17 +88,12 @@ class InstanceSegmentationService {
 #if DEBUG
             print("[Segmentation] Using tapped instance \(instanceId)")
 #endif
-        } else if let nearestId = findNearestInstance(to: tapPoint, in: observation, from: handler) {
-            // Fallback: select the instance whose centroid is closest to the tap point
-            instancesToMask = IndexSet([nearestId])
-#if DEBUG
-            print("[Segmentation] No instance at tap point, using nearest instance \(nearestId)")
-#endif
         } else {
+            // Fallback: use all instances — downstream depth/CC refinement will separate objects
+            instancesToMask = IndexSet(allInstances)
 #if DEBUG
-            print("[Segmentation] No instances could be matched to tap point")
+            print("[Segmentation] No instance matched tap point, falling back to ALL \(allInstances.count) instances")
 #endif
-            return nil
         }
 
         // Generate mask for selected instance(s)
@@ -212,195 +207,131 @@ class InstanceSegmentationService {
 
     // MARK: - Private Methods
 
-    /// Find which instance the user tapped by generating per-instance masks
-    /// and checking coverage near the tap point.
-    /// Uses generateMaskedImage (proven reliable) instead of generateScaledMaskForImage.
-    /// Optionally applies depth penalty when tapDepth is available.
+    /// Find which instance the user tapped using the observation's instanceMask label map.
+    /// Direct pixel lookup — O(1) at tap point, O(searchArea) for nearby search.
+    /// Optionally applies depth penalty when multiple candidates are nearby.
     private func findInstance(
         at point: CGPoint,
         in observation: VNInstanceMaskObservation,
-        from handler: VNImageRequestHandler,
         depthMap: CVPixelBuffer? = nil,
         tapDepth: Float? = nil
     ) -> Int? {
         let allInstances = observation.allInstances
         guard !allInstances.isEmpty else { return nil }
 
+        // instanceMask: each pixel value = instance index (0 = background)
+        let labelMap = observation.instanceMask
+        CVPixelBufferLockBaseAddress(labelMap, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(labelMap, .readOnly) }
+
+        let width = CVPixelBufferGetWidth(labelMap)
+        let height = CVPixelBufferGetHeight(labelMap)
+        guard let base = CVPixelBufferGetBaseAddress(labelMap) else { return nil }
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(labelMap)
+        let ptr = base.assumingMemoryBound(to: UInt8.self)
+
+        let cx = Int(point.x * CGFloat(width))
+        let cy = Int(point.y * CGFloat(height))
+
 #if DEBUG
-        print("[Segmentation] Finding instance at normalized point: \(point), tapDepth: \(tapDepth ?? -1)")
+        print("[Segmentation] Finding instance via labelMap (\(width)x\(height)) at (\(cx), \(cy)), tapDepth: \(tapDepth ?? -1)")
         print("[Segmentation] All instances: \(Array(allInstances))")
 #endif
 
-        var bestInstance: Int? = nil
-        var bestScore: Float = 0
-
-        for instanceId in allInstances {
-            guard let mask = try? observation.generateMaskedImage(
-                ofInstances: IndexSet([instanceId]),
-                from: handler,
-                croppedToInstancesExtent: false
-            ) else {
+        // 1. Direct lookup at tap point
+        if cx >= 0 && cx < width && cy >= 0 && cy < height {
+            let label = Int(ptr[cy * bytesPerRow + cx])
+            if label > 0 && allInstances.contains(label) {
 #if DEBUG
-                print("[Segmentation] Failed to generate mask for instance \(instanceId)")
+                print("[Segmentation] Direct hit: instance \(label)")
 #endif
-                continue
-            }
-
-            CVPixelBufferLockBaseAddress(mask, .readOnly)
-            defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
-
-            let width = CVPixelBufferGetWidth(mask)
-            let height = CVPixelBufferGetHeight(mask)
-
-            guard let base = CVPixelBufferGetBaseAddress(mask) else { continue }
-            let bytesPerRow = CVPixelBufferGetBytesPerRow(mask)
-            let pixelFormat = CVPixelBufferGetPixelFormatType(mask)
-            let buffer = base.assumingMemoryBound(to: UInt8.self)
-
-            let bytesPerPixel = (pixelFormat == kCVPixelFormatType_32BGRA ||
-                                 pixelFormat == kCVPixelFormatType_32ARGB) ? 4 : 1
-
-            let cx = Int(point.x * CGFloat(width))
-            let cy = Int(point.y * CGFloat(height))
-
-            // Search radius proportional to mask size (~5%)
-            let searchRadius = max(10, max(width, height) / 20)
-            let step = max(1, searchRadius / 15)
-            var proximityScore: Float = 0
-
-            for dy in Swift.stride(from: -searchRadius, through: searchRadius, by: step) {
-                for dx in Swift.stride(from: -searchRadius, through: searchRadius, by: step) {
-                    let px = cx + dx
-                    let py = cy + dy
-                    guard px >= 0 && px < width && py >= 0 && py < height else { continue }
-
-                    let value: UInt8
-                    if bytesPerPixel == 4 {
-                        value = buffer[py * bytesPerRow + px * 4 + 3]
-                    } else {
-                        value = buffer[py * bytesPerRow + px]
-                    }
-
-                    if value > 0 {
-                        // Weight closer pixels higher (inverse Manhattan distance)
-                        let dist = max(1, abs(dx) + abs(dy))
-                        proximityScore += Float(searchRadius) / Float(dist)
-                    }
-                }
-            }
-
-            // Apply depth penalty: reduce score if instance median depth differs from tap depth
-            var depthPenalty: Float = 1.0
-            if let tapD = tapDepth, tapD > 0, let dm = depthMap {
-                let instanceDepth = Self.sampleInstanceMedianDepth(
-                    mask: mask, depthMap: dm, point: point
-                )
-                if let instD = instanceDepth, instD > 0 {
-                    let relDiff = abs(instD - tapD) / tapD
-                    // Up to 30% penalty for depth mismatch (1.0 at 0% diff, 0.7 at 30%+ diff)
-                    depthPenalty = max(0.7, 1.0 - relDiff)
-                }
-            }
-
-            let finalScore = proximityScore * depthPenalty
-
-#if DEBUG
-            print("[Segmentation] Instance \(instanceId): proximityScore=\(proximityScore), depthPenalty=\(depthPenalty), finalScore=\(finalScore) near tap (\(cx), \(cy)) in \(width)x\(height)")
-#endif
-
-            if finalScore > bestScore {
-                bestScore = finalScore
-                bestInstance = instanceId
+                return label
             }
         }
 
-#if DEBUG
-        if let best = bestInstance {
-            print("[Segmentation] Selected instance \(best) with score \(bestScore)")
-        } else {
-            print("[Segmentation] No instance found near tap point")
+        // 2. Search nearby area — collect proximity scores per instance
+        let searchRadius = max(10, max(width, height) / 20)
+        let step = max(1, searchRadius / 15)
+        var instanceScores: [Int: Float] = [:]
+
+        // Optionally collect depth samples per instance for penalty
+        var depthLocked = false
+        var depthWidth = 0, depthHeight = 0
+        var depthPtr: UnsafeMutablePointer<Float32>?
+        var depthStride = 0
+
+        if let tapD = tapDepth, tapD > 0, let dm = depthMap {
+            CVPixelBufferLockBaseAddress(dm, .readOnly)
+            depthLocked = true
+            depthWidth = CVPixelBufferGetWidth(dm)
+            depthHeight = CVPixelBufferGetHeight(dm)
+            if let db = CVPixelBufferGetBaseAddress(dm) {
+                depthPtr = db.assumingMemoryBound(to: Float32.self)
+                depthStride = CVPixelBufferGetBytesPerRow(dm) / MemoryLayout<Float32>.size
+            }
         }
-#endif
+        defer {
+            if depthLocked, let dm = depthMap {
+                CVPixelBufferUnlockBaseAddress(dm, .readOnly)
+            }
+        }
 
-        return bestInstance
-    }
+        var instanceDepths: [Int: [Float]] = [:]
 
-    /// Find the instance whose coarse mask centroid is closest to the given point.
-    /// Used as a fallback when findInstance() fails to find any instance near the tap.
-    private func findNearestInstance(
-        to point: CGPoint,
-        in observation: VNInstanceMaskObservation,
-        from handler: VNImageRequestHandler
-    ) -> Int? {
-        let allInstances = observation.allInstances
-        guard !allInstances.isEmpty else { return nil }
+        for dy in Swift.stride(from: -searchRadius, through: searchRadius, by: step) {
+            for dx in Swift.stride(from: -searchRadius, through: searchRadius, by: step) {
+                let px = cx + dx
+                let py = cy + dy
+                guard px >= 0 && px < width && py >= 0 && py < height else { continue }
 
-        var bestInstance: Int? = nil
-        var bestDistance = CGFloat.infinity
+                let label = Int(ptr[py * bytesPerRow + px])
+                guard label > 0 && allInstances.contains(label) else { continue }
 
-        for instanceId in allInstances {
-            guard let mask = try? observation.generateMaskedImage(
-                ofInstances: IndexSet([instanceId]),
-                from: handler,
-                croppedToInstancesExtent: false
-            ) else { continue }
+                let dist = max(1, abs(dx) + abs(dy))
+                instanceScores[label, default: 0] += Float(searchRadius) / Float(dist)
 
-            CVPixelBufferLockBaseAddress(mask, .readOnly)
-            defer { CVPixelBufferUnlockBaseAddress(mask, .readOnly) }
-
-            let width = CVPixelBufferGetWidth(mask)
-            let height = CVPixelBufferGetHeight(mask)
-            guard let base = CVPixelBufferGetBaseAddress(mask) else { continue }
-            let bytesPerRow = CVPixelBufferGetBytesPerRow(mask)
-            let pixelFormat = CVPixelBufferGetPixelFormatType(mask)
-            let buffer = base.assumingMemoryBound(to: UInt8.self)
-            let bytesPerPixel = (pixelFormat == kCVPixelFormatType_32BGRA ||
-                                 pixelFormat == kCVPixelFormatType_32ARGB) ? 4 : 1
-
-            // Coarse centroid: sample every size/40 pixels
-            let step = max(1, max(width, height) / 40)
-            var sumX: Double = 0, sumY: Double = 0, count: Double = 0
-            for y in Swift.stride(from: 0, to: height, by: step) {
-                for x in Swift.stride(from: 0, to: width, by: step) {
-                    let value: UInt8
-                    if bytesPerPixel == 4 {
-                        value = buffer[y * bytesPerRow + x * 4 + 3]
-                    } else {
-                        value = buffer[y * bytesPerRow + x]
-                    }
-                    if value > 0 {
-                        sumX += Double(x)
-                        sumY += Double(y)
-                        count += 1
+                // Sample depth for this pixel
+                if let dPtr = depthPtr {
+                    let dxp = Int(Float(px) * Float(depthWidth) / Float(width))
+                    let dyp = Int(Float(py) * Float(depthHeight) / Float(height))
+                    if dxp >= 0 && dxp < depthWidth && dyp >= 0 && dyp < depthHeight {
+                        let d = dPtr[dyp * depthStride + dxp]
+                        if d.isFinite && d > 0 {
+                            instanceDepths[label, default: []].append(d)
+                        }
                     }
                 }
             }
+        }
 
-            guard count > 0 else { continue }
-            let centroidX = CGFloat(sumX / count) / CGFloat(width)
-            let centroidY = CGFloat(sumY / count) / CGFloat(height)
-
-            let dx = centroidX - point.x
-            let dy = centroidY - point.y
-            let dist = dx * dx + dy * dy
-
-#if DEBUG
-            print("[Segmentation] Instance \(instanceId) centroid: (\(centroidX), \(centroidY)), dist²=\(dist)")
-#endif
-
-            if dist < bestDistance {
-                bestDistance = dist
-                bestInstance = instanceId
+        // 3. Apply depth penalty if available
+        if let tapD = tapDepth, tapD > 0 {
+            for (label, depths) in instanceDepths where !depths.isEmpty {
+                let sorted = depths.sorted()
+                let median = sorted[sorted.count / 2]
+                let relDiff = abs(median - tapD) / tapD
+                let penalty = max(0.7, 1.0 - relDiff)
+                instanceScores[label, default: 0] *= penalty
             }
         }
 
 #if DEBUG
-        if let best = bestInstance {
-            print("[Segmentation] Nearest instance: \(best) (dist²=\(bestDistance))")
+        for (label, score) in instanceScores.sorted(by: { $0.value > $1.value }) {
+            print("[Segmentation] Instance \(label): score=\(score)")
         }
 #endif
 
-        return bestInstance
+        guard let best = instanceScores.max(by: { $0.value < $1.value }) else {
+#if DEBUG
+            print("[Segmentation] No instance found within search radius")
+#endif
+            return nil
+        }
+
+#if DEBUG
+        print("[Segmentation] Selected instance \(best.key) with score \(best.value)")
+#endif
+        return best.key
     }
 
     // MARK: - Depth Helpers
@@ -425,65 +356,6 @@ class InstanceSegmentationService {
         return (depth.isFinite && depth > 0) ? depth : nil
     }
 
-    /// Sample the median depth of an instance mask near the tap point area.
-    /// Uses a coarse grid over the mask to collect depth values and returns the median.
-    private static func sampleInstanceMedianDepth(
-        mask: CVPixelBuffer,
-        depthMap: CVPixelBuffer,
-        point: CGPoint
-    ) -> Float? {
-        // mask is already locked by the caller
-
-        let maskWidth = CVPixelBufferGetWidth(mask)
-        let maskHeight = CVPixelBufferGetHeight(mask)
-        guard let maskBase = CVPixelBufferGetBaseAddress(mask) else { return nil }
-        let maskBytesPerRow = CVPixelBufferGetBytesPerRow(mask)
-        let maskFormat = CVPixelBufferGetPixelFormatType(mask)
-        let maskBuffer = maskBase.assumingMemoryBound(to: UInt8.self)
-        let maskBpp = (maskFormat == kCVPixelFormatType_32BGRA ||
-                       maskFormat == kCVPixelFormatType_32ARGB) ? 4 : 1
-
-        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
-
-        let depthWidth = CVPixelBufferGetWidth(depthMap)
-        let depthHeight = CVPixelBufferGetHeight(depthMap)
-        guard let depthBase = CVPixelBufferGetBaseAddress(depthMap) else { return nil }
-        let depthBytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
-        let depthPtr = depthBase.assumingMemoryBound(to: Float32.self)
-        let depthStride = depthBytesPerRow / MemoryLayout<Float32>.size
-
-        let scaleX = Float(depthWidth) / Float(maskWidth)
-        let scaleY = Float(depthHeight) / Float(maskHeight)
-
-        // Coarse sampling: step = mask size / 30
-        let step = max(2, max(maskWidth, maskHeight) / 30)
-        var depths: [Float] = []
-        depths.reserveCapacity(100)
-
-        for my in Swift.stride(from: 0, to: maskHeight, by: step) {
-            for mx in Swift.stride(from: 0, to: maskWidth, by: step) {
-                let maskVal: UInt8
-                if maskBpp == 4 {
-                    maskVal = maskBuffer[my * maskBytesPerRow + mx * 4 + 3]
-                } else {
-                    maskVal = maskBuffer[my * maskBytesPerRow + mx]
-                }
-                guard maskVal > 0 else { continue }
-
-                let dx = Int(Float(mx) * scaleX)
-                let dy = Int(Float(my) * scaleY)
-                guard dx >= 0 && dx < depthWidth && dy >= 0 && dy < depthHeight else { continue }
-
-                let d = depthPtr[dy * depthStride + dx]
-                if d.isFinite && d > 0 { depths.append(d) }
-            }
-        }
-
-        guard !depths.isEmpty else { return nil }
-        depths.sort()
-        return depths[depths.count / 2]
-    }
 }
 
 // MARK: - Mask Utilities
