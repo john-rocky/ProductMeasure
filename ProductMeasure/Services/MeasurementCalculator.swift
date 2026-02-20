@@ -168,12 +168,20 @@ class MeasurementCalculator {
             }
 
             // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
-            let filteredPixels = filterMaskedPixelsByDepth(
-                maskedPixels: connectedPixels,
-                frame: frame,
-                tapPoint: normalizedTap,
-                imageSize: imageSize
-            )
+            let filteredPixels: [(x: Int, y: Int)]
+            if pipeline.useDepthFilter {
+                filteredPixels = filterMaskedPixelsByDepth(
+                    maskedPixels: connectedPixels,
+                    frame: frame,
+                    tapPoint: normalizedTap,
+                    imageSize: imageSize
+                )
+            } else {
+#if DEBUG
+                print("[Calculator] Depth filter disabled, using \(connectedPixels.count) pixels as-is")
+#endif
+                filteredPixels = connectedPixels
+            }
 
             guard !filteredPixels.isEmpty else {
 #if DEBUG
@@ -442,12 +450,20 @@ class MeasurementCalculator {
             }
 
             // 4. Apply depth filtering based on box center
-            let depthFilteredPixels = filterMaskedPixelsByDepth(
-                maskedPixels: connectedPixels,
-                frame: frame,
-                tapPoint: normalizedCenter,
-                imageSize: imageSize
-            )
+            let depthFilteredPixels: [(x: Int, y: Int)]
+            if pipeline.useDepthFilter {
+                depthFilteredPixels = filterMaskedPixelsByDepth(
+                    maskedPixels: connectedPixels,
+                    frame: frame,
+                    tapPoint: normalizedCenter,
+                    imageSize: imageSize
+                )
+            } else {
+#if DEBUG
+                print("[Calculator] Depth filter disabled, using \(connectedPixels.count) pixels as-is")
+#endif
+                depthFilteredPixels = connectedPixels
+            }
 
             guard !depthFilteredPixels.isEmpty else {
 #if DEBUG
@@ -820,10 +836,15 @@ class MeasurementCalculator {
             }
 
             // 3. Depth filtering
-            let filteredPixels = filterMaskedPixelsByDepth(
-                maskedPixels: connectedPixels, frame: frame,
-                tapPoint: normalizedTap, imageSize: imageSize
-            )
+            let filteredPixels: [(x: Int, y: Int)]
+            if pipeline.useDepthFilter {
+                filteredPixels = filterMaskedPixelsByDepth(
+                    maskedPixels: connectedPixels, frame: frame,
+                    tapPoint: normalizedTap, imageSize: imageSize
+                )
+            } else {
+                filteredPixels = connectedPixels
+            }
             guard !filteredPixels.isEmpty else { return nil }
 
             // 4. Point cloud generation

@@ -141,7 +141,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
         case .originalWarehouse: return "Original warehouse pipeline (Feb 6-15). Wide depth filter, area-only plane snap, no fine angle search."
         case .preSplit: return "Post-accuracy-fix, pre-split (Feb 17). Tighter depth, fine angle search, weighted plane snap."
         case .standard: return "Default pipeline. Fixed 4cm clustering, 0.5° MABR step, raycast floor."
-        case .enhanced: return "Depth-adaptive clustering (3-6cm), 0.2° MABR step, plane-based floor detection."
+        case .enhanced: return "No depth filter, depth-adaptive clustering, 0.2° MABR step. Better for large objects."
         }
     }
 
@@ -165,8 +165,15 @@ enum PipelineVersion: String, CaseIterable, Codable {
 
     var useDepthConnectivity: Bool {
         switch self {
-        case .originalWarehouse, .preSplit: return false
-        case .standard, .enhanced: return true
+        case .originalWarehouse, .preSplit, .enhanced: return false
+        case .standard: return true
+        }
+    }
+
+    var useDepthFilter: Bool {
+        switch self {
+        case .enhanced: return false
+        case .originalWarehouse, .preSplit, .standard: return true
         }
     }
 
