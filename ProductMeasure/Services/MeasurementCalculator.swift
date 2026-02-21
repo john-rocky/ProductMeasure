@@ -86,6 +86,17 @@ class MeasurementCalculator {
         print("[Calculator] Tap point: \(tapPoint), View size: \(viewSize)")
 #endif
 
+        // Branch to boundary-based pipeline for accurateSize
+        if AppConstants.currentPipelineVersion.useBoundaryMeasurement {
+            return try await measureFromBoundary(
+                frame: frame,
+                tapPoint: tapPoint,
+                viewSize: viewSize,
+                mode: mode,
+                raycastHitPosition: raycastHitPosition
+            )
+        }
+
         // Convert tap point to normalized image coordinates (0-1)
         // Note: ARKit camera image is in landscape orientation
         let imageSize = CGSize(
@@ -168,12 +179,20 @@ class MeasurementCalculator {
             }
 
             // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
-            let filteredPixels = filterMaskedPixelsByDepth(
-                maskedPixels: connectedPixels,
-                frame: frame,
-                tapPoint: normalizedTap,
-                imageSize: imageSize
-            )
+            let filteredPixels: [(x: Int, y: Int)]
+            if pipeline.skipDepthFilter {
+                filteredPixels = connectedPixels
+#if DEBUG
+                print("[Calculator] Depth filter skipped (accurateSize), using \(filteredPixels.count) pixels")
+#endif
+            } else {
+                filteredPixels = filterMaskedPixelsByDepth(
+                    maskedPixels: connectedPixels,
+                    frame: frame,
+                    tapPoint: normalizedTap,
+                    imageSize: imageSize
+                )
+            }
 
             guard !filteredPixels.isEmpty else {
 #if DEBUG
@@ -250,11 +269,13 @@ class MeasurementCalculator {
                 let clusterMin = pipeline.clusteringMinPoints
                 let fallbackMin = pipeline.clusteringFallbackMinPoints
                 if filteredPoints.count >= clusterMin {
-                    let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
-                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
+                    if !pipeline.skipClustering {
+                        let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
+                        filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
 #if DEBUG
-                    print("[Calculator] After clustering: \(filteredPoints.count) points")
+                        print("[Calculator] After clustering: \(filteredPoints.count) points")
 #endif
+                    }
 
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
@@ -279,7 +300,7 @@ class MeasurementCalculator {
                 return plane
             }
 
-            guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
+            guard var boundingBox = boundingBoxEstimator.estimateBoundingBox(
                 points: pointCloud.points,
                 mode: mode,
                 verticalPlaneAnchors: verticalPlanes
@@ -289,6 +310,18 @@ class MeasurementCalculator {
 #endif
                 return nil
             }
+
+            // Apply size compensation to offset systematic LiDAR/segmentation bias
+            let compensation = pipeline.sizeCompensationPerSide
+            if compensation > 0 {
+                boundingBox.extents.x += compensation
+                boundingBox.extents.y += compensation
+                boundingBox.extents.z += compensation
+#if DEBUG
+                print("[Calculator] Size compensation +\(compensation * 1000)mm/side applied")
+#endif
+            }
+
 #if DEBUG
             print("[Calculator] Bounding box estimated")
             print("[Calculator] Box center: \(boundingBox.center)")
@@ -355,6 +388,18 @@ class MeasurementCalculator {
         print("[Calculator] Starting ROI measurement")
         print("[Calculator] Screen ROI: \(regionOfInterest), View size: \(viewSize)")
 #endif
+
+        // Branch to boundary-based pipeline for accurateSize (using ROI center as tap point)
+        if AppConstants.currentPipelineVersion.useBoundaryMeasurement {
+            let boxCenter = CGPoint(x: regionOfInterest.midX, y: regionOfInterest.midY)
+            return try await measureFromBoundary(
+                frame: frame,
+                tapPoint: boxCenter,
+                viewSize: viewSize,
+                mode: mode,
+                raycastHitPosition: raycastHitPosition
+            )
+        }
 
         let imageSize = CGSize(
             width: CVPixelBufferGetWidth(frame.capturedImage),
@@ -442,12 +487,20 @@ class MeasurementCalculator {
             }
 
             // 4. Apply depth filtering based on box center
-            let depthFilteredPixels = filterMaskedPixelsByDepth(
-                maskedPixels: connectedPixels,
-                frame: frame,
-                tapPoint: normalizedCenter,
-                imageSize: imageSize
-            )
+            let depthFilteredPixels: [(x: Int, y: Int)]
+            if pipeline.skipDepthFilter {
+                depthFilteredPixels = connectedPixels
+#if DEBUG
+                print("[Calculator] Depth filter skipped (accurateSize), using \(depthFilteredPixels.count) pixels")
+#endif
+            } else {
+                depthFilteredPixels = filterMaskedPixelsByDepth(
+                    maskedPixels: connectedPixels,
+                    frame: frame,
+                    tapPoint: normalizedCenter,
+                    imageSize: imageSize
+                )
+            }
 
             guard !depthFilteredPixels.isEmpty else {
 #if DEBUG
@@ -519,11 +572,13 @@ class MeasurementCalculator {
                 let clusterMin = pipeline.clusteringMinPoints
                 let fallbackMin = pipeline.clusteringFallbackMinPoints
                 if filteredPoints.count >= clusterMin {
-                    let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
-                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
+                    if !pipeline.skipClustering {
+                        let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
+                        filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
 #if DEBUG
-                    print("[Calculator] After clustering: \(filteredPoints.count) points")
+                        print("[Calculator] After clustering: \(filteredPoints.count) points")
 #endif
+                    }
 
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
@@ -548,7 +603,7 @@ class MeasurementCalculator {
                 return plane
             }
 
-            guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
+            guard var boundingBox = boundingBoxEstimator.estimateBoundingBox(
                 points: pointCloud.points,
                 mode: mode,
                 verticalPlaneAnchors: verticalPlanes
@@ -558,6 +613,18 @@ class MeasurementCalculator {
 #endif
                 return nil
             }
+
+            // Apply size compensation to offset systematic LiDAR/segmentation bias
+            let compensation = pipeline.sizeCompensationPerSide
+            if compensation > 0 {
+                boundingBox.extents.x += compensation
+                boundingBox.extents.y += compensation
+                boundingBox.extents.z += compensation
+#if DEBUG
+                print("[Calculator] Size compensation +\(compensation * 1000)mm/side applied")
+#endif
+            }
+
 #if DEBUG
             print("[Calculator] Bounding box estimated")
 #endif
@@ -820,10 +887,15 @@ class MeasurementCalculator {
             }
 
             // 3. Depth filtering
-            let filteredPixels = filterMaskedPixelsByDepth(
-                maskedPixels: connectedPixels, frame: frame,
-                tapPoint: normalizedTap, imageSize: imageSize
-            )
+            let filteredPixels: [(x: Int, y: Int)]
+            if pipeline.skipDepthFilter {
+                filteredPixels = connectedPixels
+            } else {
+                filteredPixels = filterMaskedPixelsByDepth(
+                    maskedPixels: connectedPixels, frame: frame,
+                    tapPoint: normalizedTap, imageSize: imageSize
+                )
+            }
             guard !filteredPixels.isEmpty else { return nil }
 
             // 4. Point cloud generation
@@ -852,8 +924,10 @@ class MeasurementCalculator {
                 let clusterMin = pipeline.clusteringMinPoints
                 let fallbackMin = pipeline.clusteringFallbackMinPoints
                 if filteredPoints.count >= clusterMin {
-                    let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
-                    filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
+                    if !pipeline.skipClustering {
+                        let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
+                        filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
+                    }
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints, quality: pointCloud.quality
                     )
@@ -892,6 +966,393 @@ class MeasurementCalculator {
         }.value
     }
 
+    // MARK: - Boundary-Based Measurement (accurateSize)
+
+    /// Boundary-based measurement pipeline: uses mask boundary pixels + interior depth sampling.
+    /// Instead of generating a full point cloud and filtering down, this extracts the object's
+    /// silhouette edges directly — preserving edge geometry that traditional filters would remove.
+    private func measureFromBoundary(
+        frame: ARFrame,
+        tapPoint: CGPoint,
+        viewSize: CGSize,
+        mode: MeasurementMode,
+        raycastHitPosition: SIMD3<Float>?
+    ) async throws -> MeasurementResult? {
+#if DEBUG
+        print("[BoundaryCalc] Starting boundary-based measurement")
+#endif
+
+        let imageSize = CGSize(
+            width: CVPixelBufferGetWidth(frame.capturedImage),
+            height: CVPixelBufferGetHeight(frame.capturedImage)
+        )
+
+        let normalizedTap = convertScreenToImageCoordinates(
+            screenPoint: tapPoint,
+            viewSize: viewSize,
+            imageSize: imageSize
+        )
+
+        // 1. Segmentation (reuses existing instance segmentation)
+        guard let segmentation = try await segmentationService.segmentInstance(
+            in: frame.capturedImage,
+            at: normalizedTap,
+            depthMap: frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
+        ) else {
+#if DEBUG
+            print("[BoundaryCalc] Segmentation failed")
+#endif
+            return nil
+        }
+
+        // Offload CPU-heavy processing off main thread
+        return await Task.detached(priority: .userInitiated) { [self] in
+            // 2. Extract boundary pixels (4-connected edge detection on mask)
+            let boundaryPixels = segmentationService.getBoundaryPixels(
+                mask: segmentation.mask,
+                imageSize: imageSize
+            )
+
+            guard !boundaryPixels.isEmpty else {
+#if DEBUG
+                print("[BoundaryCalc] No boundary pixels found")
+#endif
+                return nil
+            }
+
+            // Compute mask center for interior depth sampling direction
+            var sumX = 0, sumY = 0
+            for px in boundaryPixels { sumX += px.x; sumY += px.y }
+            let maskCenter = CGPoint(
+                x: CGFloat(sumX) / CGFloat(boundaryPixels.count),
+                y: CGFloat(sumY) / CGFloat(boundaryPixels.count)
+            )
+
+            // DEBUG: Compare boundary extent with standard getMaskedPixels extent
+#if DEBUG
+            let standardPixels = segmentationService.getMaskedPixels(
+                mask: segmentation.mask,
+                imageSize: imageSize
+            )
+            if !standardPixels.isEmpty && !boundaryPixels.isEmpty {
+                let stdMinX = standardPixels.map { $0.x }.min()!
+                let stdMaxX = standardPixels.map { $0.x }.max()!
+                let stdMinY = standardPixels.map { $0.y }.min()!
+                let stdMaxY = standardPixels.map { $0.y }.max()!
+                let bndMinX = boundaryPixels.map { $0.x }.min()!
+                let bndMaxX = boundaryPixels.map { $0.x }.max()!
+                let bndMinY = boundaryPixels.map { $0.y }.min()!
+                let bndMaxY = boundaryPixels.map { $0.y }.max()!
+                print("[BoundaryCalc] DIAGNOSTIC — Standard masked pixels extent: x=\(stdMinX)-\(stdMaxX) (\(stdMaxX-stdMinX)px), y=\(stdMinY)-\(stdMaxY) (\(stdMaxY-stdMinY)px)")
+                print("[BoundaryCalc] DIAGNOSTIC — Boundary pixels extent:        x=\(bndMinX)-\(bndMaxX) (\(bndMaxX-bndMinX)px), y=\(bndMinY)-\(bndMaxY) (\(bndMaxY-bndMinY)px)")
+                print("[BoundaryCalc] DIAGNOSTIC — Ratio: x=\(Float(bndMaxX-bndMinX)/Float(max(1,stdMaxX-stdMinX))), y=\(Float(bndMaxY-bndMinY)/Float(max(1,stdMaxY-stdMinY)))")
+                print("[BoundaryCalc] DIAGNOSTIC — Mask center (img px): (\(maskCenter.x), \(maskCenter.y))")
+            }
+#endif
+
+            // 3. Sample interior depth for each boundary pixel (avoids edge bleeding)
+            let allDepthSamples = sampleInteriorDepth(
+                boundaryPixels: boundaryPixels,
+                frame: frame,
+                imageSize: imageSize,
+                maskCenter: maskCenter
+            )
+
+            guard !allDepthSamples.isEmpty else {
+#if DEBUG
+                print("[BoundaryCalc] No valid depth samples")
+#endif
+                return nil
+            }
+
+            // 3b. Depth range filter: keep only boundary samples near the tap-point depth.
+            // This removes floor/table/background boundary points while preserving all object edges.
+            let tapDepth = Self.sampleTapDepth(
+                normalizedTap: normalizedTap,
+                frame: frame,
+                imageSize: imageSize
+            )
+
+            let depthSamples: [(imageX: Int, imageY: Int, depth: Float)]
+            if let tapDepth = tapDepth, tapDepth > 0 {
+                // Tolerance: ±30% of tap depth (min 10cm) — generous enough for box front-to-back
+                let tolerance = max(0.10, tapDepth * 0.30)
+                depthSamples = allDepthSamples.filter {
+                    abs($0.depth - tapDepth) <= tolerance
+                }
+#if DEBUG
+                print("[BoundaryCalc] Depth filter: \(allDepthSamples.count) → \(depthSamples.count) (tapDepth=\(tapDepth)m, tol=±\(tolerance)m)")
+#endif
+            } else {
+                depthSamples = allDepthSamples
+#if DEBUG
+                print("[BoundaryCalc] No tap depth available, skipping depth filter")
+#endif
+            }
+
+            guard !depthSamples.isEmpty else {
+#if DEBUG
+                print("[BoundaryCalc] No samples after depth filter")
+#endif
+                return nil
+            }
+#if DEBUG
+            print("[BoundaryCalc] \(depthSamples.count) depth samples from \(boundaryPixels.count) boundary pixels")
+#endif
+
+            // 4. Unproject boundary pixels to 3D world coordinates
+            // Uses boundary pixel position (silhouette edge) + interior pixel depth (clean value)
+            var points = PointCloudGenerator.unprojectImagePixelsToWorld(
+                pixels: depthSamples,
+                frame: frame
+            )
+
+            guard !points.isEmpty else {
+#if DEBUG
+                print("[BoundaryCalc] Unprojection produced no points")
+#endif
+                return nil
+            }
+
+            // 5. Proximity filter + clustering (isolate tapped object from surrounding surface)
+            if let hitPosition = raycastHitPosition {
+                var nearestDistance: Float = .infinity
+                for p in points {
+                    nearestDistance = min(nearestDistance, simd_distance(p, hitPosition))
+                }
+
+                if nearestDistance > 2.0 {
+#if DEBUG
+                    print("[BoundaryCalc] Points too far from raycast hit: \(nearestDistance)m")
+#endif
+                    return nil
+                }
+
+                // Adaptive proximity filter
+                let pointSpread = Self.estimatePointSpread(points: points)
+                let radius: Float = max(0.5, pointSpread * 0.8)
+                var filtered = filterPointsByProximity(
+                    points: points,
+                    center: hitPosition,
+                    maxDistance: radius
+                )
+
+                // 3D clustering: separates object boundary from surrounding surface boundary.
+                // Even when depths match (top-down view), world-Y differs by box height.
+                if filtered.count >= 15 {
+                    let camPos = SIMD3<Float>(
+                        frame.camera.transform.columns.3.x,
+                        frame.camera.transform.columns.3.y,
+                        frame.camera.transform.columns.3.z
+                    )
+                    let clustered = extractMainCluster(
+                        points: filtered,
+                        center: hitPosition,
+                        cameraPosition: camPos
+                    )
+                    if clustered.count >= 10 {
+                        filtered = clustered
+#if DEBUG
+                        print("[BoundaryCalc] After clustering: \(filtered.count) points")
+#endif
+                    }
+                }
+
+                if filtered.count >= 10 {
+                    points = filtered
+                }
+            }
+
+            // 6. Estimate bounding box (reuses existing MABR + plane snap)
+            let verticalPlanes = frame.anchors.compactMap { anchor -> ARPlaneAnchor? in
+                guard let plane = anchor as? ARPlaneAnchor, plane.alignment == .vertical else { return nil }
+                return plane
+            }
+
+            guard let boundingBox = boundingBoxEstimator.estimateBoundingBox(
+                points: points,
+                mode: mode,
+                verticalPlaneAnchors: verticalPlanes
+            ) else {
+#if DEBUG
+                print("[BoundaryCalc] Failed to estimate bounding box")
+#endif
+                return nil
+            }
+
+            // 7. Calculate dimensions with camera-based axis mapping
+            let mapping = boundingBox.calculateAxisMapping(cameraTransform: frame.camera.transform)
+            let (height, length, width) = boundingBox.dimensions(withMapping: mapping)
+
+#if DEBUG
+            print("[BoundaryCalc] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
+#endif
+
+            var result = MeasurementResult(
+                boundingBox: boundingBox,
+                length: length,
+                width: width,
+                height: height,
+                volume: boundingBox.volume,
+                quality: MeasurementQuality(
+                    depthCoverage: Float(depthSamples.count) / Float(max(boundaryPixels.count, 1)),
+                    depthConfidence: 0.8,
+                    pointCount: points.count,
+                    trackingState: frame.camera.trackingState
+                ),
+                heightAxisIndex: mapping.height,
+                lengthAxisIndex: mapping.length,
+                widthAxisIndex: mapping.width
+            )
+
+            result.pointCloud = points
+
+            // 8. Floor detection from horizontal AR planes
+            result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
+
+            #if DEBUG
+            result.debugMaskImage = DebugVisualization.visualizeMask(
+                mask: segmentation.mask,
+                cameraImage: frame.capturedImage,
+                tapPoint: normalizedTap
+            )
+            #endif
+
+            return result
+        }.value
+    }
+
+    /// Sample depth from interior pixels for boundary pixels.
+    /// For each boundary pixel, moves 1-3 depth pixels toward the mask center
+    /// to avoid edge-bleeding artifacts in the LiDAR depth map.
+    private func sampleInteriorDepth(
+        boundaryPixels: [(x: Int, y: Int)],
+        frame: ARFrame,
+        imageSize: CGSize,
+        maskCenter: CGPoint
+    ) -> [(imageX: Int, imageY: Int, depth: Float)] {
+        guard let depthData = frame.smoothedSceneDepth ?? frame.sceneDepth else { return [] }
+        let depthMap = depthData.depthMap
+        guard let confidenceMap = depthData.confidenceMap else { return [] }
+
+        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
+        CVPixelBufferLockBaseAddress(confidenceMap, .readOnly)
+        defer {
+            CVPixelBufferUnlockBaseAddress(depthMap, .readOnly)
+            CVPixelBufferUnlockBaseAddress(confidenceMap, .readOnly)
+        }
+
+        let depthWidth = CVPixelBufferGetWidth(depthMap)
+        let depthHeight = CVPixelBufferGetHeight(depthMap)
+        guard let depthBase = CVPixelBufferGetBaseAddress(depthMap),
+              let confBase = CVPixelBufferGetBaseAddress(confidenceMap) else { return [] }
+
+        let depthBytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
+        let confBytesPerRow = CVPixelBufferGetBytesPerRow(confidenceMap)
+        let depthPtr = depthBase.assumingMemoryBound(to: Float32.self)
+        let confPtr = confBase.assumingMemoryBound(to: UInt8.self)
+        let depthStride = depthBytesPerRow / MemoryLayout<Float32>.size
+
+        let scaleX = CGFloat(depthWidth) / imageSize.width
+        let scaleY = CGFloat(depthHeight) / imageSize.height
+
+        // Mask center in depth map coordinates
+        let centerDX = Float(maskCenter.x * scaleX)
+        let centerDY = Float(maskCenter.y * scaleY)
+
+        // Helper: read depth + confidence at depth map coordinates
+        func depthAt(dx: Int, dy: Int) -> (depth: Float, confident: Bool)? {
+            guard dx >= 0 && dx < depthWidth && dy >= 0 && dy < depthHeight else { return nil }
+            let depth = depthPtr[dy * depthStride + dx]
+            let conf = confPtr[dy * confBytesPerRow + dx]
+            guard depth.isFinite && depth > 0 else { return nil }
+            return (depth, conf >= ARConfidenceLevel.medium.rawValue)
+        }
+
+        var results: [(imageX: Int, imageY: Int, depth: Float)] = []
+        results.reserveCapacity(boundaryPixels.count)
+
+        for pixel in boundaryPixels {
+            let dx = Int(CGFloat(pixel.x) * scaleX)
+            let dy = Int(CGFloat(pixel.y) * scaleY)
+
+            // Direction from boundary pixel toward mask center (in depth map coords)
+            let dirX = centerDX - Float(dx)
+            let dirY = centerDY - Float(dy)
+            let dirLen = sqrt(dirX * dirX + dirY * dirY)
+            guard dirLen > 0 else { continue }
+            let ndirX = dirX / dirLen
+            let ndirY = dirY / dirLen
+
+            // Try 1-3 pixels inward along the direction toward mask center
+            var foundDepth: Float? = nil
+            for offset in 1...3 {
+                let sampleDX = dx + Int(Float(offset) * ndirX)
+                let sampleDY = dy + Int(Float(offset) * ndirY)
+                if let (d, confident) = depthAt(dx: sampleDX, dy: sampleDY), confident {
+                    foundDepth = d
+                    break
+                }
+            }
+
+            // Fallback: 3×3 median around the boundary pixel
+            if foundDepth == nil {
+                var neighbors: [Float] = []
+                for oy in -1...1 {
+                    for ox in -1...1 {
+                        if let (d, _) = depthAt(dx: dx + ox, dy: dy + oy) {
+                            neighbors.append(d)
+                        }
+                    }
+                }
+                if !neighbors.isEmpty {
+                    neighbors.sort()
+                    foundDepth = neighbors[neighbors.count / 2]
+                }
+            }
+
+            if let depth = foundDepth {
+                results.append((imageX: pixel.x, imageY: pixel.y, depth: depth))
+            }
+        }
+
+#if DEBUG
+        print("[BoundaryDepth] Sampled \(results.count) of \(boundaryPixels.count) boundary pixels with valid depth")
+#endif
+
+        return results
+    }
+
+    /// Sample depth at the tap point from the depth map
+    private static func sampleTapDepth(
+        normalizedTap: CGPoint,
+        frame: ARFrame,
+        imageSize: CGSize
+    ) -> Float? {
+        guard let depthMap = (frame.smoothedSceneDepth ?? frame.sceneDepth)?.depthMap else { return nil }
+
+        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
+
+        let depthWidth = CVPixelBufferGetWidth(depthMap)
+        let depthHeight = CVPixelBufferGetHeight(depthMap)
+        guard let depthBase = CVPixelBufferGetBaseAddress(depthMap) else { return nil }
+
+        let depthBytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
+        let depthPtr = depthBase.assumingMemoryBound(to: Float32.self)
+
+        let scaleX = CGFloat(depthWidth) / imageSize.width
+        let scaleY = CGFloat(depthHeight) / imageSize.height
+
+        let tapDX = Int(normalizedTap.x * imageSize.width * scaleX)
+        let tapDY = Int(normalizedTap.y * imageSize.height * scaleY)
+
+        guard tapDX >= 0 && tapDX < depthWidth && tapDY >= 0 && tapDY < depthHeight else { return nil }
+
+        let depth = depthPtr[tapDY * (depthBytesPerRow / MemoryLayout<Float32>.size) + tapDX]
+        return (depth.isFinite && depth > 0) ? depth : nil
+    }
+
     /// Expand a bounding box by scaling its extents
     static func expandedBoundingBox(_ box: BoundingBox3D, scale: Float) -> BoundingBox3D {
         var expanded = box
@@ -912,7 +1373,11 @@ class MeasurementCalculator {
         tapPoint: CGPoint,
         imageSize: CGSize
     ) -> [(x: Int, y: Int)] {
-        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
+        let pipelineForDepth = AppConstants.currentPipelineVersion
+        let depthSourceForFilter: ARDepthData? = pipelineForDepth.useRawDepth
+            ? (frame.sceneDepth ?? frame.smoothedSceneDepth)
+            : (frame.smoothedSceneDepth ?? frame.sceneDepth)
+        guard let depthMap = depthSourceForFilter?.depthMap else {
 #if DEBUG
             print("[DepthFilter] No depth map available, returning all pixels")
 #endif
@@ -1084,8 +1549,9 @@ class MeasurementCalculator {
         let seedDepth = depthPtr[seedDY * depthStride + seedDX]
         guard seedDepth.isFinite && seedDepth > 0 else { return maskedPixels }
 
-        let seedTolerance = seedDepth * AppConstants.depthConnectivitySeedTolerance
-        let localTolerance = AppConstants.depthConnectivityLocalTolerance
+        let pipeline = AppConstants.currentPipelineVersion
+        let seedTolerance = seedDepth * pipeline.depthConnectivitySeedTolerance
+        let localTolerance = pipeline.depthConnectivityLocalTolerance
 
         // Helper: get depth for a masked pixel
         func depthAt(_ px: (x: Int, y: Int)) -> Float? {
@@ -1206,10 +1672,13 @@ class MeasurementCalculator {
 
         // Determine clustering threshold based on pipeline version
         let neighborThreshold: Float
-        if let fixed = pipeline.clusteringFixedThreshold {
+        if pipeline.useStatisticalClustering {
+            // k-NN MAD statistical threshold (standard)
+            neighborThreshold = computeKNNThreshold(points: points, pipeline: pipeline)
+        } else if let fixed = pipeline.clusteringFixedThreshold {
             neighborThreshold = fixed
         } else {
-            // Adaptive (enhanced only)
+            // Depth-adaptive (enhanced only)
             let medianDepth = estimateMedianDepth(points: points, cameraPosition: cameraPosition)
             let adaptive = AppConstants.clusteringBaseOffset + medianDepth * AppConstants.clusteringDepthScale
             neighborThreshold = min(max(adaptive, AppConstants.clusteringMinThreshold), AppConstants.clusteringMaxThreshold)
@@ -1298,6 +1767,97 @@ class MeasurementCalculator {
         var distances = points.map { simd_distance($0, origin) }
         distances.sort()
         return distances[distances.count / 2]
+    }
+
+    /// Compute clustering threshold from k-NN distance distribution using MAD.
+    /// Falls back to fixed 4cm when point count is insufficient.
+    private func computeKNNThreshold(points: [SIMD3<Float>], pipeline: PipelineVersion) -> Float {
+        let k = pipeline.clusteringKnnK
+        let madMultiplier = pipeline.clusteringKnnMADMultiplier
+        let gridCell = pipeline.clusteringKnnSearchRadius
+
+        // Need at least 2*k points for meaningful statistics
+        guard points.count >= 2 * k else {
+#if DEBUG
+            print("[Clustering] Too few points (\(points.count)) for k-NN, using fixed 4cm")
+#endif
+            return 0.04
+        }
+
+        // Subsample for performance if needed
+        let maxSample = 5000
+        let samplePoints: [SIMD3<Float>]
+        if points.count > maxSample {
+            var rng = SystemRandomNumberGenerator()
+            samplePoints = Array(points.shuffled(using: &rng).prefix(maxSample))
+        } else {
+            samplePoints = points
+        }
+
+        // Build spatial hash grid for k-NN search
+        struct Cell: Hashable { let x, y, z: Int }
+        var grid: [Cell: [Int]] = [:]
+        grid.reserveCapacity(samplePoints.count / 2)
+        for (i, p) in samplePoints.enumerated() {
+            let cell = Cell(x: Int(floor(p.x / gridCell)),
+                            y: Int(floor(p.y / gridCell)),
+                            z: Int(floor(p.z / gridCell)))
+            grid[cell, default: []].append(i)
+        }
+
+        // Compute k-th nearest neighbor distance for each sample point
+        var knnDistances: [Float] = []
+        knnDistances.reserveCapacity(samplePoints.count)
+
+        for (i, p) in samplePoints.enumerated() {
+            let cx = Int(floor(p.x / gridCell))
+            let cy = Int(floor(p.y / gridCell))
+            let cz = Int(floor(p.z / gridCell))
+
+            // Collect distances from neighboring cells
+            var distances: [Float] = []
+            for dx in -1...1 {
+                for dy in -1...1 {
+                    for dz in -1...1 {
+                        guard let neighbors = grid[Cell(x: cx+dx, y: cy+dy, z: cz+dz)] else { continue }
+                        for ni in neighbors {
+                            if ni == i { continue }
+                            distances.append(simd_distance(p, samplePoints[ni]))
+                        }
+                    }
+                }
+            }
+
+            guard distances.count >= k else {
+                // Not enough neighbors in grid range; skip this point
+                continue
+            }
+            distances.sort()
+            knnDistances.append(distances[k - 1])
+        }
+
+        guard knnDistances.count >= k else {
+#if DEBUG
+            print("[Clustering] Insufficient k-NN data, using fixed 4cm")
+#endif
+            return 0.04
+        }
+
+        // MAD-based threshold: median + MAD * multiplier * 1.4826
+        knnDistances.sort()
+        let median = knnDistances[knnDistances.count / 2]
+        let deviations = knnDistances.map { abs($0 - median) }
+        let sortedDeviations = deviations.sorted()
+        let mad = sortedDeviations[sortedDeviations.count / 2]
+        let threshold = median + mad * madMultiplier * 1.4826
+
+        // Clamp to [clusteringMinThreshold, clusteringMaxThreshold]
+        let clamped = min(max(threshold, AppConstants.clusteringMinThreshold), AppConstants.clusteringMaxThreshold)
+
+#if DEBUG
+        print("[Clustering] k-NN statistical threshold: \(clamped * 100)cm (median=\(median * 100)cm, MAD=\(mad * 100)cm, raw=\(threshold * 100)cm)")
+#endif
+        return clamped
     }
 
     /// Detect floor Y from horizontal ARPlaneAnchor below the object

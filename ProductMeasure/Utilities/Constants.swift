@@ -126,6 +126,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
     case preSplit = "preSplit"                    // 32b7342 (Feb 17)
     case standard = "standard"
     case enhanced = "enhanced"
+    case accurateSize = "accurateSize"            // Relaxed filtering for isolated objects
 
     var displayName: String {
         switch self {
@@ -133,6 +134,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
         case .preSplit: return "v2 Pre-Split"
         case .standard: return "Standard"
         case .enhanced: return "Enhanced"
+        case .accurateSize: return "Accurate Size"
         }
     }
 
@@ -142,6 +144,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
         case .preSplit: return "Post-accuracy-fix, pre-split (Feb 17). Tighter depth, fine angle search, weighted plane snap."
         case .standard: return "Default pipeline. Fixed 4cm clustering, 0.5° MABR step, raycast floor."
         case .enhanced: return "Depth-adaptive clustering (3-6cm), 0.2° MABR step, plane-based floor detection."
+        case .accurateSize: return "Minimal filtering for isolated objects. Skips depth filter, MAD, clustering. Adds size compensation."
         }
     }
 
@@ -150,7 +153,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
     var useInstanceMaskLookup: Bool {
         switch self {
         case .originalWarehouse, .preSplit: return false
-        case .standard, .enhanced: return true
+        case .standard, .enhanced, .accurateSize: return true
         }
     }
 
@@ -159,14 +162,14 @@ enum PipelineVersion: String, CaseIterable, Codable {
     var use2DConnectedComponent: Bool {
         switch self {
         case .originalWarehouse, .preSplit: return false
-        case .standard, .enhanced: return true
+        case .standard, .enhanced, .accurateSize: return true
         }
     }
 
     var useDepthConnectivity: Bool {
         switch self {
         case .originalWarehouse, .preSplit: return false
-        case .standard, .enhanced: return true
+        case .standard, .enhanced, .accurateSize: return true
         }
     }
 
@@ -176,7 +179,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
         switch self {
         case .originalWarehouse: return 0.25
         case .preSplit: return 0.20
-        case .standard, .enhanced: return 0.15
+        case .standard, .enhanced, .accurateSize: return 0.15
         }
     }
 
@@ -184,7 +187,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
         switch self {
         case .originalWarehouse: return 0.10
         case .preSplit: return 0.07
-        case .standard, .enhanced: return 0.05
+        case .standard, .enhanced, .accurateSize: return 0.05
         }
     }
 
@@ -193,7 +196,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
         switch self {
         case .originalWarehouse: return nil
         case .preSplit: return 0.25
-        case .standard, .enhanced: return 0.15
+        case .standard, .enhanced, .accurateSize: return 0.15
         }
     }
 
@@ -201,7 +204,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
     var depthFilterReturnsOriginalOnTooFew: Bool {
         switch self {
         case .originalWarehouse, .preSplit: return true
-        case .standard, .enhanced: return false
+        case .standard, .enhanced, .accurateSize: return false
         }
     }
 
@@ -209,15 +212,15 @@ enum PipelineVersion: String, CaseIterable, Codable {
 
     var proximityMinRadius: Float {
         switch self {
-        case .originalWarehouse, .preSplit: return 1.0
-        case .standard, .enhanced: return 0.5
+        case .originalWarehouse, .preSplit, .standard: return 1.0
+        case .enhanced, .accurateSize: return 0.5
         }
     }
 
     var proximitySpreadScale: Float {
         switch self {
         case .originalWarehouse, .preSplit: return 1.0
-        case .standard, .enhanced: return 0.8
+        case .standard, .enhanced, .accurateSize: return 0.8
         }
     }
 
@@ -226,7 +229,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
     /// Fixed clustering threshold. nil = adaptive (enhanced only)
     var clusteringFixedThreshold: Float? {
         switch self {
-        case .originalWarehouse, .preSplit, .standard: return 0.04
+        case .originalWarehouse, .preSplit, .standard, .accurateSize: return 0.04
         case .enhanced: return nil
         }
     }
@@ -234,30 +237,42 @@ enum PipelineVersion: String, CaseIterable, Codable {
     var clusteringMinPoints: Int {
         switch self {
         case .originalWarehouse, .preSplit: return 30
-        case .standard, .enhanced: return 15
+        case .standard, .enhanced, .accurateSize: return 15
         }
     }
 
     var clusteringFallbackMinPoints: Int {
         switch self {
         case .originalWarehouse, .preSplit: return 10
-        case .standard, .enhanced: return 8
+        case .standard, .enhanced, .accurateSize: return 8
         }
     }
 
     var clusteringGuardMinPoints: Int {
         switch self {
         case .originalWarehouse, .preSplit: return 20
-        case .standard, .enhanced: return 12
+        case .standard, .enhanced, .accurateSize: return 12
         }
     }
+
+    /// Use k-NN MAD statistical threshold (standard only)
+    var useStatisticalClustering: Bool { self == .standard }
+
+    /// k-NN k value for statistical clustering threshold
+    var clusteringKnnK: Int { 6 }
+
+    /// k-NN MAD multiplier (lower than outlier removal's 3.0)
+    var clusteringKnnMADMultiplier: Float { 2.0 }
+
+    /// k-NN search grid cell size (5cm)
+    var clusteringKnnSearchRadius: Float { 0.05 }
 
     // MARK: - Bounding Box Estimation
 
     var useFineAngleSearch: Bool {
         switch self {
         case .originalWarehouse: return false
-        case .preSplit, .standard, .enhanced: return true
+        case .preSplit, .standard, .enhanced, .accurateSize: return true
         }
     }
 
@@ -265,7 +280,7 @@ enum PipelineVersion: String, CaseIterable, Codable {
         switch self {
         case .originalWarehouse, .preSplit, .standard:
             return 0.5 * .pi / 180.0
-        case .enhanced:
+        case .enhanced, .accurateSize:
             return 0.2 * .pi / 180.0
         }
     }
@@ -273,14 +288,14 @@ enum PipelineVersion: String, CaseIterable, Codable {
     var useWeightedPlaneSnap: Bool {
         switch self {
         case .originalWarehouse: return false
-        case .preSplit, .standard, .enhanced: return true
+        case .preSplit, .standard, .enhanced, .accurateSize: return true
         }
     }
 
     var boxRefinementIterations: Int {
         switch self {
         case .originalWarehouse: return 1
-        case .preSplit, .standard, .enhanced: return 2
+        case .preSplit, .standard, .enhanced, .accurateSize: return 2
         }
     }
 
@@ -289,22 +304,77 @@ enum PipelineVersion: String, CaseIterable, Codable {
     var useARPlaneFloor: Bool {
         switch self {
         case .originalWarehouse, .preSplit: return false
-        case .standard, .enhanced: return true
+        case .standard, .enhanced, .accurateSize: return true
         }
     }
 
     var floorSnapDefault: Float {
         switch self {
         case .originalWarehouse, .preSplit: return 0.05
-        case .standard, .enhanced: return 0.15
+        case .standard, .enhanced, .accurateSize: return 0.15
         }
     }
 
     var floorSnapWithPlane: Float {
         switch self {
         case .originalWarehouse, .preSplit: return 0.05
-        case .standard, .enhanced: return 0.25
+        case .standard, .enhanced, .accurateSize: return 0.25
         }
+    }
+
+    // MARK: - Accurate Size Pipeline Properties
+
+    /// Whether to use the boundary-based measurement pipeline (mask edge + interior depth)
+    var useBoundaryMeasurement: Bool {
+        return false  // Disabled: mask boundary ≠ object boundary when mask extends onto same-depth surface
+    }
+
+    var skipDepthFilter: Bool {
+        return false
+    }
+
+    /// Skip MAD outlier removal — MAD removes points far from median, which disproportionately eats edge points
+    var skipMADOutlierRemoval: Bool {
+        switch self {
+        case .accurateSize: return true
+        default: return false
+        }
+    }
+
+    var skipClustering: Bool {
+        return false
+    }
+
+    var useRawDepth: Bool {
+        return false
+    }
+
+    /// Size compensation per side (meters) to offset systematic LiDAR/segmentation bias
+    var sizeCompensationPerSide: Float {
+        return 0.0
+    }
+
+    var extentsTrimPercent: Float {
+        switch self {
+        case .accurateSize: return 0.0
+        default: return 0.01
+        }
+    }
+
+    var boxRefinementMargin: Float {
+        return 0.015
+    }
+
+    var madMultiplier: Float {
+        return 3.0
+    }
+
+    var depthConnectivityLocalTolerance: Float {
+        return 0.05
+    }
+
+    var depthConnectivitySeedTolerance: Float {
+        return 0.10
     }
 }
 
@@ -534,6 +604,7 @@ extension PipelineVersion: RawRepresentable {
         case "preSplit": self = .preSplit
         case "standard": self = .standard
         case "enhanced": self = .enhanced
+        case "accurateSize": self = .accurateSize
         default: return nil
         }
     }
