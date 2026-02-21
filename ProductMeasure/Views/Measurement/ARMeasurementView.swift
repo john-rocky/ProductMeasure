@@ -17,6 +17,7 @@ struct ARMeasurementView: View {
     @AppStorage("showScanningTips") private var showScanningTips = true
     #if DEBUG
     @AppStorage("showMaskPreview") private var showMaskPreview = false
+    @AppStorage("showDiagnostics") private var showDiagnostics = false
     #endif
     @State private var showScanningTipsSheet = false
 
@@ -75,6 +76,23 @@ struct ARMeasurementView: View {
                                         .overlay(Circle().strokeBorder(PMTheme.cyan.opacity(0.20), lineWidth: 0.5))
                                 }
                             }
+
+                            #if DEBUG
+                            if viewModel.lastPipelineDiagnostics != nil {
+                                Button(action: { viewModel.showDiagnosticsPanel = true }) {
+                                    Image(systemName: "waveform.path.ecg")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(viewModel.lastPipelineDiagnostics?.succeeded == true ? PMTheme.cyan : PMTheme.red)
+                                        .frame(width: 36, height: 36)
+                                        .background(PMTheme.surfaceDark.opacity(0.85))
+                                        .clipShape(Circle())
+                                        .overlay(Circle().strokeBorder(
+                                            (viewModel.lastPipelineDiagnostics?.succeeded == true ? PMTheme.cyan : PMTheme.red).opacity(0.20),
+                                            lineWidth: 0.5
+                                        ))
+                                }
+                            }
+                            #endif
 
                             Spacer()
 
@@ -198,6 +216,11 @@ struct ARMeasurementView: View {
                 .sheet(isPresented: $viewModel.showDebugDepth) {
                     if let image = viewModel.debugDepthImage {
                         DebugImageView(image: image, title: "Depth Map (Bright=Close) + Masked Pixels (Green)")
+                    }
+                }
+                .sheet(isPresented: $viewModel.showDiagnosticsPanel) {
+                    if let diag = viewModel.lastPipelineDiagnostics {
+                        PipelineDiagnosticsView(diagnostics: diag)
                     }
                 }
                 #endif
@@ -341,6 +364,7 @@ struct ARMeasurementView: View {
             viewModel.appMode = appMode
             #if DEBUG
             viewModel.showMaskPreviewSetting = showMaskPreview
+            viewModel.showDiagnosticsSetting = showDiagnostics
             #endif
         }
         .onDisappear {
@@ -358,6 +382,9 @@ struct ARMeasurementView: View {
         #if DEBUG
         .onChange(of: showMaskPreview) { _, newValue in
             viewModel.showMaskPreviewSetting = newValue
+        }
+        .onChange(of: showDiagnostics) { _, newValue in
+            viewModel.showDiagnosticsSetting = newValue
         }
         #endif
     }

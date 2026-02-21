@@ -15,6 +15,7 @@ struct SettingsView: View {
     @AppStorage("showScanningTips") private var showScanningTips = true
     #if DEBUG
     @AppStorage("showMaskPreview") private var showMaskPreview = false
+    @AppStorage("showDiagnostics") private var showDiagnostics = false
     #endif
 
     var body: some View {
@@ -115,6 +116,7 @@ struct SettingsView: View {
                 // Debug section
                 Section {
                     Toggle("Show Mask Preview", isOn: $showMaskPreview)
+                    Toggle("Pipeline Diagnostics", isOn: $showDiagnostics)
                 } header: {
                     Text("DEBUG")
                         .font(PMTheme.mono(11, weight: .bold))

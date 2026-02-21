@@ -64,6 +64,11 @@ class MeasurementCalculator {
     private let pointCloudGenerator = PointCloudGenerator()
     private let boundingBoxEstimator = BoundingBoxEstimator()
 
+    #if DEBUG
+    /// Diagnostics from the last pipeline run (populated on both success and failure)
+    private(set) var lastDiagnostics: PipelineDiagnostics?
+    #endif
+
     // MARK: - Public Methods
 
     /// Perform a complete measurement from an AR frame at a tap location
@@ -84,6 +89,9 @@ class MeasurementCalculator {
 #if DEBUG
         print("[Calculator] Starting measurement")
         print("[Calculator] Tap point: \(tapPoint), View size: \(viewSize)")
+        let diagStartTime = CFAbsoluteTimeGetCurrent()
+        let diagnostics = PipelineDiagnostics()
+        diagnostics.pipelineVersion = AppConstants.currentPipelineVersion.displayName
 #endif
 
         // Convert tap point to normalized image coordinates (0-1)
@@ -105,9 +113,18 @@ class MeasurementCalculator {
         )
 #if DEBUG
         print("[Calculator] Normalized tap point: \(normalizedTap)")
+        diagnostics.input = PipelineDiagnostics.InputStage(
+            tapPoint: tapPoint, normalizedTap: normalizedTap, roi: nil,
+            viewSize: viewSize, imageSize: imageSize,
+            trackingState: "\(frame.camera.trackingState)",
+            mode: "\(mode)", selectionMode: "tap"
+        )
 #endif
 
         // 1. Perform instance segmentation
+        #if DEBUG
+        let segStartTime = CFAbsoluteTimeGetCurrent()
+        #endif
         guard let segmentation = try await segmentationService.segmentInstance(
             in: frame.capturedImage,
             at: normalizedTap,
@@ -115,6 +132,15 @@ class MeasurementCalculator {
         ) else {
 #if DEBUG
             print("[Calculator] Segmentation failed - no instance found")
+            diagnostics.segmentation = PipelineDiagnostics.SegmentationStage(
+                instanceCount: 0, selectedInstance: "none", maskPixelCount: 0,
+                maskSize: .zero, durationMs: (CFAbsoluteTimeGetCurrent() - segStartTime) * 1000,
+                status: .failed
+            )
+            diagnostics.failedAtStage = "SEGMENTATION"
+            diagnostics.failureReason = "No foreground instance found at tap point"
+            diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+            self.lastDiagnostics = diagnostics
 #endif
             return nil
         }
@@ -124,15 +150,34 @@ class MeasurementCalculator {
 
         // Offload CPU-heavy processing (depth filter, point cloud, clustering, bbox) off main thread
         return await Task.detached(priority: .userInitiated) { [self] in
+            #if DEBUG
+            diagnostics.segmentation = PipelineDiagnostics.SegmentationStage(
+                instanceCount: segmentation.instanceCount,
+                selectedInstance: "instance",
+                maskPixelCount: 0,  // filled after getMaskedPixels
+                maskSize: segmentation.maskSize,
+                durationMs: (CFAbsoluteTimeGetCurrent() - segStartTime) * 1000,
+                status: .success
+            )
+            #endif
+
             // 2. Get masked pixels
             let maskedPixels = segmentationService.getMaskedPixels(
                 mask: segmentation.mask,
                 imageSize: imageSize
             )
 
+            #if DEBUG
+            diagnostics.segmentation?.maskPixelCount = maskedPixels.count
+            #endif
+
             guard !maskedPixels.isEmpty else {
 #if DEBUG
                 print("[Calculator] No masked pixels found")
+                diagnostics.failedAtStage = "SEGMENTATION"
+                diagnostics.failureReason = "Mask produced zero pixels"
+                diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                self.lastDiagnostics = diagnostics
 #endif
                 return nil
             }
@@ -153,6 +198,15 @@ class MeasurementCalculator {
             } else {
                 ccPixels = maskedPixels
             }
+            #if DEBUG
+            diagnostics.connectedComponent = PipelineDiagnostics.ConnectedComponentStage(
+                enabled: pipeline.use2DConnectedComponent,
+                pixelsBefore: maskedPixels.count,
+                pixelsAfter: ccPixels.count,
+                retentionPercent: maskedPixels.count > 0 ? Double(ccPixels.count) / Double(maskedPixels.count) * 100 : 0,
+                status: ccPixels.count > 0 ? .success : .warning
+            )
+            #endif
 
             // 2c. Refine mask by depth connectivity — separate touching objects
             let connectedPixels: [(x: Int, y: Int)]
@@ -166,6 +220,15 @@ class MeasurementCalculator {
             } else {
                 connectedPixels = ccPixels
             }
+            #if DEBUG
+            diagnostics.depthConnectivity = PipelineDiagnostics.DepthConnectivityStage(
+                enabled: pipeline.useDepthConnectivity,
+                pixelsBefore: ccPixels.count,
+                pixelsAfter: connectedPixels.count,
+                retentionPercent: ccPixels.count > 0 ? Double(connectedPixels.count) / Double(ccPixels.count) * 100 : 0,
+                status: connectedPixels.count > 0 ? .success : .warning
+            )
+            #endif
 
             // 3. Filter masked pixels by depth - only keep pixels at similar depth to tap point
             let filteredPixels = filterMaskedPixelsByDepth(
@@ -178,11 +241,27 @@ class MeasurementCalculator {
             guard !filteredPixels.isEmpty else {
 #if DEBUG
                 print("[Calculator] No pixels after depth filtering")
+                diagnostics.depthFilter = PipelineDiagnostics.DepthFilterStage(
+                    tapDepth: 0, tolerance: 0, tolerancePercent: 0,
+                    pixelsBefore: connectedPixels.count, pixelsAfter: 0,
+                    retentionPercent: 0, status: .failed
+                )
+                diagnostics.failedAtStage = "DEPTH FILTER"
+                diagnostics.failureReason = "No pixels remained after depth filtering"
+                diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                self.lastDiagnostics = diagnostics
 #endif
                 return nil
             }
 #if DEBUG
             print("[Calculator] Found \(filteredPixels.count) masked pixels after depth filtering")
+            diagnostics.depthFilter = PipelineDiagnostics.DepthFilterStage(
+                tapDepth: 0, tolerance: 0, tolerancePercent: 0,  // filled by filterMaskedPixelsByDepth prints
+                pixelsBefore: connectedPixels.count,
+                pixelsAfter: filteredPixels.count,
+                retentionPercent: connectedPixels.count > 0 ? Double(filteredPixels.count) / Double(connectedPixels.count) * 100 : 0,
+                status: .success
+            )
 #endif
 
             // Create debug mask image (memory-optimized version)
@@ -207,11 +286,34 @@ class MeasurementCalculator {
             guard !pointCloud.isEmpty else {
 #if DEBUG
                 print("[Calculator] Point cloud is empty")
+                if let gen = pointCloudGenerator.lastGenerationDetails {
+                    diagnostics.pointCloud = PipelineDiagnostics.PointCloudStage(
+                        inputPixels: gen.inputPixels, extracted: gen.extracted,
+                        afterOutlierRemoval: gen.afterOutlierRemoval, afterDownsample: gen.afterDownsample,
+                        afterUnproject: gen.afterUnproject, after3DFilter: gen.after3DFilter,
+                        finalCount: 0, depthCoverage: 0, depthConfidence: 0, status: .failed
+                    )
+                }
+                diagnostics.failedAtStage = "POINT CLOUD"
+                diagnostics.failureReason = "Point cloud generation returned zero points"
+                diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                self.lastDiagnostics = diagnostics
 #endif
                 return nil
             }
 #if DEBUG
             print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
+            if let gen = pointCloudGenerator.lastGenerationDetails {
+                diagnostics.pointCloud = PipelineDiagnostics.PointCloudStage(
+                    inputPixels: gen.inputPixels, extracted: gen.extracted,
+                    afterOutlierRemoval: gen.afterOutlierRemoval, afterDownsample: gen.afterDownsample,
+                    afterUnproject: gen.afterUnproject, after3DFilter: gen.after3DFilter,
+                    finalCount: gen.finalCount,
+                    depthCoverage: pointCloud.quality.depthCoverage,
+                    depthConfidence: pointCloud.quality.depthConfidence,
+                    status: .success
+                )
+            }
 #endif
 
             // 5. Filter point cloud by 3D distance from raycast hit position
@@ -230,6 +332,15 @@ class MeasurementCalculator {
                 if nearestDistance > 2.0 {
 #if DEBUG
                     print("[Calculator] ERROR: Mask does not contain tapped location. Nearest point is \(nearestDistance)m away.")
+                    diagnostics.clustering = PipelineDiagnostics.ClusteringStage(
+                        nearestDistToHit: nearestDistance, proximityRadius: 0,
+                        pointsAfterProximity: 0, pointsAfterClustering: 0,
+                        method: "rejected", status: .failed
+                    )
+                    diagnostics.failedAtStage = "CLUSTERING"
+                    diagnostics.failureReason = "Nearest point \(String(format: "%.2f", nearestDistance))m from tap (>2m)"
+                    diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                    self.lastDiagnostics = diagnostics
 #endif
                     return nil
                 }
@@ -254,6 +365,11 @@ class MeasurementCalculator {
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
 #if DEBUG
                     print("[Calculator] After clustering: \(filteredPoints.count) points")
+                    diagnostics.clustering = PipelineDiagnostics.ClusteringStage(
+                        nearestDistToHit: nearestDistance, proximityRadius: initialRadius,
+                        pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
+                        method: "clustering", status: .success
+                    )
 #endif
 
                     pointCloud = PointCloudGenerator.PointCloud(
@@ -261,6 +377,13 @@ class MeasurementCalculator {
                         quality: pointCloud.quality
                     )
                 } else if filteredPoints.count >= fallbackMin {
+                    #if DEBUG
+                    diagnostics.clustering = PipelineDiagnostics.ClusteringStage(
+                        nearestDistToHit: nearestDistance, proximityRadius: initialRadius,
+                        pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
+                        method: "proximity-only", status: .success
+                    )
+                    #endif
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
                         quality: pointCloud.quality
@@ -268,9 +391,26 @@ class MeasurementCalculator {
                 } else {
 #if DEBUG
                     print("[Calculator] Too few points near tap location (\(filteredPoints.count))")
+                    diagnostics.clustering = PipelineDiagnostics.ClusteringStage(
+                        nearestDistToHit: nearestDistance, proximityRadius: initialRadius,
+                        pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
+                        method: "rejected", status: .failed
+                    )
+                    diagnostics.failedAtStage = "CLUSTERING"
+                    diagnostics.failureReason = "Too few points near tap (\(filteredPoints.count) < \(fallbackMin))"
+                    diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                    self.lastDiagnostics = diagnostics
 #endif
                     return nil
                 }
+            } else {
+                #if DEBUG
+                diagnostics.clustering = PipelineDiagnostics.ClusteringStage(
+                    nearestDistToHit: 0, proximityRadius: 0,
+                    pointsAfterProximity: pointCloud.points.count, pointsAfterClustering: pointCloud.points.count,
+                    method: "skipped", status: .skipped
+                )
+                #endif
             }
 
             // 6. Estimate bounding box (with vertical plane snap for box mode)
@@ -286,6 +426,14 @@ class MeasurementCalculator {
             ) else {
 #if DEBUG
                 print("[Calculator] Failed to estimate bounding box")
+                diagnostics.bboxEstimation = PipelineDiagnostics.BBoxEstimationStage(
+                    hullPointCount: 0, coarseAngleDeg: 0, fineAngleDeg: 0,
+                    angleDelta: 0, refinementIterations: 0, method: "unknown", status: .failed
+                )
+                diagnostics.failedAtStage = "BBOX ESTIMATION"
+                diagnostics.failureReason = "Bounding box estimation returned nil"
+                diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                self.lastDiagnostics = diagnostics
 #endif
                 return nil
             }
@@ -293,6 +441,28 @@ class MeasurementCalculator {
             print("[Calculator] Bounding box estimated")
             print("[Calculator] Box center: \(boundingBox.center)")
             print("[Calculator] Box extents: \(boundingBox.extents)")
+            if let est = boundingBoxEstimator.lastEstimationDetails {
+                diagnostics.bboxEstimation = PipelineDiagnostics.BBoxEstimationStage(
+                    hullPointCount: est.hullPointCount,
+                    coarseAngleDeg: est.coarseAngleDeg,
+                    fineAngleDeg: est.fineAngleDeg,
+                    angleDelta: abs(est.fineAngleDeg - est.coarseAngleDeg),
+                    refinementIterations: est.refinementIterations,
+                    method: est.method,
+                    status: .success
+                )
+                diagnostics.planeSnap = PipelineDiagnostics.PlaneSnapStage(
+                    snapped: est.snapped,
+                    planeCount: est.planeCount,
+                    closestDistance: est.closestPlaneDistance,
+                    preSnapAngleDeg: est.preSnapAngleDeg,
+                    postSnapAngleDeg: est.postSnapAngleDeg,
+                    snapDelta: abs(est.postSnapAngleDeg - est.preSnapAngleDeg),
+                    score: est.snapScore,
+                    method: pipeline.useWeightedPlaneSnap ? "weighted" : "area-only",
+                    status: est.snapped ? .success : .skipped
+                )
+            }
 #endif
 
             // 7. Calculate dimensions using camera-based axis mapping
@@ -304,6 +474,10 @@ class MeasurementCalculator {
             print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
             print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
             print("[Calculator] Volume: \(volume * 1_000_000) cm³")
+            diagnostics.axisMapping = PipelineDiagnostics.AxisMappingStage(
+                heightAxisIndex: mapping.height, lengthAxisIndex: mapping.length, widthAxisIndex: mapping.width,
+                heightCm: height * 100, lengthCm: length * 100, widthCm: width * 100
+            )
 #endif
 
             var result = MeasurementResult(
@@ -325,11 +499,23 @@ class MeasurementCalculator {
             if pipeline.useARPlaneFloor {
                 result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
             }
+            #if DEBUG
+            let boxBottomY = boundingBox.center.y - boundingBox.extents.y
+            diagnostics.floor = PipelineDiagnostics.FloorStage(
+                detected: result.detectedFloorY != nil,
+                floorY: result.detectedFloorY,
+                boxBottomY: boxBottomY,
+                extensionAmount: result.detectedFloorY.map { boxBottomY - $0 },
+                method: pipeline.useARPlaneFloor ? "ARPlane" : "none"
+            )
+            #endif
 
             // Attach debug info (images only, not point cloud to save memory)
             #if DEBUG
             result.debugMaskImage = debugMaskImage
             result.debugDepthImage = debugDepthImage
+            diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+            self.lastDiagnostics = diagnostics
             #endif
 
             return result
@@ -354,6 +540,9 @@ class MeasurementCalculator {
 #if DEBUG
         print("[Calculator] Starting ROI measurement")
         print("[Calculator] Screen ROI: \(regionOfInterest), View size: \(viewSize)")
+        let diagStartTime = CFAbsoluteTimeGetCurrent()
+        let diagnostics = PipelineDiagnostics()
+        diagnostics.pipelineVersion = AppConstants.currentPipelineVersion.displayName
 #endif
 
         let imageSize = CGSize(
@@ -371,15 +560,33 @@ class MeasurementCalculator {
         )
 #if DEBUG
         print("[Calculator] Vision ROI: \(visionROI)")
+        diagnostics.input = PipelineDiagnostics.InputStage(
+            tapPoint: nil, normalizedTap: nil, roi: regionOfInterest,
+            viewSize: viewSize, imageSize: imageSize,
+            trackingState: "\(frame.camera.trackingState)",
+            mode: "\(mode)", selectionMode: "box"
+        )
 #endif
 
         // 1. Perform instance segmentation with ROI
+        #if DEBUG
+        let segStartTime = CFAbsoluteTimeGetCurrent()
+        #endif
         guard let segmentation = try await segmentationService.segmentInstanceWithROI(
             in: frame.capturedImage,
             regionOfInterest: visionROI
         ) else {
 #if DEBUG
             print("[Calculator] Segmentation with ROI failed - no instance found")
+            diagnostics.segmentation = PipelineDiagnostics.SegmentationStage(
+                instanceCount: 0, selectedInstance: "none", maskPixelCount: 0,
+                maskSize: .zero, durationMs: (CFAbsoluteTimeGetCurrent() - segStartTime) * 1000,
+                status: .failed
+            )
+            diagnostics.failedAtStage = "SEGMENTATION"
+            diagnostics.failureReason = "No foreground instance found in ROI"
+            diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+            self.lastDiagnostics = diagnostics
 #endif
             return nil
         }
@@ -397,6 +604,17 @@ class MeasurementCalculator {
 
         // Offload CPU-heavy processing off main thread
         return await Task.detached(priority: .userInitiated) { [self] in
+            #if DEBUG
+            diagnostics.segmentation = PipelineDiagnostics.SegmentationStage(
+                instanceCount: segmentation.instanceCount,
+                selectedInstance: "ROI",
+                maskPixelCount: 0,
+                maskSize: segmentation.maskSize,
+                durationMs: (CFAbsoluteTimeGetCurrent() - segStartTime) * 1000,
+                status: .success
+            )
+            #endif
+
             // 2. Get masked pixels with ROI coordinate transformation
             let maskedPixels = segmentationService.getMaskedPixelsWithROI(
                 mask: segmentation.mask,
@@ -404,9 +622,17 @@ class MeasurementCalculator {
                 visionROI: visionROI
             )
 
+            #if DEBUG
+            diagnostics.segmentation?.maskPixelCount = maskedPixels.count
+            #endif
+
             guard !maskedPixels.isEmpty else {
 #if DEBUG
                 print("[Calculator] No masked pixels found")
+                diagnostics.failedAtStage = "SEGMENTATION"
+                diagnostics.failureReason = "Mask produced zero pixels"
+                diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                self.lastDiagnostics = diagnostics
 #endif
                 return nil
             }
@@ -427,6 +653,14 @@ class MeasurementCalculator {
             } else {
                 ccPixels = maskedPixels
             }
+            #if DEBUG
+            diagnostics.connectedComponent = PipelineDiagnostics.ConnectedComponentStage(
+                enabled: pipeline.use2DConnectedComponent,
+                pixelsBefore: maskedPixels.count, pixelsAfter: ccPixels.count,
+                retentionPercent: maskedPixels.count > 0 ? Double(ccPixels.count) / Double(maskedPixels.count) * 100 : 0,
+                status: ccPixels.count > 0 ? .success : .warning
+            )
+            #endif
 
             // 3c. Refine mask by depth connectivity — separate touching objects
             let connectedPixels: [(x: Int, y: Int)]
@@ -440,6 +674,14 @@ class MeasurementCalculator {
             } else {
                 connectedPixels = ccPixels
             }
+            #if DEBUG
+            diagnostics.depthConnectivity = PipelineDiagnostics.DepthConnectivityStage(
+                enabled: pipeline.useDepthConnectivity,
+                pixelsBefore: ccPixels.count, pixelsAfter: connectedPixels.count,
+                retentionPercent: ccPixels.count > 0 ? Double(connectedPixels.count) / Double(ccPixels.count) * 100 : 0,
+                status: connectedPixels.count > 0 ? .success : .warning
+            )
+            #endif
 
             // 4. Apply depth filtering based on box center
             let depthFilteredPixels = filterMaskedPixelsByDepth(
@@ -452,11 +694,26 @@ class MeasurementCalculator {
             guard !depthFilteredPixels.isEmpty else {
 #if DEBUG
                 print("[Calculator] No pixels after depth filtering")
+                diagnostics.depthFilter = PipelineDiagnostics.DepthFilterStage(
+                    tapDepth: 0, tolerance: 0, tolerancePercent: 0,
+                    pixelsBefore: connectedPixels.count, pixelsAfter: 0,
+                    retentionPercent: 0, status: .failed
+                )
+                diagnostics.failedAtStage = "DEPTH FILTER"
+                diagnostics.failureReason = "No pixels remained after depth filtering"
+                diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                self.lastDiagnostics = diagnostics
 #endif
                 return nil
             }
 #if DEBUG
             print("[Calculator] Found \(depthFilteredPixels.count) masked pixels after depth filtering")
+            diagnostics.depthFilter = PipelineDiagnostics.DepthFilterStage(
+                tapDepth: 0, tolerance: 0, tolerancePercent: 0,
+                pixelsBefore: connectedPixels.count, pixelsAfter: depthFilteredPixels.count,
+                retentionPercent: connectedPixels.count > 0 ? Double(depthFilteredPixels.count) / Double(connectedPixels.count) * 100 : 0,
+                status: .success
+            )
 #endif
 
             // Create debug mask image with ROI
@@ -481,11 +738,26 @@ class MeasurementCalculator {
             guard !pointCloud.isEmpty else {
 #if DEBUG
                 print("[Calculator] Point cloud is empty")
+                diagnostics.failedAtStage = "POINT CLOUD"
+                diagnostics.failureReason = "Point cloud generation returned zero points"
+                diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                self.lastDiagnostics = diagnostics
 #endif
                 return nil
             }
 #if DEBUG
             print("[Calculator] Generated point cloud with \(pointCloud.points.count) points")
+            if let gen = pointCloudGenerator.lastGenerationDetails {
+                diagnostics.pointCloud = PipelineDiagnostics.PointCloudStage(
+                    inputPixels: gen.inputPixels, extracted: gen.extracted,
+                    afterOutlierRemoval: gen.afterOutlierRemoval, afterDownsample: gen.afterDownsample,
+                    afterUnproject: gen.afterUnproject, after3DFilter: gen.after3DFilter,
+                    finalCount: gen.finalCount,
+                    depthCoverage: pointCloud.quality.depthCoverage,
+                    depthConfidence: pointCloud.quality.depthConfidence,
+                    status: .success
+                )
+            }
 #endif
 
             // 6. Filter by proximity if raycast hit available
@@ -501,6 +773,15 @@ class MeasurementCalculator {
                 if nearestDistance > 2.0 {
 #if DEBUG
                     print("[Calculator] ERROR: Point cloud too far from raycast hit")
+                    diagnostics.clustering = PipelineDiagnostics.ClusteringStage(
+                        nearestDistToHit: nearestDistance, proximityRadius: 0,
+                        pointsAfterProximity: 0, pointsAfterClustering: 0,
+                        method: "rejected", status: .failed
+                    )
+                    diagnostics.failedAtStage = "CLUSTERING"
+                    diagnostics.failureReason = "Point cloud too far from raycast hit"
+                    diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                    self.lastDiagnostics = diagnostics
 #endif
                     return nil
                 }
@@ -523,6 +804,11 @@ class MeasurementCalculator {
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
 #if DEBUG
                     print("[Calculator] After clustering: \(filteredPoints.count) points")
+                    diagnostics.clustering = PipelineDiagnostics.ClusteringStage(
+                        nearestDistToHit: nearestDistance, proximityRadius: initialRadius,
+                        pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
+                        method: "clustering", status: .success
+                    )
 #endif
 
                     pointCloud = PointCloudGenerator.PointCloud(
@@ -530,6 +816,13 @@ class MeasurementCalculator {
                         quality: pointCloud.quality
                     )
                 } else if filteredPoints.count >= fallbackMin {
+                    #if DEBUG
+                    diagnostics.clustering = PipelineDiagnostics.ClusteringStage(
+                        nearestDistToHit: nearestDistance, proximityRadius: initialRadius,
+                        pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
+                        method: "proximity-only", status: .success
+                    )
+                    #endif
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
                         quality: pointCloud.quality
@@ -537,6 +830,15 @@ class MeasurementCalculator {
                 } else {
 #if DEBUG
                     print("[Calculator] Too few points near box center (\(filteredPoints.count))")
+                    diagnostics.clustering = PipelineDiagnostics.ClusteringStage(
+                        nearestDistToHit: nearestDistance, proximityRadius: initialRadius,
+                        pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
+                        method: "rejected", status: .failed
+                    )
+                    diagnostics.failedAtStage = "CLUSTERING"
+                    diagnostics.failureReason = "Too few points near box center (\(filteredPoints.count))"
+                    diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                    self.lastDiagnostics = diagnostics
 #endif
                     return nil
                 }
@@ -555,11 +857,33 @@ class MeasurementCalculator {
             ) else {
 #if DEBUG
                 print("[Calculator] Failed to estimate bounding box")
+                diagnostics.failedAtStage = "BBOX ESTIMATION"
+                diagnostics.failureReason = "Bounding box estimation returned nil"
+                diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+                self.lastDiagnostics = diagnostics
 #endif
                 return nil
             }
 #if DEBUG
             print("[Calculator] Bounding box estimated")
+            if let est = boundingBoxEstimator.lastEstimationDetails {
+                diagnostics.bboxEstimation = PipelineDiagnostics.BBoxEstimationStage(
+                    hullPointCount: est.hullPointCount, coarseAngleDeg: est.coarseAngleDeg,
+                    fineAngleDeg: est.fineAngleDeg,
+                    angleDelta: abs(est.fineAngleDeg - est.coarseAngleDeg),
+                    refinementIterations: est.refinementIterations, method: est.method,
+                    status: .success
+                )
+                diagnostics.planeSnap = PipelineDiagnostics.PlaneSnapStage(
+                    snapped: est.snapped, planeCount: est.planeCount,
+                    closestDistance: est.closestPlaneDistance,
+                    preSnapAngleDeg: est.preSnapAngleDeg, postSnapAngleDeg: est.postSnapAngleDeg,
+                    snapDelta: abs(est.postSnapAngleDeg - est.preSnapAngleDeg),
+                    score: est.snapScore,
+                    method: pipeline.useWeightedPlaneSnap ? "weighted" : "area-only",
+                    status: est.snapped ? .success : .skipped
+                )
+            }
 #endif
 
             // 8. Calculate dimensions using camera-based axis mapping
@@ -570,6 +894,10 @@ class MeasurementCalculator {
 #if DEBUG
             print("[Calculator] Axis mapping: height=\(mapping.height), length=\(mapping.length), width=\(mapping.width)")
             print("[Calculator] Dimensions: L=\(length*100)cm, W=\(width*100)cm, H=\(height*100)cm")
+            diagnostics.axisMapping = PipelineDiagnostics.AxisMappingStage(
+                heightAxisIndex: mapping.height, lengthAxisIndex: mapping.length, widthAxisIndex: mapping.width,
+                heightCm: height * 100, lengthCm: length * 100, widthCm: width * 100
+            )
 #endif
 
             var result = MeasurementResult(
@@ -593,6 +921,17 @@ class MeasurementCalculator {
             if pipeline.useARPlaneFloor {
                 result.detectedFloorY = Self.detectHorizontalPlaneFloorY(frame: frame, nearPoint: boundingBox.center)
             }
+            #if DEBUG
+            let boxBottomY = boundingBox.center.y - boundingBox.extents.y
+            diagnostics.floor = PipelineDiagnostics.FloorStage(
+                detected: result.detectedFloorY != nil,
+                floorY: result.detectedFloorY, boxBottomY: boxBottomY,
+                extensionAmount: result.detectedFloorY.map { boxBottomY - $0 },
+                method: pipeline.useARPlaneFloor ? "ARPlane" : "none"
+            )
+            diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
+            self.lastDiagnostics = diagnostics
+            #endif
 
             return result
         }.value

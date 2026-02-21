@@ -64,6 +64,8 @@
 		001000132 /* ShippingBoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000133 /* ShippingBoxVisualization.swift */; };
 		001000134 /* ScanningTipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000135 /* ScanningTipsView.swift */; };
 		001000136 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 001000137 /* Localizable.xcstrings */; };
+		001000143 /* PipelineDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000142 /* PipelineDiagnostics.swift */; };
+		001000145 /* PipelineDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000144 /* PipelineDiagnosticsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -126,6 +128,8 @@
 		001000133 /* ShippingBoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShippingBoxVisualization.swift; sourceTree = "<group>"; };
 		001000135 /* ScanningTipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanningTipsView.swift; sourceTree = "<group>"; };
 		001000137 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		001000142 /* PipelineDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineDiagnostics.swift; sourceTree = "<group>"; };
+		001000144 /* PipelineDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineDiagnosticsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -181,6 +185,7 @@
 				001000085 /* BoundingBoxAnimationState.swift */,
 				001000105 /* LabelData.swift */,
 				001000129 /* ShippingBox.swift */,
+				001000142 /* PipelineDiagnostics.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -261,6 +266,7 @@
 				001000121 /* BarcodeScanEffectView.swift */,
 				001000125 /* StatusVignetteView.swift */,
 				001000133 /* ShippingBoxVisualization.swift */,
+				001000144 /* PipelineDiagnosticsView.swift */,
 			);
 			path = Measurement;
 			sourceTree = "<group>";
@@ -418,6 +424,8 @@
 				001000130 /* ShippingBoxSelector.swift in Sources */,
 				001000132 /* ShippingBoxVisualization.swift in Sources */,
 				001000134 /* ScanningTipsView.swift in Sources */,
+				001000143 /* PipelineDiagnostics.swift in Sources */,
+				001000145 /* PipelineDiagnosticsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

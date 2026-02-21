@@ -9,6 +9,27 @@ import ARKit
 
 /// Estimates oriented bounding boxes from point clouds using MABR (Minimum Area Bounding Rectangle)
 class BoundingBoxEstimator {
+
+    // MARK: - Diagnostics
+
+    #if DEBUG
+    struct EstimationDetails {
+        var hullPointCount: Int = 0
+        var coarseAngleDeg: Float = 0
+        var fineAngleDeg: Float = 0
+        var snapped: Bool = false
+        var preSnapAngleDeg: Float = 0
+        var postSnapAngleDeg: Float = 0
+        var snapScore: Float = 0
+        var planeCount: Int = 0
+        var closestPlaneDistance: Float?
+        var refinementIterations: Int = 0
+        var method: String = "MABR"
+    }
+
+    private(set) var lastEstimationDetails: EstimationDetails?
+    #endif
+
     // MARK: - Public Methods
 
     /// Estimate an oriented bounding box for a point cloud
@@ -40,6 +61,11 @@ class BoundingBoxEstimator {
         points: [SIMD3<Float>],
         verticalPlaneAnchors: [ARPlaneAnchor]
     ) -> BoundingBox3D? {
+        #if DEBUG
+        var details = EstimationDetails()
+        details.planeCount = verticalPlaneAnchors.count
+        #endif
+
         let centroid = points.reduce(.zero, +) / Float(points.count)
 
         // Project points onto horizontal plane (XZ)
@@ -54,10 +80,22 @@ class BoundingBoxEstimator {
         if horizontalPoints.count >= 20 {
             let hull = convexHull2D(horizontalPoints)
             if hull.count >= 3 {
+                #if DEBUG
+                details.hullPointCount = hull.count
+                #endif
+
                 var mabrAngle = minimumAreaBoundingRect(hull: hull)
+                #if DEBUG
+                details.coarseAngleDeg = mabrAngle * 180 / .pi
+                #endif
+
                 if pipeline.useFineAngleSearch {
                     mabrAngle = fineAngleSearch(baseAngle: mabrAngle, hull: hull)
                 }
+                #if DEBUG
+                details.fineAngleDeg = mabrAngle * 180 / .pi
+                details.preSnapAngleDeg = mabrAngle * 180 / .pi
+                #endif
 
                 // Snap to vertical plane if one is nearby and aligned
                 mabrAngle = snapToVerticalPlane(
@@ -66,6 +104,10 @@ class BoundingBoxEstimator {
                     verticalPlaneAnchors: verticalPlaneAnchors,
                     useWeightedScoring: pipeline.useWeightedPlaneSnap
                 )
+                #if DEBUG
+                details.postSnapAngleDeg = mabrAngle * 180 / .pi
+                details.snapped = abs(details.preSnapAngleDeg - details.postSnapAngleDeg) > 0.01
+                #endif
 
                 let cosA = cos(mabrAngle)
                 let sinA = sin(mabrAngle)
@@ -76,12 +118,18 @@ class BoundingBoxEstimator {
                 let (ax, az) = pcaHorizontalAxes(horizontalPoints)
                 xAxis = ax
                 zAxis = az
+                #if DEBUG
+                details.method = "PCA"
+                #endif
             }
         } else {
             // Too few points for reliable hull, fall back to PCA
             let (ax, az) = pcaHorizontalAxes(horizontalPoints)
             xAxis = ax
             zAxis = az
+            #if DEBUG
+            details.method = "PCA"
+            #endif
         }
 
         let yAxis = SIMD3<Float>(0, 1, 0)
@@ -95,7 +143,14 @@ class BoundingBoxEstimator {
         let initialBox = BoundingBox3D(center: center, extents: extents, rotation: rotation)
 
         // Iterative refinement
-        return refineBoxIteratively(initialBox: initialBox, points: points, verticalPlaneAnchors: verticalPlaneAnchors)
+        let result = refineBoxIteratively(initialBox: initialBox, points: points, verticalPlaneAnchors: verticalPlaneAnchors)
+
+        #if DEBUG
+        details.refinementIterations = pipeline.boxRefinementIterations
+        lastEstimationDetails = details
+        #endif
+
+        return result
     }
 
     // MARK: - Free Object Mode
@@ -401,6 +456,7 @@ class BoundingBoxEstimator {
         if let snapped = bestPlaneAngle {
 #if DEBUG
             print("[BBoxEstimator] Snapped angle to vertical plane: \(angle * 180 / .pi)° -> \(snapped * 180 / .pi)° (score: \(bestScore))")
+            lastEstimationDetails?.snapScore = bestScore
 #endif
             return snapped
         }

@@ -25,6 +25,22 @@ class PointCloudGenerator {
         var isEmpty: Bool { points.isEmpty }
     }
 
+    // MARK: - Diagnostics
+
+    #if DEBUG
+    struct GenerationDetails {
+        var inputPixels: Int = 0
+        var extracted: Int = 0
+        var afterOutlierRemoval: Int = 0
+        var afterDownsample: Int = 0
+        var afterUnproject: Int = 0
+        var after3DFilter: Int = 0
+        var finalCount: Int = 0
+    }
+
+    private(set) var lastGenerationDetails: GenerationDetails?
+    #endif
+
     // MARK: - Properties
 
     private let depthProcessor = DepthProcessor()
@@ -44,6 +60,8 @@ class PointCloudGenerator {
     ) -> PointCloud {
         #if DEBUG
         print("[PointCloud] Starting with \(maskedPixels.count) masked pixels")
+        var genDetails = GenerationDetails()
+        genDetails.inputPixels = maskedPixels.count
         #endif
 
         // Extract depth data for masked pixels
@@ -56,6 +74,7 @@ class PointCloudGenerator {
         let totalMaskedPixels = maskedPixels.count
         #if DEBUG
         print("[PointCloud] Extracted \(depthData.count) depth points")
+        genDetails.extracted = depthData.count
         #endif
 
         guard !depthData.isEmpty else {
@@ -74,6 +93,7 @@ class PointCloudGenerator {
         depthData = depthProcessor.removeOutliers(depthData)
         #if DEBUG
         print("[PointCloud] After outlier removal: \(depthData.count) points")
+        genDetails.afterOutlierRemoval = depthData.count
         #endif
 
         // Downsample if too many points
@@ -83,6 +103,9 @@ class PointCloudGenerator {
             print("[PointCloud] After downsampling: \(depthData.count) points")
             #endif
         }
+        #if DEBUG
+        genDetails.afterDownsample = depthData.count
+        #endif
 
         // Get depth stats
         let stats = depthProcessor.getDepthStats(depthData: depthData)
@@ -118,18 +141,21 @@ class PointCloudGenerator {
         )
         #if DEBUG
         print("[PointCloud] Unprojected \(points.count) points")
+        genDetails.afterUnproject = points.count
         #endif
 
         // Filter outliers in 3D space
         let filteredPoints = filter3DOutliers(points)
         #if DEBUG
         print("[PointCloud] After 3D outlier filter: \(filteredPoints.count) points")
+        genDetails.after3DFilter = filteredPoints.count
         #endif
 
         // Grid-based downsampling in 3D
         let downsampledPoints = downsample3D(filteredPoints, gridSize: AppConstants.pointCloudGridSize)
         #if DEBUG
         print("[PointCloud] Final point count: \(downsampledPoints.count)")
+        genDetails.finalCount = downsampledPoints.count
         #endif
 
         #if DEBUG
@@ -144,6 +170,10 @@ class PointCloudGenerator {
             pointCount: downsampledPoints.count,
             trackingState: frame.camera.trackingState
         )
+
+        #if DEBUG
+        lastGenerationDetails = genDetails
+        #endif
 
         return PointCloud(points: downsampledPoints, quality: quality)
     }

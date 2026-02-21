@@ -29,6 +29,11 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var debugMaskImage2: UIImage?
     @Published var debugDepthImage: UIImage?
     var showMaskPreviewSetting = false
+
+    // Pipeline diagnostics
+    @Published var showDiagnosticsPanel = false
+    @Published var lastPipelineDiagnostics: PipelineDiagnostics?
+    var showDiagnosticsSetting = false
     #endif
 
     // Selected completed box for action icons
@@ -453,6 +458,7 @@ class ARMeasurementViewModel: ObservableObject {
                 #if DEBUG
                 print("[ViewModel] First-tap measurement successful (silent)")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
+                captureDiagnostics()
                 #endif
 
                 // Store as pending first-tap result (no animation, no box display)
@@ -490,12 +496,14 @@ class ARMeasurementViewModel: ObservableObject {
             } else {
                 #if DEBUG
                 print("[ViewModel] First-tap measurement returned nil")
+                captureDiagnostics()
                 #endif
                 isProcessing = false
             }
         } catch {
             #if DEBUG
             print("[ViewModel] First-tap measurement failed with error: \(error)")
+            captureDiagnostics()
             #endif
             isProcessing = false
         }
@@ -715,6 +723,7 @@ class ARMeasurementViewModel: ObservableObject {
                 #if DEBUG
                 print("[ViewModel] Box selection measurement successful!")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
+                captureDiagnostics()
                 #endif
 
                 #if DEBUG
@@ -740,12 +749,14 @@ class ARMeasurementViewModel: ObservableObject {
             } else {
                 #if DEBUG
                 print("[ViewModel] Box selection measurement returned nil")
+                captureDiagnostics()
                 #endif
                 isProcessing = false
             }
         } catch {
             #if DEBUG
             print("[ViewModel] Box selection measurement failed with error: \(error)")
+            captureDiagnostics()
             #endif
             isProcessing = false
         }
@@ -2144,6 +2155,14 @@ class ARMeasurementViewModel: ObservableObject {
 
     func toggleDebugDepth() {
         showDebugDepth.toggle()
+    }
+
+    /// Capture diagnostics from the last pipeline run
+    private func captureDiagnostics() {
+        lastPipelineDiagnostics = measurementCalculator.lastDiagnostics
+        if showDiagnosticsSetting {
+            showDiagnosticsPanel = true
+        }
     }
     #endif
 

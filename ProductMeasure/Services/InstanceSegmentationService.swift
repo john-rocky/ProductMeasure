@@ -21,6 +21,11 @@ class InstanceSegmentationService {
 
         /// Size of the mask
         let maskSize: CGSize
+
+        #if DEBUG
+        /// Number of foreground instances detected
+        var instanceCount: Int = 0
+        #endif
     }
 
     // MARK: - Properties
@@ -120,11 +125,15 @@ class InstanceSegmentationService {
             print("[Segmentation] Mask is in portrait orientation (rotated from camera)")
 #endif
 
-            return SegmentationResult(
+            var result = SegmentationResult(
                 mask: instanceMask,
                 boundingBox: CGRect(x: 0, y: 0, width: 1, height: 1),
                 maskSize: maskSize
             )
+            #if DEBUG
+            result.instanceCount = allInstances.count
+            #endif
+            return result
         } catch {
 #if DEBUG
             print("[Segmentation] Failed to generate mask: \(error)")
@@ -199,11 +208,15 @@ class InstanceSegmentationService {
             print("[Segmentation] Generated mask size: \(maskSize)")
 #endif
 
-            return SegmentationResult(
+            var result = SegmentationResult(
                 mask: instanceMask,
                 boundingBox: regionOfInterest,
                 maskSize: maskSize
             )
+            #if DEBUG
+            result.instanceCount = allInstances.count
+            #endif
+            return result
         } catch {
 #if DEBUG
             print("[Segmentation] Failed to generate mask with ROI: \(error)")
