@@ -92,6 +92,29 @@ struct ARMeasurementView: View {
                                         ))
                                 }
                             }
+
+                            // Point cloud visualization toggle
+                            if !viewModel.pointCloudCaptures.isEmpty {
+                                Button(action: { viewModel.togglePointCloudViz() }) {
+                                    VStack(spacing: 2) {
+                                        Image(systemName: viewModel.showPointCloudViz ? "circle.hexagongrid.fill" : "circle.hexagongrid")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(viewModel.showPointCloudViz ? PMTheme.green : PMTheme.cyan)
+                                        if let stage = viewModel.selectedVisualizationStage {
+                                            Text(stage.displayName)
+                                                .font(PMTheme.mono(7))
+                                                .foregroundColor(PMTheme.green)
+                                        }
+                                    }
+                                    .frame(width: 36, height: 36)
+                                    .background(PMTheme.surfaceDark.opacity(0.85))
+                                    .clipShape(Circle())
+                                    .overlay(Circle().strokeBorder(
+                                        (viewModel.showPointCloudViz ? PMTheme.green : PMTheme.cyan).opacity(0.20),
+                                        lineWidth: 0.5
+                                    ))
+                                }
+                            }
                             #endif
 
                             Spacer()
@@ -220,7 +243,14 @@ struct ARMeasurementView: View {
                 }
                 .sheet(isPresented: $viewModel.showDiagnosticsPanel) {
                     if let diag = viewModel.lastPipelineDiagnostics {
-                        PipelineDiagnosticsView(diagnostics: diag)
+                        PipelineDiagnosticsView(
+                            diagnostics: diag,
+                            pointCloudCapture: viewModel.pointCloudCaptures.last,
+                            selectedStage: $viewModel.selectedVisualizationStage,
+                            onStageSelected: { viewModel.updateStageVisualization(stage: $0) }
+                        )
+                        .presentationDetents([.medium, .large])
+                        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
                     }
                 }
                 #endif

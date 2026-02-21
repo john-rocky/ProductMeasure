@@ -66,6 +66,8 @@
 		001000136 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 001000137 /* Localizable.xcstrings */; };
 		001000143 /* PipelineDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000142 /* PipelineDiagnostics.swift */; };
 		001000145 /* PipelineDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000144 /* PipelineDiagnosticsView.swift */; };
+		001000146 /* PipelinePointCloudCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000147 /* PipelinePointCloudCapture.swift */; };
+		001000148 /* StagePointCloudRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000149 /* StagePointCloudRenderer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -130,6 +132,8 @@
 		001000137 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		001000142 /* PipelineDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineDiagnostics.swift; sourceTree = "<group>"; };
 		001000144 /* PipelineDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineDiagnosticsView.swift; sourceTree = "<group>"; };
+		001000147 /* PipelinePointCloudCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelinePointCloudCapture.swift; sourceTree = "<group>"; };
+		001000149 /* StagePointCloudRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagePointCloudRenderer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -186,6 +190,7 @@
 				001000105 /* LabelData.swift */,
 				001000129 /* ShippingBox.swift */,
 				001000142 /* PipelineDiagnostics.swift */,
+				001000147 /* PipelinePointCloudCapture.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -216,6 +221,7 @@
 				001000107 /* LabelReaderService.swift */,
 				001000127 /* ShareActivityItemSource.swift */,
 				001000131 /* ShippingBoxSelector.swift */,
+				001000149 /* StagePointCloudRenderer.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -426,6 +432,8 @@
 				001000134 /* ScanningTipsView.swift in Sources */,
 				001000143 /* PipelineDiagnostics.swift in Sources */,
 				001000145 /* PipelineDiagnosticsView.swift in Sources */,
+				001000146 /* PipelinePointCloudCapture.swift in Sources */,
+				001000148 /* StagePointCloudRenderer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

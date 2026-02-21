@@ -8,6 +8,10 @@ import SwiftUI
 
 struct PipelineDiagnosticsView: View {
     let diagnostics: PipelineDiagnostics
+    var pointCloudCapture: PipelinePointCloudCapture?
+    @Binding var selectedStage: PipelinePointCloudCapture.Stage?
+    var onStageSelected: ((PipelinePointCloudCapture.Stage?) -> Void)?
+
     @Environment(\.dismiss) private var dismiss
     @State private var expandedStages: Set<String> = []
 
@@ -20,6 +24,13 @@ struct PipelineDiagnosticsView: View {
                         failureBanner(stage: failedStage, reason: diagnostics.failureReason ?? "Unknown")
                     }
                     stageList
+
+                    if let capture = pointCloudCapture {
+                        let _ = print("[DiagView] Showing 3D section, stages: \(PipelinePointCloudCapture.Stage.allCases.map { "\($0.displayName)=\(capture.keptCount(at: $0))" }), onStageSelected=\(onStageSelected != nil)")
+                        pointCloudSection
+                    } else {
+                        let _ = print("[DiagView] pointCloudCapture is nil, hiding 3D section")
+                    }
                 }
                 .padding()
             }
@@ -140,6 +151,100 @@ struct PipelineDiagnosticsView: View {
         }
         .background(PMTheme.surfaceCard)
         .cornerRadius(4)
+    }
+
+    // MARK: - 3D Point Cloud Visualization
+
+    private var pointCloudSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("3D POINT CLOUD")
+                .font(PMTheme.mono(11, weight: .bold))
+                .foregroundColor(PMTheme.cyan)
+                .padding(.top, 8)
+
+            VStack(spacing: 2) {
+                ForEach(PipelinePointCloudCapture.Stage.allCases, id: \.rawValue) { stage in
+                    pointCloudStageButton(stage: stage)
+                }
+            }
+
+            if selectedStage != nil {
+                Button(action: {
+                    selectedStage = nil
+                    onStageSelected?(nil)
+                }) {
+                    HStack {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                        Text("CLEAR")
+                            .font(PMTheme.mono(11, weight: .bold))
+                    }
+                    .foregroundColor(PMTheme.red)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(PMTheme.red.opacity(0.15))
+                    .cornerRadius(6)
+                }
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private func pointCloudStageButton(stage: PipelinePointCloudCapture.Stage) -> some View {
+        let kept = pointCloudCapture?.keptCount(at: stage) ?? 0
+        let removed = pointCloudCapture?.removedCount(at: stage) ?? 0
+        let isSelected = selectedStage == stage
+        let hasData = kept > 0
+
+        return Button {
+            print("[DiagView] Button tapped: \(stage.displayName), hasData=\(hasData), onStageSelected=\(onStageSelected != nil)")
+            guard hasData else { return }
+            let newStage: PipelinePointCloudCapture.Stage? = isSelected ? nil : stage
+            selectedStage = newStage
+            onStageSelected?(newStage)
+            print("[DiagView] Called onStageSelected with \(newStage?.displayName ?? "nil")")
+        } label: {
+            HStack(spacing: 8) {
+                Text(stage.displayName)
+                    .font(PMTheme.mono(10, weight: .bold))
+                    .foregroundColor(isSelected ? .black : PMTheme.textPrimary)
+                    .frame(width: 90, alignment: .leading)
+
+                Spacer()
+
+                if hasData {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 6, height: 6)
+                        Text(formatCount(kept))
+                            .font(PMTheme.mono(10))
+                            .foregroundColor(isSelected ? .black.opacity(0.7) : PMTheme.green)
+                    }
+
+                    if removed > 0 {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 6, height: 6)
+                            Text(formatCount(removed))
+                                .font(PMTheme.mono(10))
+                                .foregroundColor(isSelected ? .black.opacity(0.7) : PMTheme.red)
+                        }
+                    }
+                } else {
+                    Text("--")
+                        .font(PMTheme.mono(10))
+                        .foregroundColor(PMTheme.textDimmed)
+                }
+            }
+            .padding(.vertical, 7)
+            .padding(.horizontal, 10)
+            .background(isSelected ? PMTheme.green : PMTheme.surfaceCard)
+            .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+        .opacity(hasData ? 1.0 : 0.4)
     }
 
     // MARK: - Expanded Detail

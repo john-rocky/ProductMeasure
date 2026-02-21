@@ -34,6 +34,12 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var showDiagnosticsPanel = false
     @Published var lastPipelineDiagnostics: PipelineDiagnostics?
     var showDiagnosticsSetting = false
+
+    // Stage point cloud visualization
+    @Published var pointCloudCaptures: [PipelinePointCloudCapture] = []
+    @Published var selectedVisualizationStage: PipelinePointCloudCapture.Stage?
+    @Published var showPointCloudViz = true
+    private var stageVisualizationAnchors: [AnchorEntity] = []
     #endif
 
     // Selected completed box for action icons
@@ -589,6 +595,7 @@ class ARMeasurementViewModel: ObservableObject {
 
                 #if DEBUG
                 print("[ViewModel] Second-tap refinement successful! Dimensions: L=\(mergedResult.length*100)cm W=\(mergedResult.width*100)cm H=\(mergedResult.height*100)cm")
+                captureDiagnostics()
                 #endif
 
                 // Now show the animation with the refined result
@@ -1094,6 +1101,14 @@ class ARMeasurementViewModel: ObservableObject {
         print("[ViewModel] clearActiveBoxOnly called")
         print("[ViewModel] boxVisualizationAnchor exists: \(boxVisualizationAnchor != nil)")
         print("[ViewModel] completedBoxAnchors count: \(completedBoxAnchors.count)")
+
+        // Remove stage point cloud visualizations
+        for anchor in stageVisualizationAnchors {
+            sessionManager.removeAnchor(anchor)
+        }
+        stageVisualizationAnchors.removeAll()
+        pointCloudCaptures.removeAll()
+        selectedVisualizationStage = nil
         #endif
 
         // Remove active box visualization
@@ -2160,8 +2175,83 @@ class ARMeasurementViewModel: ObservableObject {
     /// Capture diagnostics from the last pipeline run
     private func captureDiagnostics() {
         lastPipelineDiagnostics = measurementCalculator.lastDiagnostics
+        if let capture = measurementCalculator.lastPointCloudCapture {
+            pointCloudCaptures.append(capture)
+        }
         if showDiagnosticsSetting {
             showDiagnosticsPanel = true
+        }
+        // Auto-show point cloud after measurement
+        if showPointCloudViz, !pointCloudCaptures.isEmpty {
+            let latest = pointCloudCaptures.last!
+            // Pick best available stage: clustering > proximity > downsample
+            let stage: PipelinePointCloudCapture.Stage
+            if latest.keptCount(at: .afterClustering) > 0 {
+                stage = .afterClustering
+            } else if latest.keptCount(at: .afterProximityFilter) > 0 {
+                stage = .afterProximityFilter
+            } else {
+                stage = .after3DDownsample
+            }
+            updateStageVisualization(stage: stage)
+        }
+    }
+
+    /// Show or clear stage point cloud visualization in AR scene
+    func updateStageVisualization(stage: PipelinePointCloudCapture.Stage?) {
+        // Remove previous visualizations
+        for anchor in stageVisualizationAnchors {
+            sessionManager.removeAnchor(anchor)
+        }
+        stageVisualizationAnchors.removeAll()
+
+        selectedVisualizationStage = stage
+
+        guard let stage = stage else { return }
+
+        // Render all captured taps
+        for (i, capture) in pointCloudCaptures.enumerated() {
+            let entity = StagePointCloudRenderer.createStageEntity(capture: capture, stage: stage)
+            let anchor = sessionManager.addEntityWithAnchor(entity)
+            stageVisualizationAnchors.append(anchor)
+            print("[StageViz] Tap \(i+1) '\(stage.displayName)': \(entity.children.count) entities")
+        }
+    }
+
+    /// Toggle point cloud visualization, cycling through stages
+    func togglePointCloudViz() {
+        if !showPointCloudViz {
+            // Turn on — show best available stage
+            showPointCloudViz = true
+            if let latest = pointCloudCaptures.last {
+                let stage: PipelinePointCloudCapture.Stage
+                if latest.keptCount(at: .afterClustering) > 0 {
+                    stage = .afterClustering
+                } else if latest.keptCount(at: .afterProximityFilter) > 0 {
+                    stage = .afterProximityFilter
+                } else {
+                    stage = .after3DDownsample
+                }
+                updateStageVisualization(stage: stage)
+            }
+        } else if let current = selectedVisualizationStage {
+            // Cycle to next stage
+            let allStages = PipelinePointCloudCapture.Stage.allCases
+            if let idx = allStages.firstIndex(of: current), idx + 1 < allStages.count {
+                let next = allStages[idx + 1]
+                // Skip stages with no data (check any capture)
+                let hasData = pointCloudCaptures.contains { $0.keptCount(at: next) > 0 }
+                if hasData {
+                    updateStageVisualization(stage: next)
+                    return
+                }
+            }
+            // Wrapped around or no more data — turn off
+            showPointCloudViz = false
+            updateStageVisualization(stage: nil)
+        } else {
+            showPointCloudViz = false
+            updateStageVisualization(stage: nil)
         }
     }
     #endif

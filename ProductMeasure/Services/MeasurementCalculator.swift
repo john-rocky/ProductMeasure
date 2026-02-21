@@ -67,6 +67,8 @@ class MeasurementCalculator {
     #if DEBUG
     /// Diagnostics from the last pipeline run (populated on both success and failure)
     private(set) var lastDiagnostics: PipelineDiagnostics?
+    /// Captured 3D point clouds at each pipeline stage for visual debugging
+    private(set) var lastPointCloudCapture: PipelinePointCloudCapture?
     #endif
 
     // MARK: - Public Methods
@@ -314,6 +316,8 @@ class MeasurementCalculator {
                     status: .success
                 )
             }
+            // Copy point cloud capture from generator (stages 0-2)
+            let pcCapture = pointCloudGenerator.lastPointCloudCapture ?? PipelinePointCloudCapture()
 #endif
 
             // 5. Filter point cloud by 3D distance from raycast hit position
@@ -355,6 +359,7 @@ class MeasurementCalculator {
                 )
 #if DEBUG
                 print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
+                pcCapture.capture(points: filteredPoints, at: .afterProximityFilter)
 #endif
 
                 // Use clustering to find the connected object - this separates the tapped object from others
@@ -370,6 +375,7 @@ class MeasurementCalculator {
                         pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
                         method: "clustering", status: .success
                     )
+                    pcCapture.capture(points: filteredPoints, at: .afterClustering)
 #endif
 
                     pointCloud = PointCloudGenerator.PointCloud(
@@ -383,6 +389,7 @@ class MeasurementCalculator {
                         pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
                         method: "proximity-only", status: .success
                     )
+                    pcCapture.capture(points: filteredPoints, at: .afterClustering)
                     #endif
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
@@ -516,6 +523,9 @@ class MeasurementCalculator {
             result.debugDepthImage = debugDepthImage
             diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
             self.lastDiagnostics = diagnostics
+            self.lastPointCloudCapture = pcCapture
+            let stageCounts = PipelinePointCloudCapture.Stage.allCases.map { "\($0.displayName)=\(pcCapture.keptCount(at: $0))" }
+            print("[Calculator] Saved point cloud capture: \(stageCounts.joined(separator: ", "))")
             #endif
 
             return result
@@ -758,6 +768,8 @@ class MeasurementCalculator {
                     status: .success
                 )
             }
+            // Copy point cloud capture from generator (stages 0-2)
+            let pcCapture = pointCloudGenerator.lastPointCloudCapture ?? PipelinePointCloudCapture()
 #endif
 
             // 6. Filter by proximity if raycast hit available
@@ -795,6 +807,7 @@ class MeasurementCalculator {
                 )
 #if DEBUG
                 print("[Calculator] After initial \(initialRadius)m filter: \(filteredPoints.count) points")
+                pcCapture.capture(points: filteredPoints, at: .afterProximityFilter)
 #endif
 
                 let clusterMin = pipeline.clusteringMinPoints
@@ -809,6 +822,7 @@ class MeasurementCalculator {
                         pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
                         method: "clustering", status: .success
                     )
+                    pcCapture.capture(points: filteredPoints, at: .afterClustering)
 #endif
 
                     pointCloud = PointCloudGenerator.PointCloud(
@@ -822,6 +836,7 @@ class MeasurementCalculator {
                         pointsAfterProximity: filteredPoints.count, pointsAfterClustering: filteredPoints.count,
                         method: "proximity-only", status: .success
                     )
+                    pcCapture.capture(points: filteredPoints, at: .afterClustering)
                     #endif
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints,
@@ -931,6 +946,9 @@ class MeasurementCalculator {
             )
             diagnostics.overallDurationMs = (CFAbsoluteTimeGetCurrent() - diagStartTime) * 1000
             self.lastDiagnostics = diagnostics
+            self.lastPointCloudCapture = pcCapture
+            let stageCounts = PipelinePointCloudCapture.Stage.allCases.map { "\($0.displayName)=\(pcCapture.keptCount(at: $0))" }
+            print("[Calculator] Saved ROI point cloud capture: \(stageCounts.joined(separator: ", "))")
             #endif
 
             return result
@@ -1172,6 +1190,7 @@ class MeasurementCalculator {
             guard !pointCloud.isEmpty else { return nil }
 #if DEBUG
             print("[Refine] Generated \(pointCloud.points.count) points")
+            let pcCapture = pointCloudGenerator.lastPointCloudCapture ?? PipelinePointCloudCapture()
 #endif
 
             // 5. Proximity filter + clustering (same as measure())
@@ -1187,16 +1206,25 @@ class MeasurementCalculator {
                 var filteredPoints = filterPointsByProximity(
                     points: pointCloud.points, center: hitPosition, maxDistance: initialRadius
                 )
+#if DEBUG
+                pcCapture.capture(points: filteredPoints, at: .afterProximityFilter)
+#endif
 
                 let clusterMin = pipeline.clusteringMinPoints
                 let fallbackMin = pipeline.clusteringFallbackMinPoints
                 if filteredPoints.count >= clusterMin {
                     let camPos = SIMD3<Float>(frame.camera.transform.columns.3.x, frame.camera.transform.columns.3.y, frame.camera.transform.columns.3.z)
                     filteredPoints = extractMainCluster(points: filteredPoints, center: hitPosition, cameraPosition: camPos)
+#if DEBUG
+                    pcCapture.capture(points: filteredPoints, at: .afterClustering)
+#endif
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints, quality: pointCloud.quality
                     )
                 } else if filteredPoints.count >= fallbackMin {
+#if DEBUG
+                    pcCapture.capture(points: filteredPoints, at: .afterClustering)
+#endif
                     pointCloud = PointCloudGenerator.PointCloud(
                         points: filteredPoints, quality: pointCloud.quality
                     )
@@ -1226,6 +1254,8 @@ class MeasurementCalculator {
             var result = RefinementPointCloud(points: pointCloud.points, quality: pointCloud.quality)
             #if DEBUG
             result.debugMaskImage = debugMaskImage
+            self.lastPointCloudCapture = pcCapture
+            print("[Refine] Saved point cloud capture")
             #endif
             return result
         }.value

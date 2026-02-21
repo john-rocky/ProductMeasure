@@ -39,6 +39,7 @@ class PointCloudGenerator {
     }
 
     private(set) var lastGenerationDetails: GenerationDetails?
+    private(set) var lastPointCloudCapture: PipelinePointCloudCapture?
     #endif
 
     // MARK: - Properties
@@ -62,6 +63,7 @@ class PointCloudGenerator {
         print("[PointCloud] Starting with \(maskedPixels.count) masked pixels")
         var genDetails = GenerationDetails()
         genDetails.inputPixels = maskedPixels.count
+        let pcCapture = PipelinePointCloudCapture()
         #endif
 
         // Extract depth data for masked pixels
@@ -142,6 +144,7 @@ class PointCloudGenerator {
         #if DEBUG
         print("[PointCloud] Unprojected \(points.count) points")
         genDetails.afterUnproject = points.count
+        pcCapture.capture(points: points, at: .afterUnproject)
         #endif
 
         // Filter outliers in 3D space
@@ -149,6 +152,7 @@ class PointCloudGenerator {
         #if DEBUG
         print("[PointCloud] After 3D outlier filter: \(filteredPoints.count) points")
         genDetails.after3DFilter = filteredPoints.count
+        pcCapture.capture(points: filteredPoints, at: .after3DOutlierRemoval)
         #endif
 
         // Grid-based downsampling in 3D
@@ -156,6 +160,7 @@ class PointCloudGenerator {
         #if DEBUG
         print("[PointCloud] Final point count: \(downsampledPoints.count)")
         genDetails.finalCount = downsampledPoints.count
+        pcCapture.capture(points: downsampledPoints, at: .after3DDownsample)
         #endif
 
         #if DEBUG
@@ -173,6 +178,8 @@ class PointCloudGenerator {
 
         #if DEBUG
         lastGenerationDetails = genDetails
+        lastPointCloudCapture = pcCapture
+        print("[PointCloud] Capture saved: unproject=\(pcCapture.keptCount(at: .afterUnproject)), outlier=\(pcCapture.keptCount(at: .after3DOutlierRemoval)), downsample=\(pcCapture.keptCount(at: .after3DDownsample))")
         #endif
 
         return PointCloud(points: downsampledPoints, quality: quality)
