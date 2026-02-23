@@ -1330,8 +1330,25 @@ class MeasurementCalculator {
             return maskedPixels
         }
 
-        // Filter pixels by depth - keep those within a tolerance of tap depth
         let pipeline = AppConstants.currentPipelineVersion
+        let depthStride = depthBytesPerRow / MemoryLayout<Float32>.size
+
+        // Adaptive depth filter: IQR-based range intersected with tap-based range
+        if pipeline.useAdaptiveDepthFilter {
+            return filterAdaptiveDepth(
+                maskedPixels: maskedPixels,
+                depthPtr: depthPtr,
+                depthStride: depthStride,
+                depthWidth: depthWidth,
+                depthHeight: depthHeight,
+                scaleX: scaleX,
+                scaleY: scaleY,
+                tapDepth: tapDepth,
+                pipeline: pipeline
+            )
+        }
+
+        // Legacy fixed-tolerance depth filter
         let percentTolerance = tapDepth * pipeline.depthFilterPercent
         let depthTolerance: Float
         if let maxTol = pipeline.depthFilterMax {
@@ -1355,7 +1372,7 @@ class MeasurementCalculator {
                 continue
             }
 
-            let depthIndex = depthY * (depthBytesPerRow / MemoryLayout<Float32>.size) + depthX
+            let depthIndex = depthY * depthStride + depthX
             let pixelDepth = depthPtr[depthIndex]
 
             if pixelDepth.isFinite && pixelDepth > 0 {
@@ -1388,6 +1405,108 @@ class MeasurementCalculator {
 #endif
                 return []
             }
+        }
+
+        return filteredPixels
+    }
+
+    /// Adaptive depth filter using IQR-based outlier detection intersected with tap-based range.
+    /// Replaces the fixed max-clamp approach for standard/enhanced pipelines.
+    private func filterAdaptiveDepth(
+        maskedPixels: [(x: Int, y: Int)],
+        depthPtr: UnsafePointer<Float32>,
+        depthStride: Int,
+        depthWidth: Int,
+        depthHeight: Int,
+        scaleX: CGFloat,
+        scaleY: CGFloat,
+        tapDepth: Float,
+        pipeline: PipelineVersion
+    ) -> [(x: Int, y: Int)] {
+        // Pass 1: Collect valid depths from masked pixels
+        var depths: [Float] = []
+        depths.reserveCapacity(maskedPixels.count)
+
+        for pixel in maskedPixels {
+            let depthX = Int(CGFloat(pixel.x) * scaleX)
+            let depthY = Int(CGFloat(pixel.y) * scaleY)
+            guard depthX >= 0 && depthX < depthWidth && depthY >= 0 && depthY < depthHeight else {
+                continue
+            }
+            let pixelDepth = depthPtr[depthY * depthStride + depthX]
+            if pixelDepth.isFinite && pixelDepth > 0 {
+                depths.append(pixelDepth)
+            }
+        }
+
+        guard depths.count >= 10 else {
+#if DEBUG
+            print("[DepthFilter] Adaptive: too few valid depths (\(depths.count)), returning empty")
+#endif
+            return []
+        }
+
+        // Sort and compute IQR
+        depths.sort()
+        let q1Index = depths.count / 4
+        let q3Index = (depths.count * 3) / 4
+        let q1 = depths[q1Index]
+        let q3 = depths[q3Index]
+        let iqr = q3 - q1
+
+        // IQR fence: standard 1.5x IQR outlier bounds
+        let iqrLow = q1 - 1.5 * iqr
+        let iqrHigh = q3 + 1.5 * iqr
+
+        // Tap-based range: percentage tolerance without max clamp
+        let tapTolerance = tapDepth * pipeline.depthFilterPercent
+        let tapLow = tapDepth - tapTolerance
+        let tapHigh = tapDepth + tapTolerance
+
+        // Intersection of IQR fence and tap-based range
+        var finalLow = max(iqrLow, tapLow)
+        var finalHigh = min(iqrHigh, tapHigh)
+
+        // Minimum guarantee: at least ±depthFilterMin around tap depth
+        let minLow = tapDepth - pipeline.depthFilterMin
+        let minHigh = tapDepth + pipeline.depthFilterMin
+        finalLow = min(finalLow, minLow)
+        finalHigh = max(finalHigh, minHigh)
+
+#if DEBUG
+        let median = depths[depths.count / 2]
+        print("[DepthFilter] Adaptive: median=\(String(format: "%.3f", median))m, Q1=\(String(format: "%.3f", q1)), Q3=\(String(format: "%.3f", q3)), IQR=\(String(format: "%.3f", iqr))")
+        print("[DepthFilter] Adaptive: IQR fence=[\(String(format: "%.3f", iqrLow)), \(String(format: "%.3f", iqrHigh))], tap range=[\(String(format: "%.3f", tapLow)), \(String(format: "%.3f", tapHigh))]")
+        print("[DepthFilter] Adaptive: final range=[\(String(format: "%.3f", finalLow)), \(String(format: "%.3f", finalHigh))] (span=\(String(format: "%.3f", finalHigh - finalLow))m)")
+#endif
+
+        // Pass 2: Filter pixels using the adaptive range
+        var filteredPixels: [(x: Int, y: Int)] = []
+        filteredPixels.reserveCapacity(maskedPixels.count / 2)
+
+        for pixel in maskedPixels {
+            let depthX = Int(CGFloat(pixel.x) * scaleX)
+            let depthY = Int(CGFloat(pixel.y) * scaleY)
+            guard depthX >= 0 && depthX < depthWidth && depthY >= 0 && depthY < depthHeight else {
+                continue
+            }
+            let pixelDepth = depthPtr[depthY * depthStride + depthX]
+            if pixelDepth.isFinite && pixelDepth >= finalLow && pixelDepth <= finalHigh {
+                filteredPixels.append(pixel)
+            }
+        }
+
+#if DEBUG
+        print("[DepthFilter] Adaptive: filtered \(maskedPixels.count) → \(filteredPixels.count) pixels")
+#endif
+
+        // Safety valve: proportional minimum, return empty on failure
+        let minRequired = max(20, maskedPixels.count / 20)
+        if filteredPixels.count < minRequired {
+#if DEBUG
+            print("[DepthFilter] Adaptive: too few pixels (\(filteredPixels.count) < \(minRequired)), returning empty")
+#endif
+            return []
         }
 
         return filteredPixels

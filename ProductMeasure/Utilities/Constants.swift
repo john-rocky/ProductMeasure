@@ -172,6 +172,13 @@ enum PipelineVersion: String, CaseIterable, Codable {
 
     // MARK: - Depth Filter
 
+    var useAdaptiveDepthFilter: Bool {
+        switch self {
+        case .originalWarehouse, .preSplit: return false
+        case .standard, .enhanced: return true
+        }
+    }
+
     var depthFilterPercent: Float {
         switch self {
         case .originalWarehouse: return 0.25
