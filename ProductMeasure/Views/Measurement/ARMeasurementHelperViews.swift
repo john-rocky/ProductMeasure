@@ -88,6 +88,7 @@ struct InstructionCard: View {
         case tap, box, refine, secondTap, label
         case processing
         case ready(String)  // tracking message
+        case refinementFailed(String)
     }
 
     var mode: Mode = .tap
@@ -105,6 +106,7 @@ struct InstructionCard: View {
         case .secondTap: return "arrow.triangle.2.circlepath"
         case .label: return "doc.text.viewfinder"
         case .processing: return "circle.dotted"
+        case .refinementFailed: return "exclamationmark.triangle.fill"
         case .ready(let msg):
             if msg == "Ready to measure" { return "checkmark.circle.fill" }
             else if msg.contains("not") || msg.contains("Not") { return "exclamationmark.triangle.fill" }
@@ -120,6 +122,7 @@ struct InstructionCard: View {
         case .secondTap: return "Tap again from a different angle"
         case .label: return "Point at a label and tap"
         case .processing: return "Processing..."
+        case .refinementFailed(let msg): return msg
         case .ready(let msg): return msg
         }
     }
@@ -128,6 +131,7 @@ struct InstructionCard: View {
 
     private var accentColor: Color {
         if isLabelMode { return PMTheme.labelBlue }
+        if case .refinementFailed = mode { return PMTheme.amber }
         if case .ready(let msg) = mode {
             if msg == "Ready to measure" { return PMTheme.green }
             else if msg.contains("not") || msg.contains("Not") { return PMTheme.red }

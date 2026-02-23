@@ -69,6 +69,8 @@ class ARMeasurementViewModel: ObservableObject {
 
     // Two-tap flow: pending first-tap result (measured but not yet displayed)
     @Published var hasPendingFirstTap = false
+    @Published var secondTapFailureMessage: String? = nil
+    private var secondTapAttemptCount: Int = 0
     private var pendingFirstTapResult: MeasurementCalculator.MeasurementResult?
     private var pendingFirstTapFloorY: Float?
     private var pendingFirstTapFloorPlaneBacked = false
@@ -497,6 +499,8 @@ class ARMeasurementViewModel: ObservableObject {
                 }
                 accumulatedQualities = [result.quality]
                 originalAxisMapping = result.axisMapping
+                secondTapAttemptCount = 0
+                secondTapFailureMessage = nil
 
                 isProcessing = false
             } else {
@@ -552,10 +556,9 @@ class ARMeasurementViewModel: ObservableObject {
                     points: mergedPoints, mode: mode, verticalPlaneAnchors: verticalPlanes
                 ) else {
                     #if DEBUG
-                    print("[ViewModel] Second-tap re-estimation failed, falling back to first-tap result")
+                    print("[ViewModel] Second-tap re-estimation failed, retrying or falling back")
                     #endif
-                    // Fall back to showing the first-tap result directly
-                    showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
+                    handleSecondTapFailure(at: location, firstResult: firstResult, frame: frame)
                     return
                 }
 
@@ -609,15 +612,15 @@ class ARMeasurementViewModel: ObservableObject {
                 )
             } else {
                 #if DEBUG
-                print("[ViewModel] Second-tap refinement: object not matched, falling back to first-tap result")
+                print("[ViewModel] Second-tap refinement: object not matched, retrying or falling back")
                 #endif
-                showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
+                handleSecondTapFailure(at: location, firstResult: firstResult, frame: frame)
             }
         } catch {
             #if DEBUG
-            print("[ViewModel] Second-tap refinement error: \(error), falling back to first-tap result")
+            print("[ViewModel] Second-tap refinement error: \(error), retrying or falling back")
             #endif
-            showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
+            handleSecondTapFailure(at: location, firstResult: firstResult, frame: frame)
         }
     }
 
@@ -653,6 +656,39 @@ class ARMeasurementViewModel: ObservableObject {
             result: firstResult,
             floorY: floorY
         )
+    }
+
+    /// Handle second-tap failure: retry up to maxSecondTapAttempts, then fall back to first-tap result
+    private func handleSecondTapFailure(at location: CGPoint, firstResult: MeasurementCalculator.MeasurementResult, frame: ARFrame) {
+        secondTapAttemptCount += 1
+        if secondTapAttemptCount >= AppConstants.maxSecondTapAttempts {
+            // Max retries exceeded — fall back to first-tap result
+            secondTapFailureMessage = nil
+            secondTapAttemptCount = 0
+            showFirstTapResultWithAnimation(at: location, firstResult: firstResult, frame: frame)
+            return
+        }
+        // Retry allowed: keep pending state, show feedback
+        isProcessing = false
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        let remaining = AppConstants.maxSecondTapAttempts - secondTapAttemptCount
+        secondTapFailureMessage = "Refinement failed — tap again (\(remaining) left)"
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            if self.secondTapFailureMessage != nil {
+                self.secondTapFailureMessage = nil
+            }
+        }
+    }
+
+    /// Skip second-tap refinement and use first-tap result immediately
+    func skipSecondTap() {
+        guard let firstResult = pendingFirstTapResult,
+              let frame = sessionManager.currentFrame else { return }
+        secondTapFailureMessage = nil
+        secondTapAttemptCount = 0
+        let center = CGPoint(x: sessionManager.arView.bounds.midX, y: sessionManager.arView.bounds.midY)
+        showFirstTapResultWithAnimation(at: center, firstResult: firstResult, frame: frame)
     }
 
     func handleBoxSelection(rect: CGRect, viewSize: CGSize, mode: MeasurementMode) async {
@@ -1505,6 +1541,8 @@ class ARMeasurementViewModel: ObservableObject {
         pendingFirstTapFloorY = nil
         pendingFirstTapFloorPlaneBacked = false
         hasPendingFirstTap = false
+        secondTapAttemptCount = 0
+        secondTapFailureMessage = nil
     }
 
     func handleRefinementTap(at location: CGPoint, mode: MeasurementMode) async {

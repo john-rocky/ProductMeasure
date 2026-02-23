@@ -208,12 +208,46 @@ struct ARMeasurementView: View {
                                 case .awaitingLabelScan:
                                     InstructionCard(mode: .label)
                                 case .awaitingSecondTap:
-                                    InstructionCard(mode: .secondTap)
+                                    VStack(spacing: 6) {
+                                        if let failMsg = viewModel.secondTapFailureMessage {
+                                            InstructionCard(mode: .refinementFailed(failMsg))
+                                        } else {
+                                            InstructionCard(mode: .secondTap)
+                                        }
+                                        Button(action: { viewModel.skipSecondTap() }) {
+                                            Text("SKIP")
+                                                .font(PMTheme.mono(11, weight: .bold))
+                                                .foregroundColor(PMTheme.textSecondary)
+                                                .padding(.horizontal, 16)
+                                                .padding(.vertical, 6)
+                                                .background(PMTheme.surfaceDark.opacity(0.7))
+                                                .clipShape(Capsule())
+                                                .overlay(Capsule().strokeBorder(PMTheme.textSecondary.opacity(0.3), lineWidth: 0.5))
+                                        }
+                                    }
                                 default:
                                     InstructionCard(mode: .ready(viewModel.trackingMessage))
                                 }
                             } else {
-                                if activeSelectionMode == .tap && (viewModel.animationPhase == .showingTargetBrackets || viewModel.hasPendingFirstTap) {
+                                if activeSelectionMode == .tap && viewModel.hasPendingFirstTap {
+                                    VStack(spacing: 6) {
+                                        if let failMsg = viewModel.secondTapFailureMessage {
+                                            InstructionCard(mode: .refinementFailed(failMsg))
+                                        } else {
+                                            InstructionCard(mode: .secondTap)
+                                        }
+                                        Button(action: { viewModel.skipSecondTap() }) {
+                                            Text("SKIP")
+                                                .font(PMTheme.mono(11, weight: .bold))
+                                                .foregroundColor(PMTheme.textSecondary)
+                                                .padding(.horizontal, 16)
+                                                .padding(.vertical, 6)
+                                                .background(PMTheme.surfaceDark.opacity(0.7))
+                                                .clipShape(Capsule())
+                                                .overlay(Capsule().strokeBorder(PMTheme.textSecondary.opacity(0.3), lineWidth: 0.5))
+                                        }
+                                    }
+                                } else if activeSelectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
                                     InstructionCard(mode: .tap)
                                 } else if activeSelectionMode == .box {
                                     InstructionCard(mode: .box)
