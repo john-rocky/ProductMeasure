@@ -792,7 +792,7 @@ class BoxVisualization {
         highlightLabels.contains(label) || label.hasPrefix("BARCODE ")
     }
 
-    private func createDimensionBillboard(at position: SIMD3<Float>) -> Entity {
+    private func createDimensionBillboard(at position: SIMD3<Float>, animateLabelSection: Bool = false) -> Entity {
         let containerEntity = Entity()
         containerEntity.position = position
         self.billboardContainerEntity = containerEntity
@@ -848,7 +848,7 @@ class BoxVisualization {
                 DataLine(label: "SIZE", value: SizeClass.classify(volumeCubicMeters: boundingBox.volume).rawValue),
             ])
         ]
-        if let ld = storedLabelData, !ld.displayFields.isEmpty {
+        if !animateLabelSection, let ld = storedLabelData, !ld.displayFields.isEmpty {
             sections.append(Section(title: "LABEL DATA", lines: ld.displayFields.map {
                 DataLine(label: $0.label, value: $0.value.count > 24 ? String($0.value.prefix(24)) : $0.value)
             }))
@@ -883,8 +883,110 @@ class BoxVisualization {
             sectionLines.append(lines)
         }
 
+        // -- Animated label section (blue-styled, for expand animation) --
+        var labelAnimMainHeader: (entity: ModelEntity, size: SIMD3<Float>)?
+        var labelAnimSectionHeaders: [(entity: ModelEntity, size: SIMD3<Float>)] = []
+        var labelAnimSectionLines: [[(label: (entity: ModelEntity, size: SIMD3<Float>), value: (entity: ModelEntity, size: SIMD3<Float>))]] = []
+        var labelAnimBannerText: (entity: ModelEntity, size: SIMD3<Float>)?
+        var labelAnimBannerBgColor: UIColor?
+        var labelAnimBannerTotalHeight: Float = 0
+        var labelSectionHeight: Float = 0
+        let thickSeparatorThick: Float = 0.001
+
+        if animateLabelSection, let ld = storedLabelData {
+            let labelAccent = UIColor(hex: 0x00BFFF)
+            let lLabelColor = labelAccent.withAlphaComponent(0.55)
+            let lSectionTextColor = labelAccent.withAlphaComponent(0.70)
+            let highlightLabelColor = labelAccent.withAlphaComponent(0.85)
+            let highlightValueColor = labelAccent
+            let primaryFontSize: CGFloat = 0.012
+            let bannerPadV: Float = 0.003
+            let bannerGap: Float = 0.004
+
+            // Banner
+            if boxId == 1 || boxId == 2 {
+                let isOK = boxId == 1
+                let bannerText = isOK ? "\u{2713}  CHECK OK" : "\u{26A0}  CHECK REQUIRED (SIZE)"
+                labelAnimBannerBgColor = isOK
+                    ? PMTheme.uiCyan.withAlphaComponent(0.85)
+                    : PMTheme.uiRed.withAlphaComponent(0.85)
+                let bannerTextColor = UIColor(white: 0.05, alpha: 1.0)
+                labelAnimBannerText = textMesh(bannerText, size: billboardIdFontSize, weight: .bold, color: bannerTextColor)
+                labelAnimBannerTotalHeight = labelAnimBannerText!.size.y + bannerPadV * 2 + bannerGap
+            }
+
+            // LABEL header
+            labelAnimMainHeader = textMesh("LABEL", size: billboardIdFontSize, weight: .bold, color: labelAccent)
+            maxContentWidth = max(maxContentWidth, labelAnimMainHeader!.size.x)
+
+            // Build PRIMARY / DETAILS subsections
+            let primaryFields = ld.primaryDisplayFields
+            let secondaryFields = ld.secondaryDisplayFields
+
+            struct LabelLine { let label: String; let value: String }
+            struct LabelSec { let title: String; let lines: [LabelLine]; let isPrimary: Bool }
+            var lSections: [LabelSec] = []
+            if !primaryFields.isEmpty {
+                lSections.append(LabelSec(title: "PRIMARY", lines: primaryFields.map {
+                    LabelLine(label: $0.label, value: $0.value.count > 24 ? String($0.value.prefix(24)) : $0.value)
+                }, isPrimary: true))
+            }
+            if !secondaryFields.isEmpty {
+                lSections.append(LabelSec(title: "DETAILS", lines: secondaryFields.map {
+                    LabelLine(label: $0.label, value: $0.value.count > 24 ? String($0.value.prefix(24)) : $0.value)
+                }, isPrimary: false))
+            }
+            if lSections.isEmpty {
+                let rawLines = ld.rawText.components(separatedBy: "\n").prefix(6)
+                lSections.append(LabelSec(title: "RAW TEXT", lines: rawLines.enumerated().map {
+                    LabelLine(label: "L\($0.offset + 1)", value: String($0.element.prefix(24)))
+                }, isPrimary: false))
+            }
+
+            for section in lSections {
+                let header = textMesh(section.title, size: billboardSectionFontSize, weight: .bold, color: lSectionTextColor)
+                labelAnimSectionHeaders.append(header)
+                maxContentWidth = max(maxContentWidth, header.size.x)
+
+                let fontSize = section.isPrimary ? primaryFontSize : billboardBodyFontSize
+                var lines: [(label: (entity: ModelEntity, size: SIMD3<Float>), value: (entity: ModelEntity, size: SIMD3<Float>))] = []
+                for dl in section.lines {
+                    let isHighlight = Self.isHighlightLabel(dl.label)
+                    let lColor = isHighlight ? highlightLabelColor : lLabelColor
+                    let vColor = isHighlight ? highlightValueColor : valueColor
+                    let vWeight: UIFont.Weight = isHighlight ? .bold : .medium
+                    let l = textMesh(dl.label, size: fontSize, weight: .semibold, color: lColor)
+                    let v = textMesh(dl.value, size: fontSize, weight: vWeight, color: vColor)
+                    maxLabelWidth = max(maxLabelWidth, l.size.x)
+                    lines.append((l, v))
+                }
+                labelAnimSectionLines.append(lines)
+            }
+
+            // Label section height
+            labelSectionHeight += labelAnimBannerTotalHeight
+            labelSectionHeight += thickSeparatorThick + sectionTopGap
+            if let lh = labelAnimMainHeader {
+                labelSectionHeight += lh.size.y
+            }
+            for (si, section) in labelAnimSectionLines.enumerated() {
+                labelSectionHeight += sectionTopGap
+                labelSectionHeight += separatorThick + separatorMargin
+                labelSectionHeight += labelAnimSectionHeaders[si].size.y
+                for pair in section {
+                    labelSectionHeight += lineGap
+                    labelSectionHeight += max(pair.label.size.y, pair.value.size.y)
+                }
+            }
+        }
+
         // Recalculate max width with label+gap+value
         for sl in sectionLines {
+            for pair in sl {
+                maxContentWidth = max(maxContentWidth, maxLabelWidth + labelValueGap + pair.value.size.x)
+            }
+        }
+        for sl in labelAnimSectionLines {
             for pair in sl {
                 maxContentWidth = max(maxContentWidth, maxLabelWidth + labelValueGap + pair.value.size.x)
             }
@@ -901,6 +1003,7 @@ class BoxVisualization {
                 totalContentHeight += max(pair.label.size.y, pair.value.size.y)
             }
         }
+        totalContentHeight += labelSectionHeight
 
         // -- Layout dimensions --
         let totalWidth = accentBarWidth + innerPadding + maxContentWidth + padding * 2
@@ -980,6 +1083,29 @@ class BoxVisualization {
         // -- Position text top-to-bottom --
         var cursor = padding + totalContentHeight
 
+        // Banner (if animating label section with check status)
+        if animateLabelSection, let txtResult = labelAnimBannerText, let bgColor = labelAnimBannerBgColor {
+            let bannerPadV: Float = 0.003
+            let bannerGap: Float = 0.004
+            let bannerH = txtResult.size.y + bannerPadV * 2
+            let bannerW = totalWidth - padding * 0.5
+            let bannerBgMesh = MeshResource.generateBox(
+                size: [bannerW, bannerH, 0.0012],
+                cornerRadius: bannerH * 0.2
+            )
+            var bannerMat = UnlitMaterial(color: bgColor)
+            bannerMat.blending = .transparent(opacity: .init(floatLiteral: 0.85))
+            let bannerBgEntity = ModelEntity(mesh: bannerBgMesh, materials: [bannerMat])
+            let bannerCenterY = cursor - bannerH / 2
+            bannerBgEntity.position = SIMD3<Float>(0, bannerCenterY, 0.0003)
+            containerEntity.addChild(bannerBgEntity)
+            let textY = cursor - bannerPadV - txtResult.size.y
+            let textX = -txtResult.size.x / 2
+            txtResult.entity.position = SIMD3<Float>(textX, textY, 0.001)
+            containerEntity.addChild(txtResult.entity)
+            cursor -= bannerH + bannerGap
+        }
+
         // ID header
         cursor -= idResult.size.y
         idResult.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
@@ -1016,354 +1142,103 @@ class BoxVisualization {
             }
         }
 
+        // -- Animated label section content --
+        if animateLabelSection, storedLabelData != nil {
+            self.revealEntities.removeAll()
+            let labelAccent = UIColor(hex: 0x00BFFF)
+            let labelSeparatorColor = labelAccent.withAlphaComponent(0.25)
+
+            // Thick separator between dimensions and label
+            let thickSepW = maxContentWidth
+            let thickSepMesh = MeshResource.generateBox(size: [thickSepW, thickSeparatorThick, 0.0012])
+            var thickSepMat = UnlitMaterial(color: labelAccent.withAlphaComponent(0.40))
+            thickSepMat.blending = .transparent(opacity: .init(floatLiteral: 0.40))
+            let thickSepEntity = ModelEntity(mesh: thickSepMesh, materials: [thickSepMat])
+            thickSepEntity.position = SIMD3<Float>(textLeftX + thickSepW / 2, cursor, 0.0005)
+            containerEntity.addChild(thickSepEntity)
+            cursor -= thickSeparatorThick + sectionTopGap
+
+            // LABEL header
+            if let mainHeader = labelAnimMainHeader {
+                cursor -= mainHeader.size.y
+                mainHeader.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+                containerEntity.addChild(mainHeader.entity)
+            }
+
+            // Label subsections with animated line containers
+            for (si, sl) in labelAnimSectionLines.enumerated() {
+                cursor -= sectionTopGap
+
+                // Separator
+                let sepW = maxContentWidth
+                let sepMesh = MeshResource.generateBox(size: [sepW, separatorThick, 0.0012])
+                var sepMat = UnlitMaterial(color: labelSeparatorColor)
+                sepMat.blending = .transparent(opacity: .init(floatLiteral: 0.25))
+                let sepEntity = ModelEntity(mesh: sepMesh, materials: [sepMat])
+                sepEntity.position = SIMD3<Float>(textLeftX + sepW / 2, cursor, 0.0005)
+                containerEntity.addChild(sepEntity)
+                cursor -= separatorThick + separatorMargin
+
+                // Section header
+                cursor -= labelAnimSectionHeaders[si].size.y
+                labelAnimSectionHeaders[si].entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+                containerEntity.addChild(labelAnimSectionHeaders[si].entity)
+
+                // Data lines in containers for stagger reveal
+                for pair in sl {
+                    cursor -= lineGap
+                    let h = max(pair.label.size.y, pair.value.size.y)
+                    cursor -= h
+
+                    let lineContainer = Entity()
+                    pair.label.entity.position = SIMD3<Float>(textLeftX, cursor, 0)
+                    pair.value.entity.position = SIMD3<Float>(valueLeftX, cursor, 0)
+                    lineContainer.addChild(pair.label.entity)
+                    lineContainer.addChild(pair.value.entity)
+                    lineContainer.scale = .zero
+                    containerEntity.addChild(lineContainer)
+                    self.revealEntities.append(lineContainer)
+                }
+            }
+        }
+
         return containerEntity
     }
 
     // MARK: - Label Expansion (Warehouse Mode)
 
-    /// Expand the dimension billboard in-place to include label data below dimensions.
-    /// Modeled on LabelBillboard.expandWithDimensions() — replaces structural entities with
-    /// taller versions, adds label section with staggered reveal animation.
+    /// Expand the dimension billboard to include label data below dimensions.
+    /// Rebuilds the entire billboard using createDimensionBillboard with the combined layout,
+    /// then animates the label section lines with staggered reveal.
     func expandWithLabelData(_ labelData: LabelData, boxId: Int, volume: Float, completion: @escaping () -> Void) {
         isExpandedWithLabel = true
         storedLabelData = labelData
+        self.boxId = boxId
 
-        guard let container = billboardContainerEntity else {
-            completion()
-            return
-        }
-
-        // Accent color based on boxId
-        let dimAccent = boxId == 2 ? PMTheme.uiRed : PMTheme.uiBillboardAccent
-        let labelAccent = UIColor(hex: 0x00BFFF)
-        let dimBorder = dimAccent.withAlphaComponent(0.40)
-
-        // Layout constants (match createDimensionBillboard)
-        let accentBarWidth: Float = 0.002
-        let padding: Float = 0.008
-        let innerPadding: Float = 0.005
-        let lineGap: Float = 0.004
-        let sectionTopGap: Float = 0.006
-        let labelValueGap: Float = 0.005
-        let separatorThick: Float = 0.0004
-        let separatorMargin: Float = 0.001
-        let thickSeparatorThick: Float = 0.001
-
-        let labelLabelColor = labelAccent.withAlphaComponent(0.55)
-        let labelValueColor = dimensionLabelTextColor
-        let labelSectionTextColor = labelAccent.withAlphaComponent(0.70)
-        let labelSeparatorColor = labelAccent.withAlphaComponent(0.25)
-        let highlightLabelColor = labelAccent.withAlphaComponent(0.85)
-        let highlightValueColor = labelAccent
-
-        // Text mesh helper
-        func textMesh(_ text: String, size: CGFloat, weight: UIFont.Weight, color: UIColor) -> (entity: ModelEntity, size: SIMD3<Float>) {
-            let mesh = MeshResource.generateText(
-                text, extrusionDepth: 0.001,
-                font: .monospacedSystemFont(ofSize: size, weight: weight),
-                containerFrame: .zero, alignment: .left, lineBreakMode: .byTruncatingTail
-            )
-            return (ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: color)]), mesh.bounds.extents)
-        }
-
-        struct DataLine { let label: String; let value: String }
-
-        // -- Build label section data --
-        let primaryFields = labelData.primaryDisplayFields
-        let secondaryFields = labelData.secondaryDisplayFields
-
-        var labelSections: [(title: String, lines: [DataLine])] = []
-        if !primaryFields.isEmpty {
-            labelSections.append(("PRIMARY", primaryFields.map {
-                DataLine(label: $0.label, value: $0.value.count > 24 ? String($0.value.prefix(24)) : $0.value)
-            }))
-        }
-        if !secondaryFields.isEmpty {
-            labelSections.append(("DETAILS", secondaryFields.map {
-                DataLine(label: $0.label, value: $0.value.count > 24 ? String($0.value.prefix(24)) : $0.value)
-            }))
-        }
-        if labelSections.isEmpty {
-            let rawLines = labelData.rawText.components(separatedBy: "\n").prefix(6)
-            labelSections.append(("RAW TEXT", rawLines.enumerated().map {
-                DataLine(label: "L\($0.offset + 1)", value: String($0.element.prefix(24)))
-            }))
-        }
-
-        // -- Pre-generate check status banner --
-        let bannerPadV: Float = 0.003
-        let bannerGap: Float = 0.004
-
-        var bannerTextResult: (entity: ModelEntity, size: SIMD3<Float>)?
-        var bannerBgColor: UIColor?
-        var bannerTotalHeight: Float = 0
-
-        if boxId == 1 || boxId == 2 {
-            let isOK = boxId == 1
-            let bannerText = isOK ? "\u{2713}  CHECK OK" : "\u{26A0}  CHECK REQUIRED (SIZE)"
-            bannerBgColor = isOK
-                ? PMTheme.uiCyan.withAlphaComponent(0.85)
-                : PMTheme.uiRed.withAlphaComponent(0.85)
-            let bannerTextColor = UIColor(white: 0.05, alpha: 1.0)
-            bannerTextResult = textMesh(bannerText, size: billboardIdFontSize, weight: .bold, color: bannerTextColor)
-            bannerTotalHeight = bannerTextResult!.size.y + bannerPadV * 2 + bannerGap
-        }
-
-        // -- Pre-generate label text entities --
-        let labelHeader = textMesh("LABEL", size: billboardIdFontSize, weight: .bold, color: labelAccent)
-
-        var labelSectionHeaders: [(entity: ModelEntity, size: SIMD3<Float>)] = []
-        var labelSectionLines: [[(label: (entity: ModelEntity, size: SIMD3<Float>), value: (entity: ModelEntity, size: SIMD3<Float>))]] = []
-        var labelMaxLabelWidth: Float = 0
-        var labelMaxContentWidth: Float = labelHeader.size.x
-
-        let primaryFontSize: CGFloat = 0.012
-
-        for section in labelSections {
-            let header = textMesh(section.title, size: billboardSectionFontSize, weight: .bold, color: labelSectionTextColor)
-            labelSectionHeaders.append(header)
-            labelMaxContentWidth = max(labelMaxContentWidth, header.size.x)
-
-            let fontSize = section.title == "PRIMARY" ? primaryFontSize : billboardBodyFontSize
-            var lines: [(label: (entity: ModelEntity, size: SIMD3<Float>), value: (entity: ModelEntity, size: SIMD3<Float>))] = []
-            for dl in section.lines {
-                let isHighlight = Self.isHighlightLabel(dl.label)
-                let lColor = isHighlight ? highlightLabelColor : labelLabelColor
-                let vColor = isHighlight ? highlightValueColor : labelValueColor
-                let vWeight: UIFont.Weight = isHighlight ? .bold : .medium
-                let l = textMesh(dl.label, size: fontSize, weight: .semibold, color: lColor)
-                let v = textMesh(dl.value, size: fontSize, weight: vWeight, color: vColor)
-                labelMaxLabelWidth = max(labelMaxLabelWidth, l.size.x)
-                lines.append((l, v))
-            }
-            labelSectionLines.append(lines)
-        }
-
-        for sl in labelSectionLines {
-            for pair in sl {
-                labelMaxContentWidth = max(labelMaxContentWidth, labelMaxLabelWidth + labelValueGap + pair.value.size.x)
-            }
-        }
-
-        // -- Calculate label section height --
-        var labelSectionHeight: Float = bannerTotalHeight
-        labelSectionHeight += thickSeparatorThick + sectionTopGap  // thick separator above label
-        labelSectionHeight += labelHeader.size.y
-        for (si, sl) in labelSectionLines.enumerated() {
-            labelSectionHeight += sectionTopGap
-            labelSectionHeight += separatorThick + separatorMargin
-            labelSectionHeight += labelSectionHeaders[si].size.y
-            for pair in sl {
-                labelSectionHeight += lineGap
-                labelSectionHeight += max(pair.label.size.y, pair.value.size.y)
-            }
-        }
-
-        // -- Calculate new billboard dimensions --
-        let newMaxContentWidth = max(currentMaxContentWidth, labelMaxContentWidth)
-        let newMaxLabelWidth = max(currentMaxLabelWidth, labelMaxLabelWidth)
-        let newTotalWidth = accentBarWidth + innerPadding + newMaxContentWidth + padding * 2
-        let newTotalHeight = currentTotalHeight + labelSectionHeight
-
-        let cornerRadius = min(newTotalHeight, newTotalWidth) * 0.06
-        let newLeftEdge = -newTotalWidth / 2
-        let newAccentX = newLeftEdge + padding / 2 + accentBarWidth / 2
-        let newTextLeftX = newLeftEdge + padding + accentBarWidth + innerPadding
-        let newValueLeftX = newTextLeftX + newMaxLabelWidth + labelValueGap
-
-        // -- Remove old structural entities --
-        bgEntity?.removeFromParent()
-        glowEntity?.removeFromParent()
-        accentEntity?.removeFromParent()
-        accentGlowEntity?.removeFromParent()
-        topBorderEntity?.removeFromParent()
-        bottomBorderEntity?.removeFromParent()
-        actionIconRow?.removeFromParent()
+        // Remove old billboard entirely
+        dimensionBillboardEntity?.removeFromParent()
+        dimensionBillboardEntity = nil
         actionIconRow = nil
+        billboardContainerEntity = nil
+        bgEntity = nil
+        glowEntity = nil
+        accentEntity = nil
+        accentGlowEntity = nil
+        topBorderEntity = nil
+        bottomBorderEntity = nil
 
-        // -- Create new taller structural entities --
+        // Rebuild with combined layout (dimensions + label), label lines hidden for animation
+        let billboardPos = boundingBox.center + SIMD3<Float>(0, boundingBox.extents.y + 0.03, 0)
+        dimensionBillboardEntity = createDimensionBillboard(at: billboardPos, animateLabelSection: true)
+        entity.addChild(dimensionBillboardEntity!)
+        dimensionBillboardEntity?.isEnabled = true
 
-        // Outer glow (green accent)
-        let glowPad: Float = 0.003
-        let newGlowMesh = MeshResource.generateBox(
-            size: [newTotalWidth + glowPad * 2, newTotalHeight + glowPad * 2, 0.0008],
-            cornerRadius: cornerRadius + glowPad * 0.5
-        )
-        var newGlowMat = UnlitMaterial(color: dimAccent.withAlphaComponent(0.06))
-        newGlowMat.blending = .transparent(opacity: .init(floatLiteral: 0.06))
-        let newGlow = ModelEntity(mesh: newGlowMesh, materials: [newGlowMat])
-        newGlow.position = SIMD3<Float>(0, newTotalHeight / 2, -0.002)
-        self.glowEntity = newGlow
-
-        // Dark glass background
-        let newBgMesh = MeshResource.generateBox(size: [newTotalWidth, newTotalHeight, 0.001], cornerRadius: cornerRadius)
-        var newBgMat = UnlitMaterial(color: dimensionLabelBackgroundColor)
-        newBgMat.blending = .transparent(opacity: .init(floatLiteral: 0.90))
-        let newBg = ModelEntity(mesh: newBgMesh, materials: [newBgMat])
-        newBg.position = SIMD3<Float>(0, newTotalHeight / 2, -0.001)
-        self.bgEntity = newBg
-
-        // Accent bar (green)
-        let newAccentH = (newTotalHeight - padding * 2) + padding
-        let newAccentMesh = MeshResource.generateBox(size: [accentBarWidth, newAccentH, 0.0015], cornerRadius: accentBarWidth * 0.4)
-        let newAccent = ModelEntity(mesh: newAccentMesh, materials: [UnlitMaterial(color: dimAccent)])
-        newAccent.position = SIMD3<Float>(newAccentX, newTotalHeight / 2, 0.0)
-        self.accentEntity = newAccent
-
-        let accentGlowW: Float = 0.006
-        let newAgMesh = MeshResource.generateBox(size: [accentGlowW, newAccentH, 0.001], cornerRadius: accentGlowW * 0.3)
-        var newAgMat = UnlitMaterial(color: dimAccent.withAlphaComponent(0.10))
-        newAgMat.blending = .transparent(opacity: .init(floatLiteral: 0.10))
-        let newAccentGlow = ModelEntity(mesh: newAgMesh, materials: [newAgMat])
-        newAccentGlow.position = SIMD3<Float>(newAccentX, newTotalHeight / 2, -0.0005)
-        self.accentGlowEntity = newAccentGlow
-
-        // Top + bottom borders (green)
-        let newBorderW = newTotalWidth * 0.92
-        func makeBorder(opacity: Float) -> ModelEntity {
-            let mesh = MeshResource.generateBox(size: [newBorderW, 0.0006, 0.0012])
-            var mat = UnlitMaterial(color: dimBorder)
-            mat.blending = .transparent(opacity: .init(floatLiteral: Float(opacity)))
-            return ModelEntity(mesh: mesh, materials: [mat])
-        }
-        let newTopBorder = makeBorder(opacity: 0.50)
-        newTopBorder.position = SIMD3<Float>(0, newTotalHeight - 0.0003, 0.0005)
-        self.topBorderEntity = newTopBorder
-        let newBottomBorder = makeBorder(opacity: 0.30)
-        newBottomBorder.position = SIMD3<Float>(0, 0.0003, 0.0005)
-        self.bottomBorderEntity = newBottomBorder
-
-        // Add new structural entities
-        container.addChild(newGlow)
-        container.addChild(newBg)
-        container.addChild(newAccent)
-        container.addChild(newAccentGlow)
-        container.addChild(newTopBorder)
-        container.addChild(newBottomBorder)
-
-        // -- Build label content group below existing dimension content --
-        let labelContentGroup = Entity()
-        labelContentGroup.name = "label_content"
-
-        // Position label section below existing dimension section
-        // The existing dimension content occupies from top down to currentTotalHeight's bottom padding.
-        // New label section starts just below that.
-        var cursor = padding  // Start from bottom of original billboard
-
-        // Check status banner (full-width colored strip at bottom of label section, above label header)
-        if let txtResult = bannerTextResult, let bgColor = bannerBgColor {
-            let bannerH = txtResult.size.y + bannerPadV * 2
-            let bannerW = newTotalWidth - padding * 0.5
-            let bannerBgMesh = MeshResource.generateBox(
-                size: [bannerW, bannerH, 0.0012],
-                cornerRadius: bannerH * 0.2
-            )
-            var bannerMat = UnlitMaterial(color: bgColor)
-            bannerMat.blending = .transparent(opacity: .init(floatLiteral: 0.85))
-            let bannerBgEntity = ModelEntity(mesh: bannerBgMesh, materials: [bannerMat])
-            let bannerCenterY = cursor - bannerH / 2
-            bannerBgEntity.position = SIMD3<Float>(0, bannerCenterY, 0.0003)
-            labelContentGroup.addChild(bannerBgEntity)
-            let textY = cursor - bannerPadV - txtResult.size.y
-            let textX = -txtResult.size.x / 2
-            txtResult.entity.position = SIMD3<Float>(textX, textY, 0.001)
-            labelContentGroup.addChild(txtResult.entity)
-            cursor -= bannerH + bannerGap
-        }
-
-        // Thick separator between dimensions and label sections
-        let thickSepW = newMaxContentWidth
-        let thickSepMesh = MeshResource.generateBox(size: [thickSepW, thickSeparatorThick, 0.0012])
-        var thickSepMat = UnlitMaterial(color: labelAccent.withAlphaComponent(0.40))
-        thickSepMat.blending = .transparent(opacity: .init(floatLiteral: 0.40))
-        let thickSepEntity = ModelEntity(mesh: thickSepMesh, materials: [thickSepMat])
-        thickSepEntity.position = SIMD3<Float>(newTextLeftX + thickSepW / 2, cursor, 0.0005)
-        labelContentGroup.addChild(thickSepEntity)
-        cursor -= thickSeparatorThick + sectionTopGap
-
-        // LABEL header
-        cursor -= labelHeader.size.y
-        labelHeader.entity.position = SIMD3<Float>(newTextLeftX, cursor, 0)
-        labelContentGroup.addChild(labelHeader.entity)
-
-        // Label data sections
-        var newRevealEntities: [Entity] = []
-        for (si, sl) in labelSectionLines.enumerated() {
-            cursor -= sectionTopGap
-
-            // Separator
-            let sepW = newMaxContentWidth
-            let sepMesh = MeshResource.generateBox(size: [sepW, separatorThick, 0.0012])
-            var sepMat = UnlitMaterial(color: labelSeparatorColor)
-            sepMat.blending = .transparent(opacity: .init(floatLiteral: 0.25))
-            let sepEntity = ModelEntity(mesh: sepMesh, materials: [sepMat])
-            sepEntity.position = SIMD3<Float>(newTextLeftX + sepW / 2, cursor, 0.0005)
-            labelContentGroup.addChild(sepEntity)
-            cursor -= separatorThick + separatorMargin
-
-            // Section header
-            cursor -= labelSectionHeaders[si].size.y
-            labelSectionHeaders[si].entity.position = SIMD3<Float>(newTextLeftX, cursor, 0)
-            labelContentGroup.addChild(labelSectionHeaders[si].entity)
-
-            // Data lines (wrapped for stagger reveal)
-            for pair in sl {
-                cursor -= lineGap
-                let h = max(pair.label.size.y, pair.value.size.y)
-                cursor -= h
-
-                let lineContainer = Entity()
-                pair.label.entity.position = SIMD3<Float>(newTextLeftX, cursor, 0)
-                pair.value.entity.position = SIMD3<Float>(newValueLeftX, cursor, 0)
-                lineContainer.addChild(pair.label.entity)
-                lineContainer.addChild(pair.value.entity)
-                lineContainer.scale = .zero  // Hidden for staggered reveal
-                labelContentGroup.addChild(lineContainer)
-                newRevealEntities.append(lineContainer)
-            }
-        }
-
-        // Start label content hidden
-        labelContentGroup.scale = .zero
-        container.addChild(labelContentGroup)
-
-        revealEntities = newRevealEntities
-
-        // -- Action icon row (warehouse combined) --
-        let actions = ActionIconBuilder.warehouseCombinedActions
-        let row = ActionIconBuilder.createActionRow(actions: actions)
-        row.position = SIMD3<Float>(0, -0.005, 0)
-        container.addChild(row)
-        actionIconRow = row
-
-        // Update stored metrics
-        currentTotalHeight = newTotalHeight
-        currentTotalWidth = newTotalWidth
-        currentMaxContentWidth = newMaxContentWidth
-        currentMaxLabelWidth = newMaxLabelWidth
+        // Update action mode
         currentActionMode = .labelExpanded
+        updateActionMode(.labelExpanded)
 
-        // -- Animate: label content grows, then lines stagger-reveal --
-        let growDuration = PMTheme.labelBillboardExpandDuration
-        let growStart = Date()
-
-        let growTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
-            guard self != nil else { timer.invalidate(); return }
-            let elapsed = Date().timeIntervalSince(growStart)
-            let t = Float(min(elapsed / growDuration, 1.0))
-            let eased = 1.0 - pow(1.0 - t, 3)  // easeOutCubic
-
-            labelContentGroup.scale = SIMD3<Float>(repeating: eased)
-
-            if t >= 1.0 {
-                timer.invalidate()
-                labelContentGroup.scale = .one
-
-                // Stagger-reveal label text lines
-                self?.revealLabelLines(completion: completion)
-            }
-        }
-        RunLoop.main.add(growTimer, forMode: .common)
+        // Animate: stagger-reveal label text lines
+        revealLabelLines(completion: completion)
     }
 
     /// Stagger-reveal label text lines after expansion animation
