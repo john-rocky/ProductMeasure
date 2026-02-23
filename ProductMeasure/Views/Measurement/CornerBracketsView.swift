@@ -10,22 +10,54 @@ struct CornerBracketsView: View {
     let phase: BoundingBoxAnimationPhase
     let screenSize: CGSize
     var stabilityLevel: StabilityLevel = .moving
+    var targetState: ReticleTargetState = .noTarget
+    var centerDepth: Float = 0
 
     // Bracket styling
     private let bracketLength: CGFloat = 24
 
     private var currentInset: CGFloat { PMTheme.bracketInset(for: stabilityLevel) }
     private var currentLineWidth: CGFloat { PMTheme.bracketLineWidth(for: stabilityLevel) }
-    private var currentCrosshairOpacity: Double { PMTheme.crosshairOpacity(for: stabilityLevel) }
-    private var currentColor: Color {
-        switch stabilityLevel {
-        case .moving:   return PMTheme.cyan.opacity(0.55)
-        case .settling: return PMTheme.cyan.opacity(0.75)
-        case .stable:   return PMTheme.cyan.opacity(0.95)
-        case .locked:   return PMTheme.stabilityLockedColor
+
+    private var currentCrosshairOpacity: Double {
+        let base = PMTheme.crosshairOpacity(for: stabilityLevel)
+        switch targetState {
+        case .noTarget:       return base * 0.5
+        case .targetDetected: return base * 0.85
+        case .targetLocked:   return base
         }
     }
+
+    private var currentColor: Color {
+        let baseColor: Color
+        switch stabilityLevel {
+        case .moving:   baseColor = PMTheme.cyan.opacity(0.55)
+        case .settling: baseColor = PMTheme.cyan.opacity(0.75)
+        case .stable:   baseColor = PMTheme.cyan.opacity(0.95)
+        case .locked:   baseColor = PMTheme.stabilityLockedColor
+        }
+
+        // Dim when no target
+        if targetState == .noTarget {
+            return baseColor.opacity(0.5)
+        }
+        // Green when locked on target + device stable
+        if targetState == .targetLocked && stabilityLevel >= .stable {
+            return PMTheme.stabilityLockedColor
+        }
+        return baseColor
+    }
+
     private var isPulsing: Bool { stabilityLevel != .locked }
+
+    /// Diamond rotation speed based on target state
+    private var diamondRotationDuration: Double {
+        switch targetState {
+        case .noTarget:       return 8.0
+        case .targetDetected: return 4.0
+        case .targetLocked:   return 0   // stopped
+        }
+    }
 
     @State private var pulseScale: CGFloat = 1.0
     @State private var pulseOpacity: Double = 0.8
@@ -51,12 +83,22 @@ struct CornerBracketsView: View {
                     targetBracketsView(center: center, size: targetSize, opacity: isPulsing ? pulseOpacity : 1.0, offset: 0)
                         .scaleEffect(isPulsing ? pulseScale : 1.0, anchor: .center)
 
-                    // Rotating center diamond
+                    // Rotating center diamond (stops + scales up when locked)
                     Diamond()
                         .stroke(currentColor.opacity(0.30), lineWidth: 1)
                         .frame(width: 10, height: 10)
+                        .scaleEffect(targetState == .targetLocked ? 1.3 : 1.0)
                         .rotationEffect(.degrees(diamondRotation))
                         .position(x: center.x, y: center.y)
+
+                    // Depth readout below crosshair (visible when target locked)
+                    if targetState == .targetLocked && centerDepth > 0 {
+                        Text(String(format: "%.2fm", centerDepth))
+                            .font(PMTheme.mono(PMTheme.reticleDepthReadoutFontSize))
+                            .foregroundColor(currentColor.opacity(0.7))
+                            .position(x: center.x, y: center.y + 28)
+                            .transition(.opacity)
+                    }
                 }
             }
         }
@@ -67,12 +109,15 @@ struct CornerBracketsView: View {
                 : .easeInOut(duration: PMTheme.stabilitySettleTransition),
             value: stabilityLevel
         )
+        .animation(.easeInOut(duration: PMTheme.reticleTargetTransitionDuration), value: targetState)
         .allowsHitTesting(false)
         .onAppear {
             startPulseAnimation()
-            withAnimation(.linear(duration: 8.0).repeatForever(autoreverses: false)) {
-                diamondRotation = 360
-            }
+            startDiamondRotation()
+        }
+        .onChange(of: targetState) { _, newState in
+            // Restart diamond rotation when target state changes
+            startDiamondRotation()
         }
         .onChange(of: stabilityLevel) { _, newLevel in
             if newLevel == .locked {
@@ -91,6 +136,16 @@ struct CornerBracketsView: View {
                 }
             }
         }
+    }
+
+    private func startDiamondRotation() {
+        let duration = diamondRotationDuration
+        if duration > 0 {
+            withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+                diamondRotation += 360
+            }
+        }
+        // When targetLocked (duration == 0), animation naturally stops at current rotation
     }
 
     private func startPulseAnimation() {
@@ -225,7 +280,9 @@ struct Diamond: Shape {
         CornerBracketsView(
             phase: .showingTargetBrackets,
             screenSize: CGSize(width: 400, height: 800),
-            stabilityLevel: .locked
+            stabilityLevel: .locked,
+            targetState: .targetLocked,
+            centerDepth: 0.72
         )
     }
 }

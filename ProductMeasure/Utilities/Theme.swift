@@ -126,6 +126,10 @@ enum PMTheme {
     static let calloutIdFontSize: CGFloat = 16
     static let calloutBodyFontSize: CGFloat = 14
 
+    // MARK: Reticle Target
+    static let reticleDepthReadoutFontSize: CGFloat = 10
+    static let reticleTargetTransitionDuration: Double = 0.2
+
     // MARK: Stability Feedback
 
     static func bracketInset(for level: StabilityLevel) -> CGFloat {

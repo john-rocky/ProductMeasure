@@ -44,7 +44,9 @@ struct ARMeasurementView: View {
                         CornerBracketsView(
                             phase: viewModel.animationPhase,
                             screenSize: geometry.size,
-                            stabilityLevel: viewModel.stabilityLevel
+                            stabilityLevel: viewModel.stabilityLevel,
+                            targetState: viewModel.reticleTargetState,
+                            centerDepth: viewModel.reticleCenterDepth
                         )
                     }
                     .ignoresSafeArea()

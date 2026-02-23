@@ -88,6 +88,17 @@ enum AppConstants {
     static let stabilityEMAAlpha: Float = 0.15            // Smooth over ~7 frames
     static let stabilityViolationTolerance: Int = 4       // Frames before demotion
 
+    // MARK: - Reticle Lock-On
+    static let reticleMinDepth: Float = 0.15          // 15cm closer is ignored
+    static let reticleMaxDepth: Float = 3.0           // 3m farther is ignored
+    static let reticleDepthDiscontinuity: Float = 0.05 // 5cm depth edge detection
+    static let reticleDepthEMAAlpha: Float = 0.20     // Depth smoothing
+    static let reticleTargetFrameThreshold: Int = 3   // Frames for state transition
+    static let reticleBackgroundSegInterval: TimeInterval = 0.35 // Segmentation interval
+    static let reticleCacheFreshnessTime: TimeInterval = 0.15    // Cache validity
+    static let reticleCacheMaxMovement: Float = 0.02             // 2cm
+    static let reticleTapCenterThreshold: CGFloat = 0.15         // 15% of screen diagonal
+
     // MARK: - Label Reader
     static let labelMinConfidence: Float = 0.6
     static let labelMinSize: Float = 0.1
@@ -453,6 +464,12 @@ enum WorkflowStep: Equatable {
     case showingResult
     case showingConsole
     case showingCSV
+}
+
+enum ReticleTargetState: Int {
+    case noTarget = 0       // Empty space or too far
+    case targetDetected = 1 // Object present (even while device moving)
+    case targetLocked = 2   // Object present + device stable
 }
 
 enum StabilityLevel: Int, Comparable {

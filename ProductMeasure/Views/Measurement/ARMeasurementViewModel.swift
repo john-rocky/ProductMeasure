@@ -86,6 +86,23 @@ class ARMeasurementViewModel: ObservableObject {
             : pipeline.floorSnapDefault
     }
 
+    // Reticle lock-on state
+    @Published var reticleTargetState: ReticleTargetState = .noTarget
+    @Published var reticleCenterDepth: Float = 0
+    private var smoothedCenterDepth: Float = 0
+    private var targetDetectedFrameCount: Int = 0
+    private var cachedSegmentation: CachedSegmentation?
+    private var backgroundSegmentationTask: Task<Void, Never>?
+    private var lastBackgroundSegTime: TimeInterval = 0
+
+    private struct CachedSegmentation {
+        let mask: CVPixelBuffer
+        let maskSize: CGSize
+        let instanceCount: Int
+        let frameTimestamp: TimeInterval
+        let cameraPosition: SIMD3<Float>
+    }
+
     // Label reader state
     @Published var isReadingLabel = false
     @Published var showLabelResult = false
@@ -224,6 +241,11 @@ class ARMeasurementViewModel: ObservableObject {
         lastStabilityCameraForward = cameraForward
         updateStabilityLevel(rawPosDelta: rawPosDelta, rawDirDelta: rawDirDelta)
 
+        // Reticle target detection (runs every frame in target-bracket phase)
+        if animationPhase == .showingTargetBrackets && !isProcessing && !hasPendingFirstTap {
+            updateReticleTarget(frame: frame, cameraPosition: cameraPosition)
+        }
+
         // Skip billboard updates when camera is nearly stationary
         let billboardPosDelta = simd_distance(cameraPosition, lastFrameCameraPosition)
         let billboardDirDelta = simd_distance(cameraForward, lastFrameCameraForward)
@@ -351,6 +373,187 @@ class ARMeasurementViewModel: ObservableObject {
         generator.impactOccurred(intensity: 0.6)
     }
 
+    // MARK: - Reticle Target Detection
+
+    private func updateReticleTarget(frame: ARFrame, cameraPosition: SIMD3<Float>) {
+        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
+            transitionReticleState(to: .noTarget)
+            return
+        }
+
+        let depthWidth = CVPixelBufferGetWidth(depthMap)
+        let depthHeight = CVPixelBufferGetHeight(depthMap)
+
+        // Screen center → depth map coordinates
+        // Screen center is (viewWidth/2, viewHeight/2).
+        // In the landscape depth map: depthX = screenY / screenH * depthW, depthY = (1 - screenX / screenW) * depthH
+        // For screen center: depthX = 0.5 * depthWidth, depthY = 0.5 * depthHeight
+        let centerDX = depthWidth / 2
+        let centerDY = depthHeight / 2
+
+        // Sample center depth
+        guard let centerDepthValue = sampleDepthAt(x: centerDX, y: centerDY, depthMap: depthMap) else {
+            transitionReticleState(to: .noTarget)
+            return
+        }
+
+        // Sample 8 surrounding points (cross pattern, ±15px offset in depth map space)
+        let offset = 15
+        let offsets = [
+            (offset, 0), (-offset, 0), (0, offset), (0, -offset),
+            (offset, offset), (-offset, -offset), (offset, -offset), (-offset, offset)
+        ]
+        var surroundingDepths: [Float] = []
+        for (dx, dy) in offsets {
+            if let d = sampleDepthAt(x: centerDX + dx, y: centerDY + dy, depthMap: depthMap) {
+                surroundingDepths.append(d)
+            }
+        }
+
+        // Check for depth discontinuity (edge detection)
+        var hasDiscontinuity = false
+        for d in surroundingDepths {
+            if abs(d - centerDepthValue) > AppConstants.reticleDepthDiscontinuity {
+                hasDiscontinuity = true
+                break
+            }
+        }
+
+        // EMA smoothing
+        let alpha = AppConstants.reticleDepthEMAAlpha
+        smoothedCenterDepth = alpha * centerDepthValue + (1.0 - alpha) * smoothedCenterDepth
+
+        // Determine new state
+        let newState: ReticleTargetState
+        if smoothedCenterDepth >= AppConstants.reticleMinDepth
+            && smoothedCenterDepth <= AppConstants.reticleMaxDepth
+            && !hasDiscontinuity {
+            if stabilityLevel >= .stable {
+                newState = .targetLocked
+            } else {
+                newState = .targetDetected
+            }
+        } else if smoothedCenterDepth >= AppConstants.reticleMinDepth
+                    && smoothedCenterDepth <= AppConstants.reticleMaxDepth {
+            // Object detected but on an edge — still detected, not locked
+            newState = .targetDetected
+        } else {
+            newState = .noTarget
+        }
+
+        transitionReticleState(to: newState)
+
+        // Update published depth for UI
+        if reticleTargetState != .noTarget {
+            reticleCenterDepth = smoothedCenterDepth
+        }
+
+        // Background segmentation management
+        if reticleTargetState == .targetLocked {
+            startBackgroundSegmentationIfNeeded(frame: frame, cameraPosition: cameraPosition)
+        } else if reticleTargetState == .noTarget {
+            stopBackgroundSegmentation()
+        }
+    }
+
+    private func sampleDepthAt(x: Int, y: Int, depthMap: CVPixelBuffer) -> Float? {
+        let width = CVPixelBufferGetWidth(depthMap)
+        let height = CVPixelBufferGetHeight(depthMap)
+        guard x >= 0, x < width, y >= 0, y < height else { return nil }
+
+        CVPixelBufferLockBaseAddress(depthMap, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depthMap, .readOnly) }
+
+        guard let base = CVPixelBufferGetBaseAddress(depthMap) else { return nil }
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
+        let ptr = base.assumingMemoryBound(to: Float32.self)
+        let stride = bytesPerRow / MemoryLayout<Float32>.size
+
+        let depth = ptr[y * stride + x]
+        return (depth.isFinite && depth > 0) ? depth : nil
+    }
+
+    private func transitionReticleState(to newState: ReticleTargetState) {
+        if newState.rawValue > reticleTargetState.rawValue {
+            // Promote: require threshold frames
+            targetDetectedFrameCount += 1
+            if targetDetectedFrameCount >= AppConstants.reticleTargetFrameThreshold {
+                reticleTargetState = newState
+                targetDetectedFrameCount = 0
+            }
+        } else if newState.rawValue < reticleTargetState.rawValue {
+            // Demote immediately
+            reticleTargetState = newState
+            targetDetectedFrameCount = 0
+        }
+        // Equal: no change needed
+    }
+
+    private func startBackgroundSegmentationIfNeeded(frame: ARFrame, cameraPosition: SIMD3<Float>) {
+        let now = frame.timestamp
+        guard now - lastBackgroundSegTime >= AppConstants.reticleBackgroundSegInterval else { return }
+        guard backgroundSegmentationTask == nil else { return }
+
+        lastBackgroundSegTime = now
+        let capturedImage = frame.capturedImage
+        let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
+        let imageSize = CGSize(
+            width: CVPixelBufferGetWidth(capturedImage),
+            height: CVPixelBufferGetHeight(capturedImage)
+        )
+
+        // Screen center in normalized image coordinates
+        // Screen center (0.5, 0.5) → normalizedX = 0.5, normalizedY = 1 - 0.5 = 0.5
+        let normalizedCenter = CGPoint(x: 0.5, y: 0.5)
+
+        backgroundSegmentationTask = Task { [weak self] in
+            do {
+                let segResult = try await InstanceSegmentationService().segmentInstance(
+                    in: capturedImage,
+                    at: normalizedCenter,
+                    depthMap: depthMap
+                )
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    if let seg = segResult {
+                        self.cachedSegmentation = CachedSegmentation(
+                            mask: seg.mask,
+                            maskSize: seg.maskSize,
+                            instanceCount: {
+                                #if DEBUG
+                                return seg.instanceCount
+                                #else
+                                return 0
+                                #endif
+                            }(),
+                            frameTimestamp: now,
+                            cameraPosition: cameraPosition
+                        )
+                    }
+                    self.backgroundSegmentationTask = nil
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.backgroundSegmentationTask = nil
+                }
+            }
+        }
+    }
+
+    private func stopBackgroundSegmentation() {
+        backgroundSegmentationTask?.cancel()
+        backgroundSegmentationTask = nil
+        cachedSegmentation = nil
+    }
+
+    private func clearReticleState() {
+        reticleTargetState = .noTarget
+        reticleCenterDepth = 0
+        smoothedCenterDepth = 0
+        targetDetectedFrameCount = 0
+        stopBackgroundSegmentation()
+    }
+
     func pauseSession() {
         sessionManager.pauseSession()
     }
@@ -393,13 +596,15 @@ class ARMeasurementViewModel: ObservableObject {
             return
         }
 
-        // Reset stability on tap
+        // Reset stability and reticle state on tap
         stabilityLevel = .moving
         stabilityWindowStart = nil
         lastHapticLevel = .moving
         smoothedPosDelta = 0
         smoothedDirDelta = 0
         violationCount = 0
+        reticleTargetState = .noTarget
+        reticleCenterDepth = 0
 
         // Two-tap flow: if we have a pending first-tap result, this is the second tap
         if let firstResult = pendingFirstTapResult {
@@ -436,6 +641,11 @@ class ARMeasurementViewModel: ObservableObject {
         animationContext = nil
 
         isProcessing = true
+
+        // Stop background segmentation (we'll use cache if valid)
+        backgroundSegmentationTask?.cancel()
+        backgroundSegmentationTask = nil
+
         #if DEBUG
         print("[ViewModel] Starting first-tap measurement (silent)...")
         #endif
@@ -456,13 +666,47 @@ class ARMeasurementViewModel: ObservableObject {
             print("[ViewModel] View size: \(viewSize)")
             #endif
 
-            if let result = try await measurementCalculator.measure(
-                frame: frame,
-                tapPoint: location,
-                viewSize: viewSize,
-                mode: mode,
-                raycastHitPosition: raycastHitPosition
-            ) {
+            // Check if cached segmentation can be used (tap near center + fresh cache)
+            let result: MeasurementCalculator.MeasurementResult?
+            let screenCenter = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+            let tapDistance = hypot(location.x - screenCenter.x, location.y - screenCenter.y)
+            let screenDiagonal = hypot(viewSize.width, viewSize.height)
+            let cameraPos = SIMD3<Float>(
+                frame.camera.transform.columns.3.x,
+                frame.camera.transform.columns.3.y,
+                frame.camera.transform.columns.3.z
+            )
+
+            if tapDistance / screenDiagonal < AppConstants.reticleTapCenterThreshold,
+               let cached = cachedSegmentation,
+               frame.timestamp - cached.frameTimestamp < AppConstants.reticleCacheFreshnessTime,
+               simd_distance(cameraPos, cached.cameraPosition) < AppConstants.reticleCacheMaxMovement {
+                #if DEBUG
+                print("[ViewModel] Using cached segmentation (age: \(String(format: "%.0f", (frame.timestamp - cached.frameTimestamp) * 1000))ms)")
+                #endif
+                result = try await measurementCalculator.measureWithCachedSegmentation(
+                    frame: frame,
+                    cachedMask: cached.mask,
+                    cachedMaskSize: cached.maskSize,
+                    tapPoint: location,
+                    viewSize: viewSize,
+                    mode: mode,
+                    raycastHitPosition: raycastHitPosition
+                )
+            } else {
+                result = try await measurementCalculator.measure(
+                    frame: frame,
+                    tapPoint: location,
+                    viewSize: viewSize,
+                    mode: mode,
+                    raycastHitPosition: raycastHitPosition
+                )
+            }
+
+            // Clear cache after use
+            cachedSegmentation = nil
+
+            if let result = result {
                 #if DEBUG
                 print("[ViewModel] First-tap measurement successful (silent)")
                 print("[ViewModel] Dimensions: L=\(result.length*100)cm, W=\(result.width*100)cm, H=\(result.height*100)cm")
@@ -1204,6 +1448,9 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Reset pending first-tap state
         clearPendingFirstTap()
+
+        // Reset reticle lock-on state
+        clearReticleState()
 
         // Reset callout state
         resetCalloutState()
