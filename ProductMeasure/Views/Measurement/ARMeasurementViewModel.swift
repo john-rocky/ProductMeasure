@@ -1356,6 +1356,7 @@ class ARMeasurementViewModel: ObservableObject {
         }
 
         // Create completed visualization with dimension labels and re-edit data
+        // In warehouse mode, pass pendingLabelData so the completed billboard includes label info
         let completedViz = CompletedBoxVisualization(
             boundingBox: result.boundingBox,
             height: result.height,
@@ -1366,7 +1367,8 @@ class ARMeasurementViewModel: ObservableObject {
             quality: result.quality,
             axisMapping: result.axisMapping,
             pointCloud: result.pointCloud,
-            floorY: boxVisualization?.floorY
+            floorY: boxVisualization?.floorY,
+            labelData: pendingLabelData
         )
         nextBoxId += 1
 
@@ -1521,7 +1523,13 @@ class ARMeasurementViewModel: ObservableObject {
         isEditing = false
         isDragging = false
         boxVisualization?.isInteractive = false
-        boxVisualization?.updateActionMode(.normal)
+        if boxVisualization?.isExpandedWithLabel == true {
+            let mode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
+                ? .labelExpandedNoRefine : .labelExpanded
+            boxVisualization?.updateActionMode(mode)
+        } else {
+            boxVisualization?.updateActionMode(.normal)
+        }
         if labelBillboard?.isUnified == true {
             let actions = refinementCount >= AppConstants.maxRefinementRounds
                 ? ActionIconBuilder.labelUnifiedNoRefineActions
@@ -1774,9 +1782,15 @@ class ARMeasurementViewModel: ObservableObject {
 
     private func cancelRefinement() {
         isRefining = false
-        let mode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
-            ? .normalNoRefine : .normal
-        boxVisualization?.updateActionMode(mode)
+        if boxVisualization?.isExpandedWithLabel == true {
+            let mode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
+                ? .labelExpandedNoRefine : .labelExpanded
+            boxVisualization?.updateActionMode(mode)
+        } else {
+            let mode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
+                ? .normalNoRefine : .normal
+            boxVisualization?.updateActionMode(mode)
+        }
         if labelBillboard?.isUnified == true {
             let actions = refinementCount >= AppConstants.maxRefinementRounds
                 ? ActionIconBuilder.labelUnifiedNoRefineActions
@@ -2004,13 +2018,53 @@ class ARMeasurementViewModel: ObservableObject {
             workflowStep = .showingLabelResult
         }
 
-        // Try to create AR billboard above the real label
         guard let labelData = currentLabelData,
               let liftAnim = labelLiftAnimation else {
             // Fallback to 2D overlay if we can't create billboard
             showLabelResult2D()
             return
         }
+
+        // -- Warehouse mode: expand BoxVisualization billboard instead of creating LabelBillboard --
+        if appMode == .warehouse, let boxViz = boxVisualization {
+            // Show the lifted label again so it can transition back
+            liftAnim.setVisible(true)
+
+            // Phase A: Label shrinks back toward original position
+            liftAnim.transitionToOrigin { [weak self] in
+                guard let self = self else { return }
+                if let liftAnchor = self.labelLiftAnchor {
+                    self.sessionManager.removeAnchor(liftAnchor)
+                }
+                self.labelLiftAnchor = nil
+                self.labelLiftAnimation = nil
+            }
+
+            // Store label data
+            pendingLabelData = labelData
+
+            // Trigger status vignette flash
+            statusVignetteIsNG = nextBoxId == 2
+            showStatusVignette = true
+
+            // Phase B: Expand box billboard with label data at 0.3s delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self = self else { return }
+                boxViz.expandWithLabelData(
+                    labelData,
+                    boxId: self.nextBoxId,
+                    volume: self.currentMeasurement?.boundingBox.volume ?? 0
+                ) { [weak self] in
+                    guard let self = self else { return }
+                    if self.workflowStep == .showingLabelResult {
+                        self.workflowStep = .showingResult
+                    }
+                }
+            }
+            return
+        }
+
+        // -- Non-warehouse modes: create separate LabelBillboard --
 
         // Show the lifted label again so it can transition back
         liftAnim.setVisible(true)
@@ -2141,7 +2195,16 @@ class ARMeasurementViewModel: ObservableObject {
         // Dismiss label result
         showLabelResult = false
 
-        // Dismiss AR billboard
+        // Warehouse mode: collapse the expanded box billboard back to dimensions-only
+        if boxVisualization?.isExpandedWithLabel == true {
+            boxVisualization?.collapseLabelSection()
+            let mode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
+                ? .normalNoRefine : .normal
+            boxVisualization?.updateActionMode(mode)
+            pendingLabelData = nil
+        }
+
+        // Dismiss AR billboard (non-warehouse mode)
         if showLabelBillboard {
             showLabelBillboard = false
             labelBillboard?.entity.isEnabled = false

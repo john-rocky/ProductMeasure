@@ -79,6 +79,23 @@ enum ActionIconBuilder {
         ActionIconConfig(type: .save, sfSymbol: "checkmark", color: PMTheme.uiGreen),
     ]
 
+    /// Actions for warehouse unified billboard (box + label): Rescan, Discard, Refine, Edit, Save
+    static let warehouseCombinedActions: [ActionIconConfig] = [
+        ActionIconConfig(type: .labelRescan, sfSymbol: "arrow.counterclockwise", color: UIColor(hex: 0x00BFFF)),
+        ActionIconConfig(type: .discard, sfSymbol: "xmark", color: PMTheme.uiRed),
+        ActionIconConfig(type: .refine, sfSymbol: "arrow.triangle.2.circlepath", color: PMTheme.uiCyan),
+        ActionIconConfig(type: .edit, sfSymbol: "pencil", color: PMTheme.uiAmber),
+        ActionIconConfig(type: .save, sfSymbol: "checkmark", color: PMTheme.uiGreen),
+    ]
+
+    /// Actions for warehouse unified billboard when refinement limit reached
+    static let warehouseCombinedNoRefineActions: [ActionIconConfig] = [
+        ActionIconConfig(type: .labelRescan, sfSymbol: "arrow.counterclockwise", color: UIColor(hex: 0x00BFFF)),
+        ActionIconConfig(type: .discard, sfSymbol: "xmark", color: PMTheme.uiRed),
+        ActionIconConfig(type: .edit, sfSymbol: "pencil", color: PMTheme.uiAmber),
+        ActionIconConfig(type: .save, sfSymbol: "checkmark", color: PMTheme.uiGreen),
+    ]
+
     /// Actions for completed box: Re-edit, Delete
     static let completedActions: [ActionIconConfig] = [
         ActionIconConfig(type: .reEdit, sfSymbol: "pencil", color: PMTheme.uiAmber),
