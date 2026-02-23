@@ -14,9 +14,13 @@ struct HistoryDetailView: View {
     let measurement: ProductMeasurement
 
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
+    @AppStorage("sendEndpointURL") private var sendEndpointURL = ""
     @State private var showingShareSheet = false
     @State private var showingDeleteAlert = false
     @State private var notes: String = ""
+    @State private var isSending = false
+    @State private var sendAlertMessage: String?
+    @State private var showingSendAlert = false
 
     var body: some View {
         NavigationStack {
@@ -53,6 +57,11 @@ struct HistoryDetailView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        Button(action: { sendMeasurement() }) {
+                            Label("Send", systemImage: "paperplane")
+                        }
+                        .disabled(sendEndpointURL.isEmpty || isSending)
+
                         Button(action: { showingShareSheet = true }) {
                             Label("Share", systemImage: "square.and.arrow.up")
                         }
@@ -60,7 +69,11 @@ struct HistoryDetailView: View {
                             Label("Delete", systemImage: "trash")
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        if isSending {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "ellipsis.circle")
+                        }
                     }
                 }
             }
@@ -74,6 +87,11 @@ struct HistoryDetailView: View {
                 }
             } message: {
                 Text("Are you sure you want to delete this measurement? This action cannot be undone.")
+            }
+            .alert("Send", isPresented: $showingSendAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(sendAlertMessage ?? "")
             }
             .onAppear {
                 notes = measurement.notes
@@ -288,6 +306,21 @@ struct HistoryDetailView: View {
 
     private var formattedDate: String {
         Self.detailDateFormatter.string(from: measurement.timestamp)
+    }
+
+    private func sendMeasurement() {
+        let jsonData = ExportService().exportToJSON(measurements: [measurement])
+        isSending = true
+        Task {
+            do {
+                let status = try await MeasurementSendService().sendRawJSON(jsonData)
+                sendAlertMessage = "Sent successfully (HTTP \(status))."
+            } catch {
+                sendAlertMessage = "Send failed: \(error.localizedDescription)"
+            }
+            isSending = false
+            showingSendAlert = true
+        }
     }
 
     private func deleteMeasurement() {

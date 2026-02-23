@@ -11,9 +11,13 @@ struct HistoryListView: View {
     @Query(sort: \ProductMeasurement.timestamp, order: .reverse) private var measurements: [ProductMeasurement]
 
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
+    @AppStorage("sendEndpointURL") private var sendEndpointURL = ""
     @State private var searchText = ""
     @State private var selectedMeasurement: ProductMeasurement?
     @State private var showingExportSheet = false
+    @State private var isSendingAll = false
+    @State private var sendAllAlertMessage: String?
+    @State private var showingSendAllAlert = false
 
     var body: some View {
         NavigationStack {
@@ -33,8 +37,17 @@ struct HistoryListView: View {
                             Label("Export All", systemImage: "square.and.arrow.up")
                         }
                         .disabled(measurements.isEmpty)
+
+                        Button(action: { sendAllMeasurements() }) {
+                            Label("Send All", systemImage: "paperplane")
+                        }
+                        .disabled(measurements.isEmpty || sendEndpointURL.isEmpty || isSendingAll)
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        if isSendingAll {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "ellipsis.circle")
+                        }
                     }
                 }
             }
@@ -43,6 +56,11 @@ struct HistoryListView: View {
             }
             .sheet(isPresented: $showingExportSheet) {
                 ExportSheet(measurements: measurements, unit: measurementUnit)
+            }
+            .alert("Send All", isPresented: $showingSendAllAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(sendAllAlertMessage ?? "")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .saveMeasurement)) { notification in
@@ -97,6 +115,22 @@ struct HistoryListView: View {
                 measurement.formattedDimensions(unit: measurementUnit, precision: .millimeter1)
                     .localizedCaseInsensitiveContains(searchText)
             }
+        }
+    }
+
+    private func sendAllMeasurements() {
+        let snapshot = Array(measurements)
+        let jsonData = ExportService().exportToJSON(measurements: snapshot)
+        isSendingAll = true
+        Task {
+            do {
+                let status = try await MeasurementSendService().sendRawJSON(jsonData)
+                sendAllAlertMessage = "Sent \(snapshot.count) measurement(s) successfully (HTTP \(status))."
+            } catch {
+                sendAllAlertMessage = "Send failed: \(error.localizedDescription)"
+            }
+            isSendingAll = false
+            showingSendAllAlert = true
         }
     }
 

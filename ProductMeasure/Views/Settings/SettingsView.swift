@@ -13,10 +13,16 @@ struct SettingsView: View {
     @AppStorage("showQualityIndicators") private var showQualityIndicators = true
     @AppStorage("pipelineVersion") private var pipelineVersion: PipelineVersion = .standard
     @AppStorage("showScanningTips") private var showScanningTips = true
+    @AppStorage("sendEndpointURL") private var sendEndpointURL = ""
     #if DEBUG
     @AppStorage("showMaskPreview") private var showMaskPreview = false
     @AppStorage("showDiagnostics") private var showDiagnostics = false
     #endif
+
+    private var isValidEndpointURL: Bool {
+        guard let url = URL(string: sendEndpointURL) else { return false }
+        return url.scheme == "http" || url.scheme == "https"
+    }
 
     var body: some View {
         NavigationStack {
@@ -101,6 +107,41 @@ struct SettingsView: View {
                     Text("DISPLAY")
                         .font(PMTheme.mono(11, weight: .bold))
                         .foregroundColor(PMTheme.cyan)
+                }
+
+                // Send endpoint section
+                Section {
+                    TextField("https://example.com/api/measurements", text: $sendEndpointURL)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(PMTheme.mono(13))
+
+                    if !sendEndpointURL.isEmpty {
+                        HStack(spacing: 6) {
+                            if isValidEndpointURL {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(PMTheme.green)
+                                Text("Valid URL")
+                                    .font(PMTheme.mono(11))
+                                    .foregroundColor(PMTheme.green)
+                            } else {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(PMTheme.red)
+                                Text("Invalid URL (requires http or https)")
+                                    .font(PMTheme.mono(11))
+                                    .foregroundColor(PMTheme.red)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("SEND ENDPOINT")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
+                } footer: {
+                    Text("Measurement data will be sent as JSON via HTTP POST to this URL.")
+                        .font(PMTheme.mono(11))
+                        .foregroundColor(PMTheme.textDimmed)
                 }
 
                 // Scanning tips section
