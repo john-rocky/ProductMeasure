@@ -447,9 +447,9 @@ enum SizeClass: String, CaseIterable {
 
 enum WorkflowStep: Equatable {
     case idle
-    case awaitingLabelScan
-    case showingLabelResult
     case awaitingSecondTap
+    case awaitingLabelScan      // after box measurement (warehouse)
+    case showingLabelResult
     case showingResult
     case showingConsole
     case showingCSV

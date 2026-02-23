@@ -21,8 +21,8 @@ struct WorkflowStepIndicator: View {
         case .warehouse:
             return [
                 StepInfo(icon: "hand.tap", label: "Measure"),
-                StepInfo(icon: "doc.text.viewfinder", label: "Label"),
                 StepInfo(icon: "arrow.triangle.2.circlepath", label: "Refine"),
+                StepInfo(icon: "doc.text.viewfinder", label: "Label"),
                 StepInfo(icon: "checkmark.rectangle", label: "Review"),
                 StepInfo(icon: "doc.text", label: "Export"),
             ]
@@ -45,8 +45,8 @@ struct WorkflowStepIndicator: View {
         case .warehouse:
             switch currentStep {
             case .idle: return 0
-            case .awaitingLabelScan, .showingLabelResult: return 1
-            case .awaitingSecondTap: return 2
+            case .awaitingSecondTap: return 1
+            case .awaitingLabelScan, .showingLabelResult: return 2
             case .showingResult: return 3
             case .showingConsole, .showingCSV: return 4
             }

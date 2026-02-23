@@ -480,9 +480,7 @@ class ARMeasurementViewModel: ObservableObject {
                 print("[Workflow] First tap complete, appMode=\(appMode)")
                 #endif
                 switch appMode {
-                case .warehouse:
-                    workflowStep = .awaitingLabelScan
-                case .shipping, .measure:
+                case .warehouse, .shipping, .measure:
                     workflowStep = .awaitingSecondTap
                 case .labelOnly:
                     break  // Should not reach here (label-only skips measurement)
@@ -986,7 +984,11 @@ class ARMeasurementViewModel: ObservableObject {
                                     self.isProcessing = false
 
                                     if self.workflowStep == .awaitingSecondTap {
-                                        self.workflowStep = .showingResult
+                                        if self.appMode == .warehouse {
+                                            self.workflowStep = .awaitingLabelScan
+                                        } else {
+                                            self.workflowStep = .showingResult
+                                        }
                                     }
                                 }
                             }
@@ -1009,7 +1011,11 @@ class ARMeasurementViewModel: ObservableObject {
                                 self.isProcessing = false
 
                                 if self.workflowStep == .awaitingSecondTap {
-                                    self.workflowStep = .showingResult
+                                    if self.appMode == .warehouse {
+                                        self.workflowStep = .awaitingLabelScan
+                                    } else {
+                                        self.workflowStep = .showingResult
+                                    }
                                 }
                             }
                         }
@@ -1798,11 +1804,7 @@ class ARMeasurementViewModel: ObservableObject {
                 // Store label data and advance workflow — no Done button needed
                 self.pendingLabelData = self.currentLabelData
                 if self.workflowStep == .showingLabelResult {
-                    if self.appMode == .labelOnly {
-                        self.workflowStep = .showingResult
-                    } else {
-                        self.workflowStep = .awaitingSecondTap
-                    }
+                    self.workflowStep = .showingResult
                 }
             }
         }
@@ -1879,11 +1881,7 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Advance workflow if active
         if isWorkflowActive {
-            if appMode == .labelOnly {
-                workflowStep = .showingResult
-            } else {
-                workflowStep = .awaitingSecondTap
-            }
+            workflowStep = .showingResult
         }
     }
 
@@ -1935,7 +1933,7 @@ class ARMeasurementViewModel: ObservableObject {
     }
 
     func skipLabelScan() {
-        workflowStep = .awaitingSecondTap
+        workflowStep = .showingResult
     }
 
     func showMeasurementConsole() {

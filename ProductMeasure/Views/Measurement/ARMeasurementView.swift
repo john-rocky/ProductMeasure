@@ -202,6 +202,21 @@ struct ARMeasurementView: View {
                             InstructionCard(mode: .processing)
                         } else if viewModel.isRefining {
                             InstructionCard(mode: .refine)
+                        } else if viewModel.workflowStep == .awaitingLabelScan && viewModel.currentMeasurement != nil {
+                            // Post-box label scan prompt (warehouse flow)
+                            VStack(spacing: 6) {
+                                InstructionCard(mode: .label)
+                                Button(action: { viewModel.skipLabelScan() }) {
+                                    Text("SKIP")
+                                        .font(PMTheme.mono(11, weight: .bold))
+                                        .foregroundColor(PMTheme.textSecondary)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 6)
+                                        .background(PMTheme.surfaceDark.opacity(0.7))
+                                        .clipShape(Capsule())
+                                        .overlay(Capsule().strokeBorder(PMTheme.textSecondary.opacity(0.3), lineWidth: 0.5))
+                                }
+                            }
                         } else if viewModel.currentMeasurement == nil && !viewModel.isReadingLabel {
                             if viewModel.isWorkflowActive {
                                 switch viewModel.workflowStep {
