@@ -80,34 +80,11 @@ struct ARMeasurementView: View {
                             }
 
                             #if DEBUG
-                            if viewModel.lastPipelineDiagnostics != nil {
-                                Button(action: { viewModel.showDiagnosticsPanel = true }) {
-                                    Image(systemName: "waveform.path.ecg")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(viewModel.lastPipelineDiagnostics?.succeeded == true ? PMTheme.cyan : PMTheme.red)
-                                        .frame(width: 36, height: 36)
-                                        .background(PMTheme.surfaceDark.opacity(0.85))
-                                        .clipShape(Circle())
-                                        .overlay(Circle().strokeBorder(
-                                            (viewModel.lastPipelineDiagnostics?.succeeded == true ? PMTheme.cyan : PMTheme.red).opacity(0.20),
-                                            lineWidth: 0.5
-                                        ))
-                                }
-                            }
-
                             // Point cloud visualization toggle
-                            if !viewModel.pointCloudCaptures.isEmpty {
-                                Button(action: { viewModel.togglePointCloudViz() }) {
-                                    VStack(spacing: 2) {
-                                        Image(systemName: viewModel.showPointCloudViz ? "circle.hexagongrid.fill" : "circle.hexagongrid")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(viewModel.showPointCloudViz ? PMTheme.green : PMTheme.cyan)
-                                        if let stage = viewModel.selectedVisualizationStage {
-                                            Text(stage.displayName)
-                                                .font(PMTheme.mono(7))
-                                                .foregroundColor(PMTheme.green)
-                                        }
-                                    }
+                            Button(action: { viewModel.togglePointCloudViz() }) {
+                                Image(systemName: viewModel.showPointCloudViz ? "circle.hexagongrid.fill" : "circle.hexagongrid")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(viewModel.showPointCloudViz ? PMTheme.green : PMTheme.cyan)
                                     .frame(width: 36, height: 36)
                                     .background(PMTheme.surfaceDark.opacity(0.85))
                                     .clipShape(Circle())
@@ -115,11 +92,25 @@ struct ARMeasurementView: View {
                                         (viewModel.showPointCloudViz ? PMTheme.green : PMTheme.cyan).opacity(0.20),
                                         lineWidth: 0.5
                                     ))
-                                }
                             }
                             #endif
 
                             Spacer()
+
+                            // Reset button (visible during warehouse workflow)
+                            if appMode == .warehouse && viewModel.isWorkflowActive {
+                                Button(action: {
+                                    viewModel.resetForNewMeasurement()
+                                }) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(PMTheme.red)
+                                        .frame(width: 36, height: 36)
+                                        .background(PMTheme.surfaceDark.opacity(0.85))
+                                        .clipShape(Circle())
+                                        .overlay(Circle().strokeBorder(PMTheme.red.opacity(0.20), lineWidth: 0.5))
+                                }
+                            }
 
                             // Clear all button (visible when completed boxes exist)
                             if viewModel.completedBoxCount > 0 && !viewModel.isWorkflowActive {
@@ -290,18 +281,6 @@ struct ARMeasurementView: View {
                 .sheet(isPresented: $viewModel.showDebugDepth) {
                     if let image = viewModel.debugDepthImage {
                         DebugImageView(image: image, title: "Depth Map (Bright=Close) + Masked Pixels (Green)")
-                    }
-                }
-                .sheet(isPresented: $viewModel.showDiagnosticsPanel) {
-                    if let diag = viewModel.lastPipelineDiagnostics {
-                        PipelineDiagnosticsView(
-                            diagnostics: diag,
-                            pointCloudCapture: viewModel.pointCloudCaptures.last,
-                            selectedStage: $viewModel.selectedVisualizationStage,
-                            onStageSelected: { viewModel.updateStageVisualization(stage: $0) }
-                        )
-                        .presentationDetents([.medium, .large])
-                        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
                     }
                 }
                 #endif

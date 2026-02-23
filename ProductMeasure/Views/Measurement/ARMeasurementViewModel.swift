@@ -38,7 +38,7 @@ class ARMeasurementViewModel: ObservableObject {
     // Stage point cloud visualization
     @Published var pointCloudCaptures: [PipelinePointCloudCapture] = []
     @Published var selectedVisualizationStage: PipelinePointCloudCapture.Stage?
-    @Published var showPointCloudViz = true
+    @Published var showPointCloudViz = false
     private var stageVisualizationAnchors: [AnchorEntity] = []
     #endif
 
@@ -2460,9 +2460,6 @@ class ARMeasurementViewModel: ObservableObject {
         lastPipelineDiagnostics = measurementCalculator.lastDiagnostics
         if let capture = measurementCalculator.lastPointCloudCapture {
             pointCloudCaptures.append(capture)
-        }
-        if showDiagnosticsSetting {
-            showDiagnosticsPanel = true
         }
         // Auto-show point cloud after measurement
         if showPointCloudViz, !pointCloudCaptures.isEmpty {
