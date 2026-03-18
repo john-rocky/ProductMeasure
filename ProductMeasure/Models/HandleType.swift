@@ -1,6 +1,6 @@
 //
 //  HandleType.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import UIKit

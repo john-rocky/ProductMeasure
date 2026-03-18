@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		001000152 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 001000153 /* PrivacyInfo.xcprivacy */; };
+		001000154 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000155 /* OnboardingView.swift */; };
 		001000001 /* ProductMeasureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000002 /* ProductMeasureApp.swift */; };
 		001000003 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000004 /* MainTabView.swift */; };
 		001000005 /* ARMeasurementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000006 /* ARMeasurementView.swift */; };
@@ -72,6 +74,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		001000153 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		001000155 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		001000002 /* ProductMeasureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductMeasureApp.swift; sourceTree = "<group>"; };
 		001000004 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		001000006 /* ARMeasurementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementView.swift; sourceTree = "<group>"; };
@@ -162,6 +166,7 @@
 			children = (
 				001000002 /* ProductMeasureApp.swift */,
 				001000053 /* Info.plist */,
+				001000153 /* PrivacyInfo.xcprivacy */,
 				001000052 /* Assets.xcassets */,
 				001000137 /* Localizable.xcstrings */,
 				001000059 /* Models */,
@@ -204,8 +209,17 @@
 				001000064 /* Measurement */,
 				001000065 /* History */,
 				001000066 /* Settings */,
+				001000156 /* Onboarding */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		001000156 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				001000155 /* OnboardingView.swift */,
+			);
+			path = Onboarding;
 			sourceTree = "<group>";
 		};
 		001000061 /* Services */ = {
@@ -368,6 +382,7 @@
 			files = (
 				001000051 /* Assets.xcassets in Resources */,
 				001000136 /* Localizable.xcstrings in Resources */,
+				001000152 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -438,6 +453,7 @@
 				001000145 /* PipelineDiagnosticsView.swift in Sources */,
 				001000146 /* PipelinePointCloudCapture.swift in Sources */,
 				001000148 /* StagePointCloudRenderer.swift in Sources */,
+				001000154 /* OnboardingView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -574,7 +590,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ProductMeasure/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Product Measure";
+				INFOPLIST_KEY_CFBundleDisplayName = SnapMeasure;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to measure objects using AR and LiDAR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -588,8 +604,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.ProductMeasure;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.snapmeasure.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -610,7 +626,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ProductMeasure/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Product Measure";
+				INFOPLIST_KEY_CFBundleDisplayName = SnapMeasure;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to measure objects using AR and LiDAR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -624,8 +640,8 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.ProductMeasure;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.snapmeasure.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;

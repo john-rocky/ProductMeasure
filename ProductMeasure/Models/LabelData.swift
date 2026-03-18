@@ -1,6 +1,6 @@
 //
 //  LabelData.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import Foundation

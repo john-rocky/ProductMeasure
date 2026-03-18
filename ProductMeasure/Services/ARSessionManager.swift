@@ -1,6 +1,6 @@
 //
 //  ARSessionManager.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import ARKit

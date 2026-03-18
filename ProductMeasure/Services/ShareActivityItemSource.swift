@@ -1,6 +1,6 @@
 //
 //  ShareActivityItemSource.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import UIKit

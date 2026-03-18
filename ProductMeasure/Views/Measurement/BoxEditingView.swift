@@ -1,6 +1,6 @@
 //
 //  BoxEditingView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

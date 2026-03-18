@@ -1,6 +1,6 @@
 //
 //  BoundingBox3D.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import Foundation

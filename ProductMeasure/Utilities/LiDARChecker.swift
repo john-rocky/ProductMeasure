@@ -1,6 +1,6 @@
 //
 //  LiDARChecker.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import ARKit

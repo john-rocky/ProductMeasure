@@ -1,6 +1,6 @@
 //
 //  PipelinePointCloudCapture.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 #if DEBUG

@@ -1,6 +1,6 @@
 //
-//  ProductMeasureApp.swift
-//  ProductMeasure
+//  SnapMeasureApp.swift
+//  SnapMeasure
 //
 //  iOS 17+ 3D object measurement app using ARKit + LiDAR
 //
@@ -9,7 +9,8 @@ import SwiftUI
 import SwiftData
 
 @main
-struct ProductMeasureApp: App {
+struct SnapMeasureApp: App {
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     init() {
         LabelReaderService.warmup()
@@ -33,6 +34,12 @@ struct ProductMeasureApp: App {
             MainTabView()
                 .preferredColorScheme(.dark)
                 .tint(PMTheme.cyan)
+                .fullScreenCover(isPresented: Binding(
+                    get: { !hasCompletedOnboarding },
+                    set: { if !$0 { hasCompletedOnboarding = true } }
+                )) {
+                    OnboardingView()
+                }
         }
         .modelContainer(sharedModelContainer)
     }

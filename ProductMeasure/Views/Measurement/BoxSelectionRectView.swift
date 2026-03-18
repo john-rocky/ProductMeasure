@@ -1,6 +1,6 @@
 //
 //  BoxSelectionRectView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import UIKit

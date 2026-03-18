@@ -1,6 +1,6 @@
 //
 //  ShippingBox.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import Foundation

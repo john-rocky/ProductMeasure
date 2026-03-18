@@ -1,6 +1,6 @@
 //
 //  ARMeasurementView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI
@@ -10,7 +10,7 @@ import UIKit
 
 struct ARMeasurementView: View {
     @StateObject private var viewModel = ARMeasurementViewModel()
-    @AppStorage("appMode") private var appMode: AppMode = .warehouse
+    @AppStorage("appMode") private var appMode: AppMode = .measure
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
@@ -137,7 +137,7 @@ struct ARMeasurementView: View {
                         if viewModel.workflowStep == .showingResult {
                             if appMode == .shipping || appMode == .measure {
                                 Button(action: {
-                                    viewModel.resetForNewMeasurement()
+                                    viewModel.saveAndReset(mode: measurementMode, unit: measurementUnit)
                                 }) {
                                     HStack(spacing: 6) {
                                         Image(systemName: "arrow.counterclockwise")

@@ -1,6 +1,6 @@
 //
 //  BoxEditingService.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import simd

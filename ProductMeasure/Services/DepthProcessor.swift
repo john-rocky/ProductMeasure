@@ -1,6 +1,6 @@
 //
 //  DepthProcessor.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import ARKit

@@ -1,6 +1,6 @@
 //
 //  Theme.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 //  Centralized design tokens for the Dark Tech / Holographic Scanner theme
 //

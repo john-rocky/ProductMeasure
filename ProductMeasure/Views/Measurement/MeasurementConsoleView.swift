@@ -1,6 +1,6 @@
 //
 //  MeasurementConsoleView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI
@@ -35,35 +35,45 @@ struct MeasurementConsoleView: View {
     @State private var cursorVisible = true
     @State private var receiptNumber = String(format: "%06d", Int.random(in: 100000...999999))
 
+    private var endpointURL: String {
+        UserDefaults.standard.string(forKey: "sendEndpointURL") ?? ""
+    }
+
+    private var hasEndpoint: Bool {
+        !endpointURL.isEmpty
+    }
+
     private var allLines: [ConsoleLine] {
         var lines: [ConsoleLine] = []
 
         let isSizeAlert = boxId == 2
 
-        // WMS registration section
-        if isSizeAlert {
-            // Second scan: no POST, just show failed status (3 lines, indices 0-2)
-            lines.append(ConsoleLine(icon: "xmark.circle", label: "STATUS", value: "REGISTRATION FAILED", section: .wms, isAlert: true,
-                                     processingValue: "Checking...", completedValue: "REGISTRATION FAILED"))
-            lines.append(ConsoleLine(icon: "exclamationmark.triangle", label: "REASON", value: "Size error detected", section: .wms, isAlert: true,
-                                     processingValue: "Evaluating...", completedValue: "Size error detected"))
-            lines.append(ConsoleLine(icon: "arrow.counterclockwise", label: "ACTION", value: "Re-measure required", section: .wms, isAlert: true,
-                                     processingValue: "Resolving...", completedValue: "Re-measure required"))
-        } else {
-            // First scan: full POST flow (6 lines, indices 0-5)
-            let ctnDisplay = cartonId ?? "N/A"
-            lines.append(ConsoleLine(icon: "network", label: "CONNECT", value: "wms.warehouse.io:443", section: .wms,
-                                     processingValue: "Connecting...", completedValue: "wms.warehouse.io:443 \u{2713}"))
-            lines.append(ConsoleLine(icon: "arrow.up.circle", label: "REQUEST", value: "POST /wms/receipts", section: .wms,
-                                     processingValue: "Sending...", completedValue: "POST /wms/receipts \u{2713}"))
-            lines.append(ConsoleLine(icon: "doc.text", label: "BODY", value: "{\"ctn\":\"\(ctnDisplay)\"}", section: .wms,
-                                     processingValue: "Encoding...", completedValue: "{\"ctn\":\"\(ctnDisplay)\"} \u{2713}"))
-            lines.append(ConsoleLine(icon: "checkmark.circle", label: "RESPONSE", value: "200 OK", section: .wms,
-                                     processingValue: "Awaiting...", completedValue: "200 OK \u{2713}"))
-            lines.append(ConsoleLine(icon: "tray.and.arrow.down", label: "RECEIPT", value: "RCV-\(receiptNumber)", section: .wms,
-                                     processingValue: "Generating...", completedValue: "RCV-\(receiptNumber) \u{2713}"))
-            lines.append(ConsoleLine(icon: "printer", label: "PRINT", value: "Label sent to printer", section: .wms,
-                                     processingValue: "Spooling...", completedValue: "Label sent to printer \u{2713}"))
+        // WMS / Send section (only when endpoint is configured)
+        if hasEndpoint {
+            if isSizeAlert {
+                lines.append(ConsoleLine(icon: "xmark.circle", label: "STATUS", value: "REGISTRATION FAILED", section: .wms, isAlert: true,
+                                         processingValue: "Checking...", completedValue: "REGISTRATION FAILED"))
+                lines.append(ConsoleLine(icon: "exclamationmark.triangle", label: "REASON", value: "Size error detected", section: .wms, isAlert: true,
+                                         processingValue: "Evaluating...", completedValue: "Size error detected"))
+                lines.append(ConsoleLine(icon: "arrow.counterclockwise", label: "ACTION", value: "Re-measure required", section: .wms, isAlert: true,
+                                         processingValue: "Resolving...", completedValue: "Re-measure required"))
+            } else {
+                let host = URL(string: endpointURL)?.host ?? endpointURL
+                let path = URL(string: endpointURL)?.path ?? "/api"
+                let ctnDisplay = cartonId ?? "N/A"
+                lines.append(ConsoleLine(icon: "network", label: "CONNECT", value: "\(host)", section: .wms,
+                                         processingValue: "Connecting...", completedValue: "\(host) \u{2713}"))
+                lines.append(ConsoleLine(icon: "arrow.up.circle", label: "REQUEST", value: "POST \(path)", section: .wms,
+                                         processingValue: "Sending...", completedValue: "POST \(path) \u{2713}"))
+                lines.append(ConsoleLine(icon: "doc.text", label: "BODY", value: "{\"ctn\":\"\(ctnDisplay)\"}", section: .wms,
+                                         processingValue: "Encoding...", completedValue: "{\"ctn\":\"\(ctnDisplay)\"} \u{2713}"))
+                lines.append(ConsoleLine(icon: "checkmark.circle", label: "RESPONSE", value: "200 OK", section: .wms,
+                                         processingValue: "Awaiting...", completedValue: "200 OK \u{2713}"))
+                lines.append(ConsoleLine(icon: "tray.and.arrow.down", label: "RECEIPT", value: "RCV-\(receiptNumber)", section: .wms,
+                                         processingValue: "Generating...", completedValue: "RCV-\(receiptNumber) \u{2713}"))
+                lines.append(ConsoleLine(icon: "printer", label: "PRINT", value: "Label sent to printer", section: .wms,
+                                         processingValue: "Spooling...", completedValue: "Label sent to printer \u{2713}"))
+            }
         }
 
         // Dimensions section

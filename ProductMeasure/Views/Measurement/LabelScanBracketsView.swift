@@ -1,6 +1,6 @@
 //
 //  LabelScanBracketsView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

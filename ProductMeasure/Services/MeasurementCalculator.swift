@@ -1,6 +1,6 @@
 //
 //  MeasurementCalculator.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import ARKit

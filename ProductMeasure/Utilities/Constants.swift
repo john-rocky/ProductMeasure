@@ -1,6 +1,6 @@
 //
 //  Constants.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import Foundation
@@ -61,8 +61,12 @@ enum AppConstants {
 
     // MARK: - Pipeline Version
     static var currentPipelineVersion: PipelineVersion {
+        #if DEBUG
         let raw = UserDefaults.standard.string(forKey: "pipelineVersion") ?? PipelineVersion.standard.rawValue
         return PipelineVersion(rawValue: raw) ?? .standard
+        #else
+        return .standard
+        #endif
     }
 
     // MARK: - Vertical Plane Snap
@@ -125,9 +129,9 @@ enum AppMode: String, CaseIterable, Codable {
 
     var description: String {
         switch self {
-        case .warehouse: return "Full measurement workflow with label scanning and WMS registration."
+        case .warehouse: return "Full workflow: measure → label scan → WMS integration"
         case .shipping: return "Find the best-fit shipping box for a measured object."
-        case .measure: return "Measure objects and show dimensions in AR. No label scan or saving."
+        case .measure: return "Quick measurement with AR visualization. Tap to measure, results saved to history."
         case .labelOnly: return "Read labels only. No measurement or history."
         }
     }

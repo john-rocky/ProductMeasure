@@ -1,6 +1,6 @@
 //
 //  WorkflowStepIndicator.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

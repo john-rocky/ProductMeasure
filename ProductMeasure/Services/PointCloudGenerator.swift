@@ -1,6 +1,6 @@
 //
 //  PointCloudGenerator.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import ARKit

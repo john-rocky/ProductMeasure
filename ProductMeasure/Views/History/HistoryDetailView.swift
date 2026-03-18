@@ -1,6 +1,6 @@
 //
 //  HistoryDetailView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

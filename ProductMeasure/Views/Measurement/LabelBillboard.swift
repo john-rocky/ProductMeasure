@@ -1,6 +1,6 @@
 //
 //  LabelBillboard.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import RealityKit

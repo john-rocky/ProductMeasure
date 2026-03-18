@@ -1,6 +1,6 @@
 //
 //  BoxVisualization.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import RealityKit

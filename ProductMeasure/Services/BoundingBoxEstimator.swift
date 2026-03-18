@@ -1,6 +1,6 @@
 //
 //  BoundingBoxEstimator.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import simd

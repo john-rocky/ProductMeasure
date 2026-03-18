@@ -1,20 +1,20 @@
 //
 //  SettingsView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage("appMode") private var appMode: AppMode = .warehouse
+    @AppStorage("appMode") private var appMode: AppMode = .measure
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("roundingPrecision") private var roundingPrecision: RoundingPrecision = .millimeter1
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("showQualityIndicators") private var showQualityIndicators = true
-    @AppStorage("pipelineVersion") private var pipelineVersion: PipelineVersion = .standard
     @AppStorage("showScanningTips") private var showScanningTips = true
     @AppStorage("sendEndpointURL") private var sendEndpointURL = ""
     #if DEBUG
+    @AppStorage("pipelineVersion") private var pipelineVersion: PipelineVersion = .standard
     @AppStorage("showMaskPreview") private var showMaskPreview = false
     @AppStorage("showDiagnostics") private var showDiagnostics = false
     #endif
@@ -22,6 +22,10 @@ struct SettingsView: View {
     private var isValidEndpointURL: Bool {
         guard let url = URL(string: sendEndpointURL) else { return false }
         return url.scheme == "http" || url.scheme == "https"
+    }
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     }
 
     var body: some View {
@@ -83,23 +87,6 @@ struct SettingsView: View {
                         .foregroundColor(PMTheme.cyan)
                 }
 
-                // Pipeline version section
-                Section {
-                    Picker("Pipeline", selection: $pipelineVersion) {
-                        ForEach(PipelineVersion.allCases, id: \.self) { version in
-                            Text(version.displayName).tag(version)
-                        }
-                    }
-
-                    Text(pipelineVersion.description)
-                        .font(PMTheme.mono(11))
-                        .foregroundColor(PMTheme.textSecondary)
-                } header: {
-                    Text("PIPELINE VERSION")
-                        .font(PMTheme.mono(11, weight: .bold))
-                        .foregroundColor(PMTheme.cyan)
-                }
-
                 // Display section
                 Section {
                     Toggle("Show Quality Indicators", isOn: $showQualityIndicators)
@@ -107,41 +94,6 @@ struct SettingsView: View {
                     Text("DISPLAY")
                         .font(PMTheme.mono(11, weight: .bold))
                         .foregroundColor(PMTheme.cyan)
-                }
-
-                // Send endpoint section
-                Section {
-                    TextField("https://example.com/api/measurements", text: $sendEndpointURL)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(PMTheme.mono(13))
-
-                    if !sendEndpointURL.isEmpty {
-                        HStack(spacing: 6) {
-                            if isValidEndpointURL {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(PMTheme.green)
-                                Text("Valid URL")
-                                    .font(PMTheme.mono(11))
-                                    .foregroundColor(PMTheme.green)
-                            } else {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(PMTheme.red)
-                                Text("Invalid URL (requires http or https)")
-                                    .font(PMTheme.mono(11))
-                                    .foregroundColor(PMTheme.red)
-                            }
-                        }
-                    }
-                } header: {
-                    Text("SEND ENDPOINT")
-                        .font(PMTheme.mono(11, weight: .bold))
-                        .foregroundColor(PMTheme.cyan)
-                } footer: {
-                    Text("Measurement data will be sent as JSON via HTTP POST to this URL.")
-                        .font(PMTheme.mono(11))
-                        .foregroundColor(PMTheme.textDimmed)
                 }
 
                 // Scanning tips section
@@ -152,18 +104,6 @@ struct SettingsView: View {
                         .font(PMTheme.mono(11, weight: .bold))
                         .foregroundColor(PMTheme.cyan)
                 }
-
-                #if DEBUG
-                // Debug section
-                Section {
-                    Toggle("Show Mask Preview", isOn: $showMaskPreview)
-                    Toggle("Pipeline Diagnostics", isOn: $showDiagnostics)
-                } header: {
-                    Text("DEBUG")
-                        .font(PMTheme.mono(11, weight: .bold))
-                        .foregroundColor(PMTheme.cyan)
-                }
-                #endif
 
                 // Device info section
                 Section {
@@ -229,7 +169,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text("1.0.0")
+                        Text(appVersion)
                             .foregroundColor(PMTheme.textSecondary)
                     }
 
@@ -248,6 +188,85 @@ struct SettingsView: View {
                         .font(PMTheme.mono(11))
                         .foregroundColor(PMTheme.textDimmed)
                 }
+
+                // Advanced section
+                Section {
+                    DisclosureGroup {
+                        // Send endpoint
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("SEND ENDPOINT")
+                                .font(PMTheme.mono(10, weight: .bold))
+                                .foregroundColor(PMTheme.cyan.opacity(0.7))
+
+                            TextField("https://example.com/api/measurements", text: $sendEndpointURL)
+                                .keyboardType(.URL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .font(PMTheme.mono(13))
+
+                            if !sendEndpointURL.isEmpty {
+                                HStack(spacing: 6) {
+                                    if isValidEndpointURL {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(PMTheme.green)
+                                        Text("Valid URL")
+                                            .font(PMTheme.mono(11))
+                                            .foregroundColor(PMTheme.green)
+                                    } else {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(PMTheme.red)
+                                        Text("Invalid URL (requires http or https)")
+                                            .font(PMTheme.mono(11))
+                                            .foregroundColor(PMTheme.red)
+                                    }
+                                }
+                            }
+
+                            Text("Measurement data will be sent as JSON via HTTP POST to this URL.")
+                                .font(PMTheme.mono(11))
+                                .foregroundColor(PMTheme.textDimmed)
+                        }
+
+                        #if DEBUG
+                        // Pipeline version (Debug only)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("PIPELINE VERSION")
+                                .font(PMTheme.mono(10, weight: .bold))
+                                .foregroundColor(PMTheme.cyan.opacity(0.7))
+                                .padding(.top, 8)
+
+                            Picker("Pipeline", selection: $pipelineVersion) {
+                                ForEach(PipelineVersion.allCases, id: \.self) { version in
+                                    Text(version.displayName).tag(version)
+                                }
+                            }
+
+                            Text(pipelineVersion.description)
+                                .font(PMTheme.mono(11))
+                                .foregroundColor(PMTheme.textSecondary)
+                        }
+                        #endif
+                    } label: {
+                        Text("Advanced")
+                            .font(PMTheme.mono(13, weight: .medium))
+                    }
+                } header: {
+                    Text("ADVANCED")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
+                }
+
+                #if DEBUG
+                // Debug section
+                Section {
+                    Toggle("Show Mask Preview", isOn: $showMaskPreview)
+                    Toggle("Pipeline Diagnostics", isOn: $showDiagnostics)
+                } header: {
+                    Text("DEBUG")
+                        .font(PMTheme.mono(11, weight: .bold))
+                        .foregroundColor(PMTheme.cyan)
+                }
+                #endif
             }
             .scrollContentBackground(.hidden)
             .background(PMTheme.surfaceDark)

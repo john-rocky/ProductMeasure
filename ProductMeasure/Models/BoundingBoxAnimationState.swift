@@ -1,6 +1,6 @@
 //
 //  BoundingBoxAnimationState.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import Foundation

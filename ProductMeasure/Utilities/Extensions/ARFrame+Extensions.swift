@@ -1,6 +1,6 @@
 //
 //  ARFrame+Extensions.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import ARKit

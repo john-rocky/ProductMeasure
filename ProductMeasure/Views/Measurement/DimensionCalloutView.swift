@@ -1,6 +1,6 @@
 //
 //  DimensionCalloutView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

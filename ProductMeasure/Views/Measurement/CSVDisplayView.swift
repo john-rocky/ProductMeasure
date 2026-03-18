@@ -1,6 +1,6 @@
 //
 //  CSVDisplayView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

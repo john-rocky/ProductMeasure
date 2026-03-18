@@ -1,6 +1,6 @@
 //
 //  BoxAnimationCoordinator.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import Foundation

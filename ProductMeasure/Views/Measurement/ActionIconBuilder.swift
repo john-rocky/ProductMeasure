@@ -1,6 +1,6 @@
 //
 //  ActionIconBuilder.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import RealityKit

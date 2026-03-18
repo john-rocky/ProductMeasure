@@ -1,6 +1,6 @@
 //
 //  Measurement.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import Foundation

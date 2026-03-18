@@ -1,6 +1,6 @@
 //
 //  BarcodeScanEffectView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

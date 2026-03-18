@@ -1,6 +1,6 @@
 //
 //  CompletedBoxVisualization.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import RealityKit

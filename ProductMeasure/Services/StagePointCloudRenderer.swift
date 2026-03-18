@@ -1,6 +1,6 @@
 //
 //  StagePointCloudRenderer.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 #if DEBUG

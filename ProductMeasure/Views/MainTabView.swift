@@ -1,6 +1,6 @@
 //
 //  MainTabView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

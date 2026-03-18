@@ -1,6 +1,6 @@
 //
 //  LabelReaderService.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import Foundation

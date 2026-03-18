@@ -1,6 +1,6 @@
 //
 //  ARMeasurementViewModel.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI
@@ -2385,6 +2385,13 @@ class ARMeasurementViewModel: ObservableObject {
 
     func resetForNewMeasurement() {
         clearActiveBoxOnly()
+        workflowStep = .idle
+    }
+
+    func saveAndReset(mode: MeasurementMode, unit: MeasurementUnit) {
+        if currentMeasurement != nil {
+            saveMeasurement(mode: mode, unit: unit)
+        }
         workflowStep = .idle
     }
 

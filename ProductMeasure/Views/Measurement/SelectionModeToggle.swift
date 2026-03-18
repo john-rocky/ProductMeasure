@@ -1,6 +1,6 @@
 //
 //  SelectionModeToggle.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

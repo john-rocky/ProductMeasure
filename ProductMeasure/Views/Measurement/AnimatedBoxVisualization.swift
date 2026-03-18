@@ -1,6 +1,6 @@
 //
 //  AnimatedBoxVisualization.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import RealityKit

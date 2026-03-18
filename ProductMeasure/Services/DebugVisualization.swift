@@ -1,6 +1,6 @@
 //
 //  DebugVisualization.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 #if DEBUG

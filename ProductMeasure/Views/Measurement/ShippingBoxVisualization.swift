@@ -1,6 +1,6 @@
 //
 //  ShippingBoxVisualization.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import RealityKit

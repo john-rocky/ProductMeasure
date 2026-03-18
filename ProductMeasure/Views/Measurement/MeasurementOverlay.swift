@@ -1,6 +1,6 @@
 //
 //  MeasurementOverlay.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI

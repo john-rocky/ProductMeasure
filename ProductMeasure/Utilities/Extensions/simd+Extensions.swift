@@ -1,6 +1,6 @@
 //
 //  simd+Extensions.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import simd

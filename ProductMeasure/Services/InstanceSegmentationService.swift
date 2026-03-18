@@ -1,6 +1,6 @@
 //
 //  InstanceSegmentationService.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import Vision

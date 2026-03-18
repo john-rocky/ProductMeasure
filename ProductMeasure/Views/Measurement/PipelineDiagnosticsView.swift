@@ -1,6 +1,6 @@
 //
 //  PipelineDiagnosticsView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 #if DEBUG

@@ -1,6 +1,6 @@
 //
 //  LabelLiftAnimation.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import RealityKit

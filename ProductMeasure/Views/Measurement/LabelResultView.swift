@@ -1,6 +1,6 @@
 //
 //  LabelResultView.swift
-//  ProductMeasure
+//  SnapMeasure
 //
 
 import SwiftUI
