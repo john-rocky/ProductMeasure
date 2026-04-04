@@ -10,6 +10,8 @@ import SwiftUI
 struct StatusBar: View {
     let trackingMessage: String
     let isProcessing: Bool
+    var isTrackingReady: Bool = false
+    var isTrackingError: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -22,7 +24,7 @@ struct StatusBar: View {
             } else {
                 Image(systemName: trackingStatusIcon)
                     .foregroundColor(trackingStatusColor)
-                    .symbolEffect(.pulse, options: .repeating, value: trackingMessage == "Ready to measure")
+                    .symbolEffect(.pulse, options: .repeating, value: isTrackingReady)
                 Text(trackingMessage)
                     .font(PMTheme.mono(13))
                     .foregroundColor(PMTheme.textPrimary)
@@ -39,9 +41,9 @@ struct StatusBar: View {
     }
 
     private var trackingStatusIcon: String {
-        if trackingMessage == "Ready to measure" {
+        if isTrackingReady {
             return "checkmark.circle.fill"
-        } else if trackingMessage.contains("not") || trackingMessage.contains("Not") {
+        } else if isTrackingError {
             return "exclamationmark.triangle.fill"
         } else {
             return "arrow.triangle.2.circlepath"
@@ -49,9 +51,9 @@ struct StatusBar: View {
     }
 
     private var trackingStatusColor: Color {
-        if trackingMessage == "Ready to measure" {
+        if isTrackingReady {
             return PMTheme.green
-        } else if trackingMessage.contains("not") || trackingMessage.contains("Not") {
+        } else if isTrackingError {
             return PMTheme.red
         } else {
             return PMTheme.amber
@@ -92,6 +94,8 @@ struct InstructionCard: View {
     }
 
     var mode: Mode = .tap
+    var isTrackingReady: Bool = false
+    var isTrackingError: Bool = false
 
     private var isProcessing: Bool {
         if case .processing = mode { return true }
@@ -107,21 +111,21 @@ struct InstructionCard: View {
         case .label: return "doc.text.viewfinder"
         case .processing: return "circle.dotted"
         case .refinementFailed: return "exclamationmark.triangle.fill"
-        case .ready(let msg):
-            if msg == "Ready to measure" { return "checkmark.circle.fill" }
-            else if msg.contains("not") || msg.contains("Not") { return "exclamationmark.triangle.fill" }
+        case .ready:
+            if isTrackingReady { return "checkmark.circle.fill" }
+            else if isTrackingError { return "exclamationmark.triangle.fill" }
             else { return "arrow.triangle.2.circlepath" }
         }
     }
 
     private var title: String {
         switch mode {
-        case .tap: return "Tap on an object to measure"
-        case .box: return "Draw a box to select"
-        case .refine: return "Refine from a different angle"
-        case .secondTap: return "Tap again from a different angle"
-        case .label: return "Point at a label and tap"
-        case .processing: return "Processing..."
+        case .tap: return String(localized: "Tap on an object to measure")
+        case .box: return String(localized: "Draw a box to select")
+        case .refine: return String(localized: "Refine from a different angle")
+        case .secondTap: return String(localized: "Tap again from a different angle")
+        case .label: return String(localized: "Point at a label and tap")
+        case .processing: return String(localized: "Processing...")
         case .refinementFailed(let msg): return msg
         case .ready(let msg): return msg
         }
@@ -132,9 +136,9 @@ struct InstructionCard: View {
     private var accentColor: Color {
         if isLabelMode { return PMTheme.labelBlue }
         if case .refinementFailed = mode { return PMTheme.amber }
-        if case .ready(let msg) = mode {
-            if msg == "Ready to measure" { return PMTheme.green }
-            else if msg.contains("not") || msg.contains("Not") { return PMTheme.red }
+        if case .ready = mode {
+            if isTrackingReady { return PMTheme.green }
+            else if isTrackingError { return PMTheme.red }
             else { return PMTheme.amber }
         }
         return PMTheme.cyan
@@ -167,7 +171,7 @@ struct InstructionCard: View {
     }
 
     private var isReadyPulse: Bool {
-        if case .ready(let msg) = mode { return msg == "Ready to measure" }
+        if case .ready = mode { return isTrackingReady }
         return false
     }
 }

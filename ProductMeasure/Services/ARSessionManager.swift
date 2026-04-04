@@ -13,7 +13,9 @@ class ARSessionManager: NSObject, ObservableObject {
     // MARK: - Published Properties
 
     @Published var trackingState: ARCamera.TrackingState = .notAvailable
-    @Published var trackingStateMessage: String = "Initializing..."
+    @Published var trackingStateMessage: String = String(localized: "Initializing...")
+    @Published var isTrackingReady: Bool = false
+    @Published var isTrackingError: Bool = false
     @Published var isDepthAvailable: Bool = false
     var currentFrame: ARFrame?
 
@@ -49,7 +51,9 @@ class ARSessionManager: NSObject, ObservableObject {
 
     func startSession() {
         guard LiDARChecker.isARKitSupported else {
-            trackingStateMessage = "ARKit is not supported on this device"
+            trackingStateMessage = String(localized: "ARKit is not supported on this device")
+            isTrackingError = true
+            isTrackingReady = false
             return
         }
 
@@ -140,13 +144,13 @@ extension ARSessionManager: ARSessionDelegate {
 
     nonisolated func session(_ session: ARSession, didFailWithError error: Error) {
         Task { @MainActor in
-            self.trackingStateMessage = "Session failed: \(error.localizedDescription)"
+            self.trackingStateMessage = String(localized: "Session failed: \(error.localizedDescription)")
         }
     }
 
     nonisolated func sessionWasInterrupted(_ session: ARSession) {
         Task { @MainActor in
-            self.trackingStateMessage = "Session interrupted"
+            self.trackingStateMessage = String(localized: "Session interrupted")
         }
     }
 
@@ -166,22 +170,28 @@ private extension ARSessionManager {
 
         switch state {
         case .notAvailable:
-            trackingStateMessage = "Tracking not available"
+            trackingStateMessage = String(localized: "Tracking not available")
+            isTrackingReady = false
+            isTrackingError = true
         case .limited(let reason):
+            isTrackingReady = false
+            isTrackingError = false
             switch reason {
             case .initializing:
-                trackingStateMessage = "Initializing AR..."
+                trackingStateMessage = String(localized: "Initializing AR...")
             case .excessiveMotion:
-                trackingStateMessage = "Move device slower"
+                trackingStateMessage = String(localized: "Move device slower")
             case .insufficientFeatures:
-                trackingStateMessage = "Point at more textured surfaces"
+                trackingStateMessage = String(localized: "Point at more textured surfaces")
             case .relocalizing:
-                trackingStateMessage = "Relocalizing..."
+                trackingStateMessage = String(localized: "Relocalizing...")
             @unknown default:
-                trackingStateMessage = "Limited tracking"
+                trackingStateMessage = String(localized: "Limited tracking")
             }
         case .normal:
-            trackingStateMessage = "Ready to measure"
+            trackingStateMessage = String(localized: "Ready to measure")
+            isTrackingReady = true
+            isTrackingError = false
         }
     }
 }

@@ -120,19 +120,19 @@ enum AppMode: String, CaseIterable, Codable {
 
     var displayName: String {
         switch self {
-        case .warehouse: return "Warehouse"
-        case .shipping: return "Shipping"
-        case .measure: return "Measure"
-        case .labelOnly: return "Label"
+        case .warehouse: return String(localized: "Warehouse")
+        case .shipping: return String(localized: "Shipping")
+        case .measure: return String(localized: "Measure")
+        case .labelOnly: return String(localized: "Label")
         }
     }
 
     var description: String {
         switch self {
-        case .warehouse: return "Full workflow: measure → label scan → WMS integration"
-        case .shipping: return "Find the best-fit shipping box for a measured object."
-        case .measure: return "Quick measurement with AR visualization. Tap to measure, results saved to history."
-        case .labelOnly: return "Read labels only. No measurement or history."
+        case .warehouse: return String(localized: "Full workflow: measure → label scan → WMS integration")
+        case .shipping: return String(localized: "Find the best-fit shipping box for a measured object.")
+        case .measure: return String(localized: "Quick measurement with AR visualization. Tap to measure, results saved to history.")
+        case .labelOnly: return String(localized: "Read labels only. No measurement or history.")
         }
     }
 }
@@ -338,9 +338,9 @@ enum MeasurementUnit: String, CaseIterable, Codable {
 
     var displayName: String {
         switch self {
-        case .millimeters: return "Millimeters (mm)"
-        case .centimeters: return "Centimeters (cm)"
-        case .inches: return "Inches (in)"
+        case .millimeters: return String(localized: "Millimeters (mm)")
+        case .centimeters: return String(localized: "Centimeters (cm)")
+        case .inches: return String(localized: "Inches (in)")
         }
     }
 
@@ -423,15 +423,15 @@ enum MeasurementMode: String, CaseIterable, Codable {
 
     var displayName: String {
         switch self {
-        case .boxPriority: return "Box Priority"
-        case .freeObject: return "Free Object"
+        case .boxPriority: return String(localized: "Box Priority")
+        case .freeObject: return String(localized: "Free Object")
         }
     }
 
     var description: String {
         switch self {
-        case .boxPriority: return "Optimized for box-shaped objects on surfaces. Locks vertical axis."
-        case .freeObject: return "For irregularly shaped or tilted objects. Full 3D rotation."
+        case .boxPriority: return String(localized: "Optimized for box-shaped objects on surfaces. Locks vertical axis.")
+        case .freeObject: return String(localized: "For irregularly shaped or tilted objects. Full 3D rotation.")
         }
     }
 }
@@ -494,9 +494,9 @@ enum SelectionMode: String, CaseIterable, Codable {
 
     var displayName: String {
         switch self {
-        case .tap: return "Tap"
-        case .box: return "Box"
-        case .label: return "Label"
+        case .tap: return String(localized: "Tap")
+        case .box: return String(localized: "Box")
+        case .label: return String(localized: "Label")
         }
     }
 

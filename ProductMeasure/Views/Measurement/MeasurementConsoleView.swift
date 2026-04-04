@@ -51,38 +51,38 @@ struct MeasurementConsoleView: View {
         // WMS / Send section (only when endpoint is configured)
         if hasEndpoint {
             if isSizeAlert {
-                lines.append(ConsoleLine(icon: "xmark.circle", label: "STATUS", value: "REGISTRATION FAILED", section: .wms, isAlert: true,
-                                         processingValue: "Checking...", completedValue: "REGISTRATION FAILED"))
-                lines.append(ConsoleLine(icon: "exclamationmark.triangle", label: "REASON", value: "Size error detected", section: .wms, isAlert: true,
-                                         processingValue: "Evaluating...", completedValue: "Size error detected"))
-                lines.append(ConsoleLine(icon: "arrow.counterclockwise", label: "ACTION", value: "Re-measure required", section: .wms, isAlert: true,
-                                         processingValue: "Resolving...", completedValue: "Re-measure required"))
+                lines.append(ConsoleLine(icon: "xmark.circle", label: String(localized: "STATUS"), value: String(localized: "REGISTRATION FAILED"), section: .wms, isAlert: true,
+                                         processingValue: String(localized: "Checking..."), completedValue: String(localized: "REGISTRATION FAILED")))
+                lines.append(ConsoleLine(icon: "exclamationmark.triangle", label: String(localized: "REASON"), value: String(localized: "Size error detected"), section: .wms, isAlert: true,
+                                         processingValue: String(localized: "Evaluating..."), completedValue: String(localized: "Size error detected")))
+                lines.append(ConsoleLine(icon: "arrow.counterclockwise", label: String(localized: "ACTION"), value: String(localized: "Re-measure required"), section: .wms, isAlert: true,
+                                         processingValue: String(localized: "Resolving..."), completedValue: String(localized: "Re-measure required")))
             } else {
                 let host = URL(string: endpointURL)?.host ?? endpointURL
                 let path = URL(string: endpointURL)?.path ?? "/api"
                 let ctnDisplay = cartonId ?? "N/A"
-                lines.append(ConsoleLine(icon: "network", label: "CONNECT", value: "\(host)", section: .wms,
-                                         processingValue: "Connecting...", completedValue: "\(host) \u{2713}"))
-                lines.append(ConsoleLine(icon: "arrow.up.circle", label: "REQUEST", value: "POST \(path)", section: .wms,
-                                         processingValue: "Sending...", completedValue: "POST \(path) \u{2713}"))
-                lines.append(ConsoleLine(icon: "doc.text", label: "BODY", value: "{\"ctn\":\"\(ctnDisplay)\"}", section: .wms,
-                                         processingValue: "Encoding...", completedValue: "{\"ctn\":\"\(ctnDisplay)\"} \u{2713}"))
-                lines.append(ConsoleLine(icon: "checkmark.circle", label: "RESPONSE", value: "200 OK", section: .wms,
-                                         processingValue: "Awaiting...", completedValue: "200 OK \u{2713}"))
-                lines.append(ConsoleLine(icon: "tray.and.arrow.down", label: "RECEIPT", value: "RCV-\(receiptNumber)", section: .wms,
-                                         processingValue: "Generating...", completedValue: "RCV-\(receiptNumber) \u{2713}"))
-                lines.append(ConsoleLine(icon: "printer", label: "PRINT", value: "Label sent to printer", section: .wms,
-                                         processingValue: "Spooling...", completedValue: "Label sent to printer \u{2713}"))
+                lines.append(ConsoleLine(icon: "network", label: String(localized: "CONNECT"), value: "\(host)", section: .wms,
+                                         processingValue: String(localized: "Connecting..."), completedValue: "\(host) \u{2713}"))
+                lines.append(ConsoleLine(icon: "arrow.up.circle", label: String(localized: "REQUEST"), value: "POST \(path)", section: .wms,
+                                         processingValue: String(localized: "Sending..."), completedValue: "POST \(path) \u{2713}"))
+                lines.append(ConsoleLine(icon: "doc.text", label: String(localized: "BODY"), value: "{\"ctn\":\"\(ctnDisplay)\"}", section: .wms,
+                                         processingValue: String(localized: "Encoding..."), completedValue: "{\"ctn\":\"\(ctnDisplay)\"} \u{2713}"))
+                lines.append(ConsoleLine(icon: "checkmark.circle", label: String(localized: "RESPONSE"), value: "200 OK", section: .wms,
+                                         processingValue: String(localized: "Awaiting..."), completedValue: "200 OK \u{2713}"))
+                lines.append(ConsoleLine(icon: "tray.and.arrow.down", label: String(localized: "RECEIPT"), value: "RCV-\(receiptNumber)", section: .wms,
+                                         processingValue: String(localized: "Generating..."), completedValue: "RCV-\(receiptNumber) \u{2713}"))
+                lines.append(ConsoleLine(icon: "printer", label: String(localized: "PRINT"), value: String(localized: "Label sent to printer"), section: .wms,
+                                         processingValue: String(localized: "Spooling..."), completedValue: String(localized: "Label sent to printer \u{2713}")))
             }
         }
 
         // Dimensions section
-        lines.append(ConsoleLine(icon: "ruler", label: "WIDTH", value: width, section: .dimensions))
-        lines.append(ConsoleLine(icon: "ruler", label: "HEIGHT", value: height, section: .dimensions))
-        lines.append(ConsoleLine(icon: "ruler", label: "LENGTH", value: length, section: .dimensions))
-        lines.append(ConsoleLine(icon: "cube", label: "VOLUME", value: volume, section: .dimensions))
+        lines.append(ConsoleLine(icon: "ruler", label: String(localized: "WIDTH"), value: width, section: .dimensions))
+        lines.append(ConsoleLine(icon: "ruler", label: String(localized: "HEIGHT"), value: height, section: .dimensions))
+        lines.append(ConsoleLine(icon: "ruler", label: String(localized: "LENGTH"), value: length, section: .dimensions))
+        lines.append(ConsoleLine(icon: "cube", label: String(localized: "VOLUME"), value: volume, section: .dimensions))
         lines.append(ConsoleLine(icon: "shippingbox", label: "VOL.WT", value: volumetricWeight, section: .dimensions))
-        lines.append(ConsoleLine(icon: "rectangle.3.group", label: "SIZE", value: isSizeAlert ? "\(sizeClass) - OUT OF SPEC" : sizeClass, section: .dimensions, isAlert: isSizeAlert))
+        lines.append(ConsoleLine(icon: "rectangle.3.group", label: String(localized: "SIZE"), value: isSizeAlert ? "\(sizeClass) - \(String(localized: "OUT OF SPEC"))" : sizeClass, section: .dimensions, isAlert: isSizeAlert))
 
         // Label data section
         if let labelData = labelData {
@@ -92,8 +92,8 @@ struct MeasurementConsoleView: View {
         }
 
         // Quality section
-        lines.append(ConsoleLine(icon: "gauge.with.dots.needle.33percent", label: "QUALITY", value: qualityLabel, section: .quality))
-        lines.append(ConsoleLine(icon: "point.3.connected.trianglepath.dotted", label: "POINTS", value: "\(pointCount)", section: .quality))
+        lines.append(ConsoleLine(icon: "gauge.with.dots.needle.33percent", label: String(localized: "QUALITY"), value: qualityLabel, section: .quality))
+        lines.append(ConsoleLine(icon: "point.3.connected.trianglepath.dotted", label: String(localized: "POINTS"), value: "\(pointCount)", section: .quality))
 
         return lines
     }
@@ -395,10 +395,10 @@ enum ConsoleSection: Equatable {
 
     var title: String {
         switch self {
-        case .wms: return "WMS REGISTRATION"
-        case .dimensions: return "DIMENSIONS"
-        case .label: return "LABEL DATA"
-        case .quality: return "QUALITY"
+        case .wms: return String(localized: "WMS REGISTRATION")
+        case .dimensions: return String(localized: "DIMENSIONS")
+        case .label: return String(localized: "LABEL DATA")
+        case .quality: return String(localized: "QUALITY")
         }
     }
 }

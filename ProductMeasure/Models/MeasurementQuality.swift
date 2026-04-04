@@ -22,9 +22,9 @@ enum QualityLevel: String, Codable {
 
     var description: String {
         switch self {
-        case .high: return "High confidence measurement"
-        case .medium: return "Medium confidence - consider remeasuring"
-        case .low: return "Low confidence - remeasure recommended"
+        case .high: return String(localized: "High confidence measurement")
+        case .medium: return String(localized: "Medium confidence - consider remeasuring")
+        case .low: return String(localized: "Low confidence - remeasure recommended")
         }
     }
 }

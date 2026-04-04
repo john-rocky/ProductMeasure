@@ -21,7 +21,7 @@ struct BarcodeScanEffectView: View {
     @State private var textLineOpacities: [Double] = []
     @State private var barcodeHighlightOpacities: [Double] = []
     @State private var barcodePulseScale: CGFloat = 1.0
-    @State private var statusText: String = "SCANNING..."
+    @State private var statusText: String = String(localized: "SCANNING...")
     @State private var statusOpacity: Double = 0
     @State private var flashOpacity: Double = 0
     @State private var overallOpacity: Double = 1.0
@@ -265,8 +265,8 @@ struct BarcodeScanEffectView: View {
             let barcodeCount = labelData.barcodes?.count ?? 0
             withAnimation(.easeOut(duration: 0.1)) {
                 statusText = barcodeCount > 0
-                    ? "\(barcodeCount) BARCODE\(barcodeCount == 1 ? "" : "S") DETECTED"
-                    : "DETECTED"
+                    ? String(localized: "\(barcodeCount) BARCODE(S) DETECTED")
+                    : String(localized: "DETECTED")
             }
 
             // Flash barcode highlights bright

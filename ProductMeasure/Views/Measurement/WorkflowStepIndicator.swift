@@ -20,22 +20,22 @@ struct WorkflowStepIndicator: View {
         switch appMode {
         case .warehouse:
             return [
-                StepInfo(icon: "hand.tap", label: "Measure"),
-                StepInfo(icon: "arrow.triangle.2.circlepath", label: "Refine"),
-                StepInfo(icon: "doc.text.viewfinder", label: "Label"),
-                StepInfo(icon: "checkmark.rectangle", label: "Review"),
-                StepInfo(icon: "doc.text", label: "Export"),
+                StepInfo(icon: "hand.tap", label: String(localized: "Measure")),
+                StepInfo(icon: "arrow.triangle.2.circlepath", label: String(localized: "Refine")),
+                StepInfo(icon: "doc.text.viewfinder", label: String(localized: "Label")),
+                StepInfo(icon: "checkmark.rectangle", label: String(localized: "Review")),
+                StepInfo(icon: "doc.text", label: String(localized: "Export")),
             ]
         case .shipping, .measure:
             return [
-                StepInfo(icon: "hand.tap", label: "Measure"),
-                StepInfo(icon: "arrow.triangle.2.circlepath", label: "Refine"),
-                StepInfo(icon: "checkmark.rectangle", label: "Result"),
+                StepInfo(icon: "hand.tap", label: String(localized: "Measure")),
+                StepInfo(icon: "arrow.triangle.2.circlepath", label: String(localized: "Refine")),
+                StepInfo(icon: "checkmark.rectangle", label: String(localized: "Result")),
             ]
         case .labelOnly:
             return [
-                StepInfo(icon: "doc.text.viewfinder", label: "Scan"),
-                StepInfo(icon: "checkmark.rectangle", label: "Result"),
+                StepInfo(icon: "doc.text.viewfinder", label: String(localized: "Scan")),
+                StepInfo(icon: "checkmark.rectangle", label: String(localized: "Result")),
             ]
         }
     }

@@ -234,7 +234,7 @@ struct ARMeasurementView: View {
                                         }
                                     }
                                 default:
-                                    InstructionCard(mode: .ready(viewModel.trackingMessage))
+                                    InstructionCard(mode: .ready(viewModel.trackingMessage), isTrackingReady: viewModel.isTrackingReady, isTrackingError: viewModel.isTrackingError)
                                 }
                             } else {
                                 if activeSelectionMode == .tap && viewModel.hasPendingFirstTap {

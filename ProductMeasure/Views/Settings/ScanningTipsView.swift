@@ -21,34 +21,34 @@ struct ScanningTipsView: View {
                         VStack(spacing: 12) {
                             TipRow(
                                 icon: "iphone.radiowaves.left.and.right",
-                                title: String(localized: "tip.general.angle.title"),
-                                description: String(localized: "tip.general.angle.desc")
+                                title: "tip.general.angle.title",
+                                description: "tip.general.angle.desc"
                             )
                             TipRow(
                                 icon: "ruler",
-                                title: String(localized: "tip.general.distance.title"),
-                                description: String(localized: "tip.general.distance.desc")
+                                title: "tip.general.distance.title",
+                                description: "tip.general.distance.desc"
                             )
                             TipRow(
                                 icon: "hand.raised",
-                                title: String(localized: "tip.general.steady.title"),
-                                description: String(localized: "tip.general.steady.desc")
+                                title: "tip.general.steady.title",
+                                description: "tip.general.steady.desc"
                             )
                             TipRow(
                                 icon: "arrow.up.to.line",
-                                title: String(localized: "tip.general.face.title"),
-                                description: String(localized: "tip.general.face.desc")
+                                title: "tip.general.face.title",
+                                description: "tip.general.face.desc"
                             )
                             TipRow(
                                 icon: "exclamationmark.triangle",
-                                title: String(localized: "tip.general.steep.title"),
-                                description: String(localized: "tip.general.steep.desc")
+                                title: "tip.general.steep.title",
+                                description: "tip.general.steep.desc"
                             )
                         }
                         .padding(.top, 8)
                     } label: {
                         Label {
-                            Text(String(localized: "tip.section.general"))
+                            Text("tip.section.general")
                                 .font(PMTheme.mono(13, weight: .bold))
                         } icon: {
                             Image(systemName: "lightbulb.fill")
@@ -65,34 +65,34 @@ struct ScanningTipsView: View {
                         VStack(spacing: 12) {
                             TipRow(
                                 icon: "1.circle",
-                                title: String(localized: "tip.twotap.first.title"),
-                                description: String(localized: "tip.twotap.first.desc")
+                                title: "tip.twotap.first.title",
+                                description: "tip.twotap.first.desc"
                             )
                             TipRow(
                                 icon: "2.circle",
-                                title: String(localized: "tip.twotap.second.title"),
-                                description: String(localized: "tip.twotap.second.desc")
+                                title: "tip.twotap.second.title",
+                                description: "tip.twotap.second.desc"
                             )
                             TipRow(
                                 icon: "angle",
-                                title: String(localized: "tip.twotap.sameangle.title"),
-                                description: String(localized: "tip.twotap.sameangle.desc")
+                                title: "tip.twotap.sameangle.title",
+                                description: "tip.twotap.sameangle.desc"
                             )
                             TipRow(
                                 icon: "arrow.left.and.right",
-                                title: String(localized: "tip.twotap.samedist.title"),
-                                description: String(localized: "tip.twotap.samedist.desc")
+                                title: "tip.twotap.samedist.title",
+                                description: "tip.twotap.samedist.desc"
                             )
                             TipRow(
                                 icon: "square.on.square",
-                                title: String(localized: "tip.twotap.overlap.title"),
-                                description: String(localized: "tip.twotap.overlap.desc")
+                                title: "tip.twotap.overlap.title",
+                                description: "tip.twotap.overlap.desc"
                             )
                         }
                         .padding(.top, 8)
                     } label: {
                         Label {
-                            Text(String(localized: "tip.section.twotap"))
+                            Text("tip.section.twotap")
                                 .font(PMTheme.mono(13, weight: .bold))
                         } icon: {
                             Image(systemName: "arrow.triangle.2.circlepath")
@@ -109,39 +109,39 @@ struct ScanningTipsView: View {
                         VStack(spacing: 12) {
                             TipRow(
                                 icon: "arrow.2.squarepath",
-                                title: String(localized: "tip.avoid.sameangle.title"),
-                                description: String(localized: "tip.avoid.sameangle.desc")
+                                title: "tip.avoid.sameangle.title",
+                                description: "tip.avoid.sameangle.desc"
                             )
                             TipRow(
                                 icon: "arrow.left.arrow.right",
-                                title: String(localized: "tip.avoid.opposite.title"),
-                                description: String(localized: "tip.avoid.opposite.desc")
+                                title: "tip.avoid.opposite.title",
+                                description: "tip.avoid.opposite.desc"
                             )
                             TipRow(
                                 icon: "arrow.down.to.line",
-                                title: String(localized: "tip.avoid.above.title"),
-                                description: String(localized: "tip.avoid.above.desc")
+                                title: "tip.avoid.above.title",
+                                description: "tip.avoid.above.desc"
                             )
                             TipRow(
                                 icon: "figure.walk",
-                                title: String(localized: "tip.avoid.moving.title"),
-                                description: String(localized: "tip.avoid.moving.desc")
+                                title: "tip.avoid.moving.title",
+                                description: "tip.avoid.moving.desc"
                             )
                             TipRow(
                                 icon: "eye.slash",
-                                title: String(localized: "tip.avoid.surface.title"),
-                                description: String(localized: "tip.avoid.surface.desc")
+                                title: "tip.avoid.surface.title",
+                                description: "tip.avoid.surface.desc"
                             )
                             TipRow(
                                 icon: "scope",
-                                title: String(localized: "tip.avoid.distance.title"),
-                                description: String(localized: "tip.avoid.distance.desc")
+                                title: "tip.avoid.distance.title",
+                                description: "tip.avoid.distance.desc"
                             )
                         }
                         .padding(.top, 8)
                     } label: {
                         Label {
-                            Text(String(localized: "tip.section.avoid"))
+                            Text("tip.section.avoid")
                                 .font(PMTheme.mono(13, weight: .bold))
                         } icon: {
                             Image(systemName: "xmark.shield")
@@ -156,7 +156,7 @@ struct ScanningTipsView: View {
                 .padding()
             }
             .background(PMTheme.surfaceDark)
-            .navigationTitle(String(localized: "tip.nav.title"))
+            .navigationTitle("tip.nav.title")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

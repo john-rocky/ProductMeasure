@@ -119,7 +119,7 @@ class ShippingBoxVisualization {
         if let rec = recommendation {
             headerText = rec.shippingBox.displayName
         } else {
-            headerText = "No suitable box"
+            headerText = String(localized: "No suitable box")
         }
         let headerMesh = MeshResource.generateText(
             headerText,

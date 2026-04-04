@@ -89,10 +89,10 @@ class BoxSelectionRectView: UIView {
 
     private func updateStatusLabel() {
         if isRectValid {
-            statusLabel.text = "Release to select"
+            statusLabel.text = String(localized: "Release to select")
             statusLabel.backgroundColor = greenColor.withAlphaComponent(0.8)
         } else {
-            statusLabel.text = "Make it bigger"
+            statusLabel.text = String(localized: "Make it bigger")
             statusLabel.backgroundColor = amberColor.withAlphaComponent(0.8)
         }
     }

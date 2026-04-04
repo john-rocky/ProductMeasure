@@ -140,7 +140,7 @@ struct HistoryDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func dimensionCard(label: String, value: Float) -> some View {
+    private func dimensionCard(label: LocalizedStringKey, value: Float) -> some View {
         VStack(spacing: 4) {
             Text(label)
                 .font(PMTheme.mono(11))
@@ -206,7 +206,7 @@ struct HistoryDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func qualityRow(label: String, value: String, isFirst: Bool = false, isLast: Bool = false) -> some View {
+    private func qualityRow(label: LocalizedStringKey, value: String, isFirst: Bool = false, isLast: Bool = false) -> some View {
         VStack(spacing: 0) {
             if !isFirst {
                 Divider()
@@ -267,7 +267,7 @@ struct HistoryDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func metadataRow(label: String, value: String, isFirst: Bool = false, isLast: Bool = false) -> some View {
+    private func metadataRow(label: LocalizedStringKey, value: String, isFirst: Bool = false, isLast: Bool = false) -> some View {
         VStack(spacing: 0) {
             if !isFirst {
                 Divider()
@@ -290,7 +290,7 @@ struct HistoryDetailView: View {
     // MARK: - Helpers
 
     @ViewBuilder
-    private func sectionHeader(_ title: String) -> some View {
+    private func sectionHeader(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(PMTheme.mono(11, weight: .bold))
             .foregroundColor(PMTheme.cyan)
@@ -314,9 +314,9 @@ struct HistoryDetailView: View {
         Task {
             do {
                 let status = try await MeasurementSendService().sendRawJSON(jsonData)
-                sendAlertMessage = "Sent successfully (HTTP \(status))."
+                sendAlertMessage = String(localized: "Sent successfully (HTTP \(status)).")
             } catch {
-                sendAlertMessage = "Send failed: \(error.localizedDescription)"
+                sendAlertMessage = String(localized: "Send failed: \(error.localizedDescription)")
             }
             isSending = false
             showingSendAlert = true
@@ -382,11 +382,9 @@ struct ShareSheet: View {
     }
 
     private var shareText: String {
-        """
-        Measurement:
-        \(measurement.formattedDimensions(unit: unit, precision: .millimeter1))
-        Volume: \(measurement.formattedVolume(unit: unit))
-        """
+        let dims = measurement.formattedDimensions(unit: unit, precision: .millimeter1)
+        let vol = measurement.formattedVolume(unit: unit)
+        return String(localized: "Measurement:\n\(dims)\nVolume: \(vol)")
     }
 
     private func shareContent() {

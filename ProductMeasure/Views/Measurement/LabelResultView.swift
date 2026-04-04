@@ -12,7 +12,7 @@ struct LabelResultView: View {
     let isComplete: Bool
     let onDismiss: () -> Void
     var onRescan: (() -> Void)?
-    var dismissButtonLabel: String = "DONE"
+    var dismissButtonLabel: String = String(localized: "DONE")
 
     @State private var scanlineOffset: CGFloat = 0
     @State private var cursorVisible = true

@@ -125,9 +125,9 @@ struct HistoryListView: View {
         Task {
             do {
                 let status = try await MeasurementSendService().sendRawJSON(jsonData)
-                sendAllAlertMessage = "Sent \(snapshot.count) measurement(s) successfully (HTTP \(status))."
+                sendAllAlertMessage = String(localized: "Sent \(snapshot.count) measurement(s) successfully (HTTP \(status)).")
             } catch {
-                sendAllAlertMessage = "Send failed: \(error.localizedDescription)"
+                sendAllAlertMessage = String(localized: "Send failed: \(error.localizedDescription)")
             }
             isSendingAll = false
             showingSendAllAlert = true

@@ -12,7 +12,9 @@ import UIKit
 
 @MainActor
 class ARMeasurementViewModel: ObservableObject {
-    @Published var trackingMessage = "Initializing..."
+    @Published var trackingMessage = String(localized: "Initializing...")
+    @Published var isTrackingReady = false
+    @Published var isTrackingError = false
     @Published var isProcessing = false
     @Published var currentMeasurement: MeasurementCalculator.MeasurementResult?
     @Published var isEditing = false
@@ -193,6 +195,10 @@ class ARMeasurementViewModel: ObservableObject {
     init() {
         sessionManager.$trackingStateMessage
             .assign(to: &$trackingMessage)
+        sessionManager.$isTrackingReady
+            .assign(to: &$isTrackingReady)
+        sessionManager.$isTrackingError
+            .assign(to: &$isTrackingError)
 
         // Setup frame update callback for billboard updates
         sessionManager.onFrameUpdate = { [weak self] frame in
@@ -914,7 +920,7 @@ class ARMeasurementViewModel: ObservableObject {
         isProcessing = false
         UINotificationFeedbackGenerator().notificationOccurred(.warning)
         let remaining = AppConstants.maxSecondTapAttempts - secondTapAttemptCount
-        secondTapFailureMessage = "Refinement failed — tap again (\(remaining) left)"
+        secondTapFailureMessage = String(localized: "Refinement failed — tap again (\(remaining) left)")
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             if self.secondTapFailureMessage != nil {

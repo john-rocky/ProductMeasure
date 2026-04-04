@@ -161,7 +161,7 @@ struct MeasurementOverlay: View {
         }
     }
 
-    private func dimensionItem(label: String, value: Float) -> some View {
+    private func dimensionItem(label: LocalizedStringKey, value: Float) -> some View {
         VStack(spacing: 4) {
             Text(label)
                 .font(.caption)
