@@ -6,7 +6,6 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage("appMode") private var appMode: AppMode = .measure
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("roundingPrecision") private var roundingPrecision: RoundingPrecision = .millimeter1
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
@@ -31,23 +30,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // App mode section
-                Section {
-                    Picker("App Mode", selection: $appMode) {
-                        ForEach(AppMode.allCases, id: \.self) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-
-                    Text(appMode.description)
-                        .font(PMTheme.mono(11))
-                        .foregroundColor(PMTheme.textSecondary)
-                } header: {
-                    Text("APP MODE")
-                        .font(PMTheme.mono(11, weight: .bold))
-                        .foregroundColor(PMTheme.cyan)
-                }
-
                 // Units section
                 Section {
                     Picker("Display Unit", selection: $measurementUnit) {

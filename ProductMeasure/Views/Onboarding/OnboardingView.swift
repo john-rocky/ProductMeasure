@@ -6,9 +6,16 @@
 import SwiftUI
 
 struct OnboardingView: View {
-    @AppStorage("appMode") private var appMode: AppMode = .measure
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @Environment(\.dismiss) private var dismiss
+
+    @State private var currentPage = 0
+
+    private let steps: [(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey)] = [
+        ("hand.tap.fill", "Tap to Measure", "Point at any object and tap to instantly measure its dimensions with LiDAR."),
+        ("doc.text.viewfinder", "Scan Labels", "Read barcodes and shipping labels — attach label data to measurements."),
+        ("square.and.arrow.up", "Save & Export", "Review your measurements, add notes, and export as CSV or JSON."),
+    ]
 
     var body: some View {
         ZStack {
@@ -35,30 +42,45 @@ struct OnboardingView: View {
 
                 Spacer()
 
-                // Mode selection cards
-                VStack(spacing: 12) {
-                    Text("Choose your mode")
-                        .font(PMTheme.mono(13, weight: .bold))
-                        .foregroundColor(PMTheme.cyan)
+                // Tutorial step
+                VStack(spacing: 16) {
+                    Image(systemName: steps[currentPage].icon)
+                        .font(.system(size: 44))
+                        .foregroundColor(PMTheme.green)
 
-                    ForEach(AppMode.allCases, id: \.self) { mode in
-                        ModeCard(
-                            mode: mode,
-                            isSelected: appMode == mode,
-                            onSelect: { appMode = mode }
-                        )
+                    Text(steps[currentPage].title)
+                        .font(PMTheme.mono(18, weight: .bold))
+                        .foregroundColor(.white)
+
+                    Text(steps[currentPage].subtitle)
+                        .font(PMTheme.mono(13))
+                        .foregroundColor(PMTheme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                }
+                .padding(.horizontal, 32)
+
+                // Page dots
+                HStack(spacing: 8) {
+                    ForEach(0..<steps.count, id: \.self) { index in
+                        Circle()
+                            .fill(index == currentPage ? PMTheme.green : PMTheme.textDimmed)
+                            .frame(width: 8, height: 8)
                     }
                 }
-                .padding(.horizontal, 24)
 
                 Spacer()
 
-                // Start button
+                // Button
                 Button(action: {
-                    hasCompletedOnboarding = true
-                    dismiss()
+                    if currentPage < steps.count - 1 {
+                        withAnimation { currentPage += 1 }
+                    } else {
+                        hasCompletedOnboarding = true
+                        dismiss()
+                    }
                 }) {
-                    Text("Get Started")
+                    Text(currentPage < steps.count - 1 ? "Next" : "Get Started")
                         .font(PMTheme.mono(16, weight: .bold))
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
@@ -69,59 +91,6 @@ struct OnboardingView: View {
                 .padding(.horizontal, 32)
                 .padding(.bottom, 32)
             }
-        }
-    }
-}
-
-// MARK: - Mode Card
-
-private struct ModeCard: View {
-    let mode: AppMode
-    let isSelected: Bool
-    let onSelect: () -> Void
-
-    private var icon: String {
-        switch mode {
-        case .warehouse: return "shippingbox"
-        case .shipping: return "shippingbox.and.arrow.backward"
-        case .measure: return "ruler"
-        case .labelOnly: return "doc.text.viewfinder"
-        }
-    }
-
-    var body: some View {
-        Button(action: onSelect) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .foregroundColor(isSelected ? PMTheme.green : PMTheme.cyan)
-                    .frame(width: 32)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(mode.displayName)
-                        .font(PMTheme.mono(14, weight: .bold))
-                        .foregroundColor(.white)
-
-                    Text(mode.description)
-                        .font(PMTheme.mono(11))
-                        .foregroundColor(PMTheme.textSecondary)
-                        .lineLimit(2)
-                }
-
-                Spacer()
-
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(PMTheme.green)
-                }
-            }
-            .padding(14)
-            .background(isSelected ? PMTheme.green.opacity(0.1) : PMTheme.surfaceElevated)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(isSelected ? PMTheme.green.opacity(0.5) : Color.clear, lineWidth: 1)
-            )
         }
     }
 }

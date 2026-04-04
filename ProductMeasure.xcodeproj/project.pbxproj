@@ -57,14 +57,8 @@
 		001000122 /* LabelBillboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000123 /* LabelBillboard.swift */; };
 		001000110 /* LabelResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000111 /* LabelResultView.swift */; };
 		001000112 /* LabelScanBracketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000113 /* LabelScanBracketsView.swift */; };
-		001000114 /* WorkflowStepIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000115 /* WorkflowStepIndicator.swift */; };
-		001000116 /* MeasurementConsoleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000117 /* MeasurementConsoleView.swift */; };
-		001000118 /* CSVDisplayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000119 /* CSVDisplayView.swift */; };
 		001000120 /* BarcodeScanEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000121 /* BarcodeScanEffectView.swift */; };
 		001000124 /* StatusVignetteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000125 /* StatusVignetteView.swift */; };
-		001000128 /* ShippingBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000129 /* ShippingBox.swift */; };
-		001000130 /* ShippingBoxSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000131 /* ShippingBoxSelector.swift */; };
-		001000132 /* ShippingBoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000133 /* ShippingBoxVisualization.swift */; };
 		001000134 /* ScanningTipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000135 /* ScanningTipsView.swift */; };
 		001000136 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 001000137 /* Localizable.xcstrings */; };
 		001000143 /* PipelineDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000142 /* PipelineDiagnostics.swift */; };
@@ -126,14 +120,8 @@
 		001000123 /* LabelBillboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelBillboard.swift; sourceTree = "<group>"; };
 		001000111 /* LabelResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelResultView.swift; sourceTree = "<group>"; };
 		001000113 /* LabelScanBracketsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelScanBracketsView.swift; sourceTree = "<group>"; };
-		001000115 /* WorkflowStepIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowStepIndicator.swift; sourceTree = "<group>"; };
-		001000117 /* MeasurementConsoleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementConsoleView.swift; sourceTree = "<group>"; };
-		001000119 /* CSVDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVDisplayView.swift; sourceTree = "<group>"; };
 		001000121 /* BarcodeScanEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScanEffectView.swift; sourceTree = "<group>"; };
 		001000125 /* StatusVignetteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusVignetteView.swift; sourceTree = "<group>"; };
-		001000129 /* ShippingBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShippingBox.swift; sourceTree = "<group>"; };
-		001000131 /* ShippingBoxSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShippingBoxSelector.swift; sourceTree = "<group>"; };
-		001000133 /* ShippingBoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShippingBoxVisualization.swift; sourceTree = "<group>"; };
 		001000135 /* ScanningTipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanningTipsView.swift; sourceTree = "<group>"; };
 		001000137 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		001000142 /* PipelineDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineDiagnostics.swift; sourceTree = "<group>"; };
@@ -195,7 +183,6 @@
 				001000081 /* HandleType.swift */,
 				001000085 /* BoundingBoxAnimationState.swift */,
 				001000105 /* LabelData.swift */,
-				001000129 /* ShippingBox.swift */,
 				001000142 /* PipelineDiagnostics.swift */,
 				001000147 /* PipelinePointCloudCapture.swift */,
 			);
@@ -236,7 +223,6 @@
 				001000091 /* BoxAnimationCoordinator.swift */,
 				001000107 /* LabelReaderService.swift */,
 				001000127 /* ShareActivityItemSource.swift */,
-				001000131 /* ShippingBoxSelector.swift */,
 				001000149 /* StagePointCloudRenderer.swift */,
 			);
 			path = Services;
@@ -283,12 +269,8 @@
 				001000123 /* LabelBillboard.swift */,
 				001000111 /* LabelResultView.swift */,
 				001000113 /* LabelScanBracketsView.swift */,
-				001000115 /* WorkflowStepIndicator.swift */,
-				001000117 /* MeasurementConsoleView.swift */,
-				001000119 /* CSVDisplayView.swift */,
 				001000121 /* BarcodeScanEffectView.swift */,
 				001000125 /* StatusVignetteView.swift */,
-				001000133 /* ShippingBoxVisualization.swift */,
 				001000144 /* PipelineDiagnosticsView.swift */,
 			);
 			path = Measurement;
@@ -440,14 +422,8 @@
 				001000122 /* LabelBillboard.swift in Sources */,
 				001000110 /* LabelResultView.swift in Sources */,
 				001000112 /* LabelScanBracketsView.swift in Sources */,
-				001000114 /* WorkflowStepIndicator.swift in Sources */,
-				001000116 /* MeasurementConsoleView.swift in Sources */,
-				001000118 /* CSVDisplayView.swift in Sources */,
 				001000120 /* BarcodeScanEffectView.swift in Sources */,
 				001000124 /* StatusVignetteView.swift in Sources */,
-				001000128 /* ShippingBox.swift in Sources */,
-				001000130 /* ShippingBoxSelector.swift in Sources */,
-				001000132 /* ShippingBoxVisualization.swift in Sources */,
 				001000134 /* ScanningTipsView.swift in Sources */,
 				001000143 /* PipelineDiagnostics.swift in Sources */,
 				001000145 /* PipelineDiagnosticsView.swift in Sources */,

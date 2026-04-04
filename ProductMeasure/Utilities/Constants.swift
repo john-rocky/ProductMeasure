@@ -112,30 +112,6 @@ enum AppConstants {
     static let labelAreaWeight: Float = 0.5
 }
 
-enum AppMode: String, CaseIterable, Codable {
-    case warehouse = "warehouse"
-    case shipping = "shipping"
-    case measure = "measure"
-    case labelOnly = "labelOnly"
-
-    var displayName: String {
-        switch self {
-        case .warehouse: return String(localized: "Warehouse")
-        case .shipping: return String(localized: "Shipping")
-        case .measure: return String(localized: "Measure")
-        case .labelOnly: return String(localized: "Label")
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .warehouse: return String(localized: "Full workflow: measure → label scan → WMS integration")
-        case .shipping: return String(localized: "Find the best-fit shipping box for a measured object.")
-        case .measure: return String(localized: "Quick measurement with AR visualization. Tap to measure, results saved to history.")
-        case .labelOnly: return String(localized: "Read labels only. No measurement or history.")
-        }
-    }
-}
 
 enum PipelineVersion: String, CaseIterable, Codable {
     case originalWarehouse = "originalWarehouse"  // 64c52d0^ (Feb 6-15)
@@ -463,11 +439,7 @@ enum SizeClass: String, CaseIterable {
 enum WorkflowStep: Equatable {
     case idle
     case awaitingSecondTap
-    case awaitingLabelScan      // after box measurement (warehouse)
-    case showingLabelResult
     case showingResult
-    case showingConsole
-    case showingCSV
 }
 
 enum ReticleTargetState: Int {
@@ -490,13 +462,11 @@ enum StabilityLevel: Int, Comparable {
 enum SelectionMode: String, CaseIterable, Codable {
     case tap = "tap"
     case box = "box"
-    case label = "label"
 
     var displayName: String {
         switch self {
         case .tap: return String(localized: "Tap")
         case .box: return String(localized: "Box")
-        case .label: return String(localized: "Label")
         }
     }
 
@@ -504,24 +474,11 @@ enum SelectionMode: String, CaseIterable, Codable {
         switch self {
         case .tap: return "hand.tap"
         case .box: return "rectangle.dashed"
-        case .label: return "doc.text.viewfinder"
         }
     }
 }
 
 // MARK: - AppStorage Conformances
-
-extension AppMode: RawRepresentable {
-    public init?(rawValue: String) {
-        switch rawValue {
-        case "warehouse": self = .warehouse
-        case "shipping": self = .shipping
-        case "measure": self = .measure
-        case "labelOnly": self = .labelOnly
-        default: return nil
-        }
-    }
-}
 
 extension MeasurementUnit: RawRepresentable {
     public init?(rawValue: String) {

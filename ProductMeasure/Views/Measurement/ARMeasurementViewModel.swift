@@ -20,9 +20,6 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var isEditing = false
     @Published var isDragging = false
 
-    // App mode (synced from view's @AppStorage)
-    var appMode: AppMode = .warehouse
-
     // Debug visualization
     #if DEBUG
     @Published var showDebugMask = false
@@ -124,24 +121,10 @@ class ARMeasurementViewModel: ObservableObject {
 
     // Guided workflow state
     @Published var workflowStep: WorkflowStep = .idle
-    @Published var showConsole = false
-    @Published var showCSVDisplay = false
-    @Published var consoleLineRevealed: [Bool] = []
-    @Published var consoleReadingComplete = false
-    @Published var wmsLineStatus: [WMSLineStatus] = []
-    @Published var csvString: String = ""
-    private let exportService = ExportService()
 
-    /// Derives selection mode from workflow step when workflow is active
+    /// Returns the user's selection mode (.tap or .box)
     var effectiveSelectionMode: SelectionMode {
-        // Label-only mode always uses label selection
-        if appMode == .labelOnly { return .label }
-        switch workflowStep {
-        case .awaitingLabelScan, .showingLabelResult:
-            return .label
-        default:
-            return .tap
-        }
+        return .tap
     }
 
     var isWorkflowActive: Bool {
@@ -186,11 +169,6 @@ class ARMeasurementViewModel: ObservableObject {
 
     // Published count for UI
     @Published var completedBoxCount: Int = 0
-
-    // Shipping box recommendation
-    @Published var shippingRecommendation: ShippingBoxRecommendation?
-    private var shippingBoxVisualization: ShippingBoxVisualization?
-    private var shippingBoxAnchor: AnchorEntity?
 
     init() {
         sessionManager.$trackingStateMessage
@@ -265,17 +243,13 @@ class ARMeasurementViewModel: ObservableObject {
         if let boxViz = boxVisualization {
             let inCalloutPhase = animationPhase == .dimensionCallout || animationPhase == .calloutTransition
             let unifiedLabelActive = showLabelBillboard && (labelBillboard?.isUnified == true)
-            let shippingBillboardActive = appMode == .shipping && shippingBoxVisualization != nil
-            if shippingBillboardActive || unifiedLabelActive {
+            if unifiedLabelActive {
                 boxViz.setDimensionBillboardVisible(false)
             } else if !inCalloutPhase {
                 boxViz.setDimensionBillboardVisible(true, forceShow: true)
             }
             boxViz.updateLabelOrientations(cameraPosition: cameraPosition)
         }
-
-        // Shipping box billboard orientation tracking
-        shippingBoxVisualization?.updateBillboardOrientation(cameraPosition: cameraPosition)
 
         // Label billboard orientation tracking
         if showLabelBillboard {
@@ -570,15 +544,6 @@ class ARMeasurementViewModel: ObservableObject {
         print("[ViewModel] isProcessing: \(isProcessing), trackingState: \(sessionManager.trackingState)")
         #endif
 
-        // Safety: if workflow expects label scan or label-only mode, redirect
-        if workflowStep == .awaitingLabelScan || workflowStep == .showingLabelResult || appMode == .labelOnly {
-            #if DEBUG
-            print("[ViewModel] Redirecting to handleLabelTap (workflow expects label scan)")
-            #endif
-            await handleLabelTap(at: location)
-            return
-        }
-
         guard !isProcessing else {
             #if DEBUG
             print("[ViewModel] Already processing, ignoring tap")
@@ -725,18 +690,10 @@ class ARMeasurementViewModel: ObservableObject {
                 pendingFirstTapFloorPlaneBacked = result.detectedFloorY != nil
                 hasPendingFirstTap = true
 
-                // Start guided workflow based on app mode
+                // Start guided workflow
+                workflowStep = .awaitingSecondTap
                 #if DEBUG
-                print("[Workflow] First tap complete, appMode=\(appMode)")
-                #endif
-                switch appMode {
-                case .warehouse, .shipping, .measure:
-                    workflowStep = .awaitingSecondTap
-                case .labelOnly:
-                    break  // Should not reach here (label-only skips measurement)
-                }
-                #if DEBUG
-                print("[Workflow] workflowStep=\(workflowStep)")
+                print("[Workflow] First tap complete, workflowStep=\(workflowStep)")
                 #endif
 
                 // Seed refinement accumulators for the merge on second tap
@@ -1164,33 +1121,6 @@ class ARMeasurementViewModel: ObservableObject {
                             self.currentMeasurement = adjustedResult
                             self.showBoxVisualization(for: adjustedBox, pointCloud: result.pointCloud, floorY: floorY, unit: self.currentUnit)
 
-                            // Shipping mode: compute recommendation and show overlay
-                            #if DEBUG
-                            print("[Shipping] appMode=\(self.appMode), checking shipping overlay...")
-                            #endif
-                            if self.appMode == .shipping {
-                                let rec = ShippingBoxSelector.selectBestFit(
-                                    objectLength: adjustedResult.length,
-                                    objectWidth: adjustedResult.width,
-                                    objectHeight: adjustedResult.height,
-                                    objectVolume: adjustedResult.volume
-                                )
-                                self.shippingRecommendation = rec
-                                #if DEBUG
-                                print("[Shipping] recommendation=\(rec?.displayText ?? "nil"), dims=L\(adjustedResult.length*100)cm W\(adjustedResult.width*100)cm H\(adjustedResult.height*100)cm")
-                                #endif
-                                self.showShippingBoxOverlay(
-                                    for: adjustedBox,
-                                    recommendation: rec,
-                                    objectLength: adjustedResult.length,
-                                    objectWidth: adjustedResult.width,
-                                    objectHeight: adjustedResult.height
-                                )
-                                #if DEBUG
-                                print("[Shipping] shippingBoxVisualization=\(self.shippingBoxVisualization != nil), anchor=\(self.shippingBoxAnchor != nil)")
-                                #endif
-                            }
-
                             // Hide 3D billboard initially
                             self.boxVisualization?.setDimensionBillboardVisible(false)
 
@@ -1234,11 +1164,7 @@ class ARMeasurementViewModel: ObservableObject {
                                     self.isProcessing = false
 
                                     if self.workflowStep == .awaitingSecondTap {
-                                        if self.appMode == .warehouse {
-                                            self.workflowStep = .awaitingLabelScan
-                                        } else {
-                                            self.workflowStep = .showingResult
-                                        }
+                                        self.workflowStep = .showingResult
                                     }
                                 }
                             }
@@ -1261,11 +1187,7 @@ class ARMeasurementViewModel: ObservableObject {
                                 self.isProcessing = false
 
                                 if self.workflowStep == .awaitingSecondTap {
-                                    if self.appMode == .warehouse {
-                                        self.workflowStep = .awaitingLabelScan
-                                    } else {
-                                        self.workflowStep = .showingResult
-                                    }
+                                    self.workflowStep = .showingResult
                                 }
                             }
                         }
@@ -1362,7 +1284,6 @@ class ARMeasurementViewModel: ObservableObject {
         }
 
         // Create completed visualization with dimension labels and re-edit data
-        // In warehouse mode, pass pendingLabelData so the completed billboard includes label info
         let completedViz = CompletedBoxVisualization(
             boundingBox: result.boundingBox,
             height: result.height,
@@ -1416,14 +1337,6 @@ class ARMeasurementViewModel: ObservableObject {
         boxVisualizationAnchor = nil
         pointCloudEntity = nil
 
-        // Remove shipping box overlay
-        if let anchor = shippingBoxAnchor {
-            sessionManager.removeAnchor(anchor)
-        }
-        shippingBoxVisualization = nil
-        shippingBoxAnchor = nil
-        shippingRecommendation = nil
-
         // Remove animation anchor if exists
         if let anchor = animatedBoxAnchor {
             sessionManager.removeAnchor(anchor)
@@ -1465,11 +1378,6 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Reset workflow state
         workflowStep = .idle
-        showConsole = false
-        showCSVDisplay = false
-        consoleLineRevealed = []
-        consoleReadingComplete = false
-        csvString = ""
 
         // Clean up label billboard if present
         if showLabelBillboard {
@@ -2019,11 +1927,6 @@ class ARMeasurementViewModel: ObservableObject {
         correctedLabelImage = nil
         isReadingLabel = false
 
-        // Advance workflow to showingLabelResult
-        if workflowStep == .awaitingLabelScan || appMode == .labelOnly {
-            workflowStep = .showingLabelResult
-        }
-
         guard let labelData = currentLabelData,
               let liftAnim = labelLiftAnimation else {
             // Fallback to 2D overlay if we can't create billboard
@@ -2031,8 +1934,8 @@ class ARMeasurementViewModel: ObservableObject {
             return
         }
 
-        // -- Warehouse mode: expand BoxVisualization billboard instead of creating LabelBillboard --
-        if appMode == .warehouse, let boxViz = boxVisualization {
+        // Expand BoxVisualization billboard with label data if active box exists
+        if let boxViz = boxVisualization {
             // Show the lifted label again so it can transition back
             liftAnim.setVisible(true)
 
@@ -2061,16 +1964,14 @@ class ARMeasurementViewModel: ObservableObject {
                     boxId: self.nextBoxId,
                     volume: self.currentMeasurement?.boundingBox.volume ?? 0
                 ) { [weak self] in
-                    guard let self = self else { return }
-                    if self.workflowStep == .showingLabelResult {
-                        self.workflowStep = .showingResult
-                    }
+                    // Label data attached — no workflow transition needed
+                    _ = self
                 }
             }
             return
         }
 
-        // -- Non-warehouse modes: create separate LabelBillboard --
+        // No active box: create separate LabelBillboard
 
         // Show the lifted label again so it can transition back
         liftAnim.setVisible(true)
@@ -2108,11 +2009,8 @@ class ARMeasurementViewModel: ObservableObject {
             billboard.setVisible(true)
             billboard.startRevealAnimation { [weak self] in
                 guard let self = self else { return }
-                // Store label data and advance workflow — no Done button needed
+                // Store label data — no workflow transition needed
                 self.pendingLabelData = self.currentLabelData
-                if self.workflowStep == .showingLabelResult {
-                    self.workflowStep = .showingResult
-                }
             }
         }
     }
@@ -2201,7 +2099,7 @@ class ARMeasurementViewModel: ObservableObject {
         // Dismiss label result
         showLabelResult = false
 
-        // Warehouse mode: collapse the expanded box billboard back to dimensions-only
+        // Collapse expanded box billboard back to dimensions-only
         if boxVisualization?.isExpandedWithLabel == true {
             boxVisualization?.collapseLabelSection()
             let mode: BoxVisualization.ActionMode = refinementCount >= AppConstants.maxRefinementRounds
@@ -2210,7 +2108,7 @@ class ARMeasurementViewModel: ObservableObject {
             pendingLabelData = nil
         }
 
-        // Dismiss AR billboard (non-warehouse mode)
+        // Dismiss AR billboard if showing
         if showLabelBillboard {
             showLabelBillboard = false
             labelBillboard?.entity.isEnabled = false
@@ -2242,150 +2140,10 @@ class ARMeasurementViewModel: ObservableObject {
         isReadingLabel = false
         isProcessing = false
 
-        // Stay in label mode (ready for next scan)
-        if isWorkflowActive {
-            workflowStep = .awaitingLabelScan
-        }
-    }
-
-    func skipLabelScan() {
-        workflowStep = .showingResult
-    }
-
-    func showMeasurementConsole() {
-        guard let result = currentMeasurement else { return }
-
-        let unit = currentUnit
-        let vol = unit.convertVolume(cubicMeters: result.boundingBox.volume)
-        let volWeight = unit.formatVolumetricWeight(cubicMeters: result.boundingBox.volume)
-        let sizeClass = SizeClass.classify(volumeCubicMeters: result.boundingBox.volume).rawValue
-
-        // Build console line count (second scan has 3 failed-status WMS lines, first scan has 6)
-        let wmsLineCount = calloutBoxId == 2 ? 3 : 6
-        var lineCount = wmsLineCount + 6 // WMS lines + 6 dimensions lines
-        if let label = pendingLabelData {
-            lineCount += label.displayFields.count
-        }
-        lineCount += 2 // quality section
-
-        consoleLineRevealed = Array(repeating: false, count: lineCount)
-        wmsLineStatus = Array(repeating: .pending, count: wmsLineCount)
-        consoleReadingComplete = false
-        showConsole = true
-        workflowStep = .showingConsole
-
-        // Stagger line reveals with variable delays for WMS progression feel
-        Task { [weak self] in
-            guard let self = self else { return }
-            let stagger = PMTheme.consoleTypingStagger
-
-            let isSizeAlert = self.calloutBoxId == 2
-            for i in 0..<lineCount {
-                // Variable delay for WMS lines to simulate API call progression
-                let delay: Double
-                if i < wmsLineCount {
-                    if isSizeAlert {
-                        // Second scan: quick failed-status reveal (no POST simulation)
-                        switch i {
-                        case 0: delay = 0.3              // STATUS - brief pause
-                        case 1: delay = 0.25             // REASON - quick follow-up
-                        case 2: delay = 0.2              // ACTION - quick
-                        default: delay = stagger
-                        }
-                    } else {
-                        switch i {
-                        case 0: delay = stagger          // CONNECT - normal
-                        case 1: delay = 0.3              // REQUEST - brief pause after connect
-                        case 2: delay = 0.15             // BODY - quick after request
-                        case 3: delay = 0.8              // RESPONSE - simulated API wait
-                        case 4: delay = 0.2              // RECEIPT - quick follow-up
-                        case 5: delay = 0.5              // PRINT - longer for "Spooling..."
-                        default: delay = stagger
-                        }
-                    }
-                } else {
-                    delay = stagger
-                }
-
-                // WMS status transitions: mark previous completed, current processing
-                if i < wmsLineCount {
-                    if i > 0 {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            self.wmsLineStatus[i - 1] = .completed
-                        }
-                    }
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        self.wmsLineStatus[i] = .processing
-                    }
-                } else if i == wmsLineCount {
-                    // First non-WMS line: mark last WMS line as completed
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        self.wmsLineStatus[wmsLineCount - 1] = .completed
-                    }
-                }
-
-                // Reveal the line
-                guard self.showConsole else { return }
-                withAnimation(.easeOut(duration: 0.15)) {
-                    if i < self.consoleLineRevealed.count {
-                        self.consoleLineRevealed[i] = true
-                    }
-                }
-
-                // Wait after reveal so spinner is visible
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                guard self.showConsole else { return }
-            }
-
-            // Ensure all WMS lines are completed
-            withAnimation(.easeOut(duration: 0.15)) {
-                for i in 0..<wmsLineCount {
-                    self.wmsLineStatus[i] = .completed
-                }
-            }
-
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            withAnimation(.easeOut(duration: 0.2)) {
-                self.consoleReadingComplete = true
-            }
-        }
-    }
-
-    func showCSVExport() {
-        guard let result = currentMeasurement else { return }
-
-        csvString = exportService.generateSingleRowCSV(
-            length: result.length,
-            width: result.width,
-            height: result.height,
-            volumeCubicMeters: result.boundingBox.volume,
-            quality: result.quality,
-            mode: currentMeasurementMode,
-            labelData: pendingLabelData,
-            unit: currentUnit
-        )
-
-        showConsole = false
-        showCSVDisplay = true
-        workflowStep = .showingCSV
+        // Label scan reset does not change workflow step
     }
 
     func closeWorkflow() {
-        // Save measurement
-        saveMeasurement(mode: currentMeasurementMode, unit: currentUnit)
-
-        // Reset workflow
-        showConsole = false
-        showCSVDisplay = false
-        consoleLineRevealed = []
-        consoleReadingComplete = false
-        wmsLineStatus = []
-        csvString = ""
-        workflowStep = .idle
-    }
-
-    func resetForNewShippingMeasurement() {
-        clearActiveBoxOnly()
         workflowStep = .idle
     }
 
@@ -2398,11 +2156,6 @@ class ARMeasurementViewModel: ObservableObject {
         if currentMeasurement != nil {
             saveMeasurement(mode: mode, unit: unit)
         }
-        workflowStep = .idle
-    }
-
-    func resetForNewLabelScan() {
-        resetLabelScan()
         workflowStep = .idle
     }
 
@@ -2640,36 +2393,6 @@ class ARMeasurementViewModel: ObservableObject {
         if let entity = boxVisualization?.entity {
             boxVisualizationAnchor = sessionManager.addEntityWithAnchor(entity)
         }
-    }
-
-    private func showShippingBoxOverlay(
-        for objectBox: BoundingBox3D,
-        recommendation: ShippingBoxRecommendation?,
-        objectLength: Float,
-        objectWidth: Float,
-        objectHeight: Float
-    ) {
-        // Remove existing shipping overlay if any
-        if let anchor = shippingBoxAnchor {
-            sessionManager.removeAnchor(anchor)
-        }
-        shippingBoxVisualization = nil
-        shippingBoxAnchor = nil
-
-        guard let rec = recommendation else { return }
-        let box = rec.shippingBox
-        let dims = SIMD3<Float>(box.lengthCm / 100.0, box.widthCm / 100.0, box.heightCm / 100.0)
-        let viz = ShippingBoxVisualization(
-            objectBoundingBox: objectBox,
-            shippingBoxDimensionsMeters: dims,
-            recommendation: rec,
-            objectLength: objectLength,
-            objectWidth: objectWidth,
-            objectHeight: objectHeight,
-            unit: currentUnit
-        )
-        shippingBoxVisualization = viz
-        shippingBoxAnchor = sessionManager.addEntityWithAnchor(viz.entity)
     }
 
     #if DEBUG

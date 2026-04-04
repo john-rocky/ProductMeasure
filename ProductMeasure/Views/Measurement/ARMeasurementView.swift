@@ -10,7 +10,6 @@ import UIKit
 
 struct ARMeasurementView: View {
     @StateObject private var viewModel = ARMeasurementViewModel()
-    @AppStorage("appMode") private var appMode: AppMode = .measure
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("measurementUnit") private var measurementUnit: MeasurementUnit = .centimeters
     @AppStorage("selectionMode2") private var selectionMode: SelectionMode = .tap
@@ -20,11 +19,11 @@ struct ARMeasurementView: View {
     @AppStorage("showDiagnostics") private var showDiagnostics = false
     #endif
     @State private var showScanningTipsSheet = false
+    @State private var isLabelMode = false
 
-    /// When workflow is active or in label-only mode, derives selection mode from ViewModel
+    /// Active selection mode: label mode overrides user's selection
     private var activeSelectionMode: SelectionMode {
-        if appMode == .labelOnly { return .label }
-        return viewModel.isWorkflowActive ? viewModel.effectiveSelectionMode : selectionMode
+        isLabelMode ? .tap : selectionMode
     }
 
     var body: some View {
@@ -34,12 +33,13 @@ struct ARMeasurementView: View {
                 ARMeasurementViewRepresentable(
                     viewModel: viewModel,
                     measurementMode: measurementMode,
-                    selectionMode: activeSelectionMode
+                    selectionMode: activeSelectionMode,
+                    isLabelMode: isLabelMode
                 )
                     .ignoresSafeArea()
 
                 // Corner brackets overlay
-                if activeSelectionMode == .tap {
+                if !isLabelMode && activeSelectionMode == .tap {
                     GeometryReader { geometry in
                         CornerBracketsView(
                             phase: viewModel.animationPhase,
@@ -51,7 +51,7 @@ struct ARMeasurementView: View {
                     }
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
-                } else if activeSelectionMode == .label {
+                } else if isLabelMode {
                     GeometryReader { geometry in
                         LabelScanBracketsView(
                             phase: viewModel.animationPhase,
@@ -80,7 +80,6 @@ struct ARMeasurementView: View {
                             }
 
                             #if DEBUG
-                            // Point cloud visualization toggle
                             Button(action: { viewModel.togglePointCloudViz() }) {
                                 Image(systemName: viewModel.showPointCloudViz ? "circle.hexagongrid.fill" : "circle.hexagongrid")
                                     .font(.system(size: 14, weight: .medium))
@@ -97,22 +96,30 @@ struct ARMeasurementView: View {
 
                             Spacer()
 
-                            // Reset button (visible during warehouse workflow)
-                            if appMode == .warehouse && viewModel.isWorkflowActive {
-                                Button(action: {
-                                    viewModel.resetForNewMeasurement()
-                                }) {
-                                    Image(systemName: "arrow.counterclockwise")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(PMTheme.red)
+                            // Label scan button
+                            if !viewModel.isWorkflowActive && !viewModel.isProcessing && !isLabelMode {
+                                Button(action: { isLabelMode = true }) {
+                                    Image(systemName: "doc.text.viewfinder")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(PMTheme.labelBlue)
                                         .frame(width: 36, height: 36)
                                         .background(PMTheme.surfaceDark.opacity(0.85))
                                         .clipShape(Circle())
-                                        .overlay(Circle().strokeBorder(PMTheme.red.opacity(0.20), lineWidth: 0.5))
+                                        .overlay(Circle().strokeBorder(PMTheme.labelBlue.opacity(0.20), lineWidth: 0.5))
+                                }
+                            } else if isLabelMode {
+                                Button(action: { isLabelMode = false }) {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(PMTheme.textSecondary)
+                                        .frame(width: 36, height: 36)
+                                        .background(PMTheme.surfaceDark.opacity(0.85))
+                                        .clipShape(Circle())
+                                        .overlay(Circle().strokeBorder(PMTheme.textSecondary.opacity(0.20), lineWidth: 0.5))
                                 }
                             }
 
-                            // Clear all button (visible when completed boxes exist)
+                            // Clear all button
                             if viewModel.completedBoxCount > 0 && !viewModel.isWorkflowActive {
                                 Button(action: {
                                     viewModel.clearAllMeasurements()
@@ -133,135 +140,58 @@ struct ARMeasurementView: View {
 
                         Spacer()
 
-                        // Action button when workflow reaches showingResult
+                        // Action button when result is showing
                         if viewModel.workflowStep == .showingResult {
-                            if appMode == .shipping || appMode == .measure {
-                                Button(action: {
-                                    viewModel.saveAndReset(mode: measurementMode, unit: measurementUnit)
-                                }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "arrow.counterclockwise")
-                                            .font(.system(size: 14))
-                                        Text("NEW")
-                                            .font(PMTheme.mono(14, weight: .bold))
-                                    }
-                                    .foregroundColor(.black)
-                                    .padding(.horizontal, 32)
-                                    .padding(.vertical, 12)
-                                    .background(PMTheme.green)
-                                    .clipShape(Capsule())
-                                    .shadow(color: PMTheme.green.opacity(0.4), radius: 8, x: 0, y: 2)
+                            Button(action: {
+                                viewModel.saveAndReset(mode: measurementMode, unit: measurementUnit)
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "arrow.counterclockwise")
+                                        .font(.system(size: 14))
+                                    Text("NEW")
+                                        .font(PMTheme.mono(14, weight: .bold))
                                 }
-                            } else if appMode == .labelOnly {
-                                Button(action: {
-                                    viewModel.resetForNewLabelScan()
-                                }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "arrow.counterclockwise")
-                                            .font(.system(size: 14))
-                                        Text("NEW")
-                                            .font(PMTheme.mono(14, weight: .bold))
-                                    }
-                                    .foregroundColor(.black)
-                                    .padding(.horizontal, 32)
-                                    .padding(.vertical, 12)
-                                    .background(PMTheme.green)
-                                    .clipShape(Capsule())
-                                    .shadow(color: PMTheme.green.opacity(0.4), radius: 8, x: 0, y: 2)
-                                }
-                            } else {
-                                let isCheck = viewModel.calloutBoxId == 2
-                                Button(action: {
-                                    viewModel.showMeasurementConsole()
-                                }) {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: isCheck ? "exclamationmark.magnifyingglass" : "checkmark.rectangle")
-                                            .font(.system(size: 14))
-                                        Text(isCheck ? "CHECK" : "SAVE")
-                                            .font(PMTheme.mono(14, weight: .bold))
-                                    }
-                                    .foregroundColor(.black)
-                                    .padding(.horizontal, 32)
-                                    .padding(.vertical, 12)
-                                    .background(isCheck ? PMTheme.amber : PMTheme.cyan)
-                                    .clipShape(Capsule())
-                                    .shadow(color: (isCheck ? PMTheme.amber : PMTheme.cyan).opacity(0.4), radius: 8, x: 0, y: 2)
-                                }
+                                .foregroundColor(.black)
+                                .padding(.horizontal, 32)
+                                .padding(.vertical, 12)
+                                .background(PMTheme.green)
+                                .clipShape(Capsule())
+                                .shadow(color: PMTheme.green.opacity(0.4), radius: 8, x: 0, y: 2)
                             }
                         }
 
                         // Instruction / status prompt (bottom)
-                        if viewModel.isProcessing {
+                        if isLabelMode {
+                            InstructionCard(mode: .label)
+                        } else if viewModel.isProcessing {
                             InstructionCard(mode: .processing)
                         } else if viewModel.isRefining {
                             InstructionCard(mode: .refine)
-                        } else if viewModel.workflowStep == .awaitingLabelScan && viewModel.currentMeasurement != nil {
-                            // Post-box label scan prompt (warehouse flow)
-                            VStack(spacing: 6) {
-                                InstructionCard(mode: .label)
-                                Button(action: { viewModel.skipLabelScan() }) {
-                                    Text("SKIP")
-                                        .font(PMTheme.mono(11, weight: .bold))
-                                        .foregroundColor(PMTheme.textSecondary)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 6)
-                                        .background(PMTheme.surfaceDark.opacity(0.7))
-                                        .clipShape(Capsule())
-                                        .overlay(Capsule().strokeBorder(PMTheme.textSecondary.opacity(0.3), lineWidth: 0.5))
-                                }
-                            }
                         } else if viewModel.currentMeasurement == nil && !viewModel.isReadingLabel {
-                            if viewModel.isWorkflowActive {
-                                switch viewModel.workflowStep {
-                                case .awaitingLabelScan:
-                                    InstructionCard(mode: .label)
-                                case .awaitingSecondTap:
-                                    VStack(spacing: 6) {
-                                        if let failMsg = viewModel.secondTapFailureMessage {
-                                            InstructionCard(mode: .refinementFailed(failMsg))
-                                        } else {
-                                            InstructionCard(mode: .secondTap)
-                                        }
-                                        Button(action: { viewModel.skipSecondTap() }) {
-                                            Text("SKIP")
-                                                .font(PMTheme.mono(11, weight: .bold))
-                                                .foregroundColor(PMTheme.textSecondary)
-                                                .padding(.horizontal, 16)
-                                                .padding(.vertical, 6)
-                                                .background(PMTheme.surfaceDark.opacity(0.7))
-                                                .clipShape(Capsule())
-                                                .overlay(Capsule().strokeBorder(PMTheme.textSecondary.opacity(0.3), lineWidth: 0.5))
-                                        }
+                            if viewModel.hasPendingFirstTap {
+                                VStack(spacing: 6) {
+                                    if let failMsg = viewModel.secondTapFailureMessage {
+                                        InstructionCard(mode: .refinementFailed(failMsg))
+                                    } else {
+                                        InstructionCard(mode: .secondTap)
                                     }
-                                default:
-                                    InstructionCard(mode: .ready(viewModel.trackingMessage), isTrackingReady: viewModel.isTrackingReady, isTrackingError: viewModel.isTrackingError)
+                                    Button(action: { viewModel.skipSecondTap() }) {
+                                        Text("SKIP")
+                                            .font(PMTheme.mono(11, weight: .bold))
+                                            .foregroundColor(PMTheme.textSecondary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 6)
+                                            .background(PMTheme.surfaceDark.opacity(0.7))
+                                            .clipShape(Capsule())
+                                            .overlay(Capsule().strokeBorder(PMTheme.textSecondary.opacity(0.3), lineWidth: 0.5))
+                                    }
                                 }
+                            } else if activeSelectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
+                                InstructionCard(mode: .tap)
+                            } else if activeSelectionMode == .box {
+                                InstructionCard(mode: .box)
                             } else {
-                                if activeSelectionMode == .tap && viewModel.hasPendingFirstTap {
-                                    VStack(spacing: 6) {
-                                        if let failMsg = viewModel.secondTapFailureMessage {
-                                            InstructionCard(mode: .refinementFailed(failMsg))
-                                        } else {
-                                            InstructionCard(mode: .secondTap)
-                                        }
-                                        Button(action: { viewModel.skipSecondTap() }) {
-                                            Text("SKIP")
-                                                .font(PMTheme.mono(11, weight: .bold))
-                                                .foregroundColor(PMTheme.textSecondary)
-                                                .padding(.horizontal, 16)
-                                                .padding(.vertical, 6)
-                                                .background(PMTheme.surfaceDark.opacity(0.7))
-                                                .clipShape(Capsule())
-                                                .overlay(Capsule().strokeBorder(PMTheme.textSecondary.opacity(0.3), lineWidth: 0.5))
-                                        }
-                                    }
-                                } else if activeSelectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
-                                    InstructionCard(mode: .tap)
-                                } else if activeSelectionMode == .box {
-                                    InstructionCard(mode: .box)
-                                } else if activeSelectionMode == .label {
-                                    InstructionCard(mode: .label)
-                                }
+                                InstructionCard(mode: .ready(viewModel.trackingMessage), isTrackingReady: viewModel.isTrackingReady, isTrackingError: viewModel.isTrackingError)
                             }
                         }
                     }
@@ -308,6 +238,7 @@ struct ARMeasurementView: View {
                             Spacer()
                             Button(action: {
                                 viewModel.resetLabelScan()
+                                isLabelMode = false
                             }) {
                                 Image(systemName: "xmark")
                                     .font(.system(size: 14, weight: .bold))
@@ -328,7 +259,6 @@ struct ARMeasurementView: View {
                 // Label result overlay
                 if viewModel.showLabelResult, !viewModel.showLabelBillboard, let labelData = viewModel.currentLabelData {
                     ZStack {
-                        // Dim background
                         Color.black.opacity(0.3)
                             .ignoresSafeArea()
                             .allowsHitTesting(false)
@@ -339,14 +269,11 @@ struct ARMeasurementView: View {
                             isComplete: viewModel.labelReadingComplete,
                             onDismiss: {
                                 viewModel.dismissLabelResult()
-                                if !viewModel.isWorkflowActive && appMode != .labelOnly {
-                                    selectionMode = .tap
-                                }
+                                isLabelMode = false
                             },
                             onRescan: {
                                 viewModel.resetLabelScan()
-                            },
-                            dismissButtonLabel: (viewModel.isWorkflowActive && appMode != .labelOnly) ? "CONTINUE" : "DONE"
+                            }
                         )
                     }
                     .transition(.opacity)
@@ -378,42 +305,7 @@ struct ARMeasurementView: View {
                     )
                     .transition(.opacity)
                 }
-
-                // Measurement console overlay
-                if viewModel.showConsole, let result = viewModel.currentMeasurement {
-                    let unit = measurementUnit
-                    MeasurementConsoleView(
-                        width: unit.formatDimension(meters: result.width),
-                        height: unit.formatDimension(meters: result.height),
-                        length: unit.formatDimension(meters: result.length),
-                        volume: String(format: "%.2f %@", unit.convertVolume(cubicMeters: result.boundingBox.volume), unit.volumeUnit()),
-                        volumetricWeight: unit.formatVolumetricWeight(cubicMeters: result.boundingBox.volume),
-                        sizeClass: SizeClass.classify(volumeCubicMeters: result.boundingBox.volume).rawValue,
-                        qualityLabel: result.quality.overallQuality.rawValue.capitalized,
-                        pointCount: result.quality.pointCount,
-                        labelData: viewModel.pendingLabelData,
-                        cartonId: viewModel.pendingLabelData?.cartonId,
-                        boxId: viewModel.calloutBoxId,
-                        lineRevealed: viewModel.consoleLineRevealed,
-                        isComplete: viewModel.consoleReadingComplete,
-                        wmsLineStatus: viewModel.wmsLineStatus,
-                        onExportCSV: { viewModel.showCSVExport() },
-                        onClose: { viewModel.closeWorkflow() },
-                        onReMeasure: { viewModel.closeWorkflow() }
-                    )
-                    .transition(.opacity)
-                }
-
-                // CSV display overlay
-                if viewModel.showCSVDisplay {
-                    CSVDisplayView(
-                        csvString: viewModel.csvString,
-                        onDone: { viewModel.closeWorkflow() }
-                    )
-                    .transition(.opacity)
-                }
             } else {
-                // LiDAR not available view
                 LiDARNotAvailableView()
             }
         }
@@ -421,7 +313,6 @@ struct ARMeasurementView: View {
             viewModel.startSession()
             viewModel.currentUnit = measurementUnit
             viewModel.currentMeasurementMode = measurementMode
-            viewModel.appMode = appMode
             #if DEBUG
             viewModel.showMaskPreviewSetting = showMaskPreview
             viewModel.showDiagnosticsSetting = showDiagnostics
@@ -435,9 +326,6 @@ struct ARMeasurementView: View {
         }
         .onChange(of: measurementMode) { _, newMode in
             viewModel.currentMeasurementMode = newMode
-        }
-        .onChange(of: appMode) { _, newMode in
-            viewModel.appMode = newMode
         }
         #if DEBUG
         .onChange(of: showMaskPreview) { _, newValue in
@@ -457,24 +345,21 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
     @ObservedObject var viewModel: ARMeasurementViewModel
     let measurementMode: MeasurementMode
     let selectionMode: SelectionMode
+    let isLabelMode: Bool
 
     func makeUIView(context: Context) -> ARView {
         let arView = viewModel.sessionManager.arView!
 
-        // Add tap gesture recognizer
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         arView.addGestureRecognizer(tapGesture)
         context.coordinator.tapGesture = tapGesture
 
-        // Add pan gesture recognizer for handle dragging and box selection
         let panGesture = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
         arView.addGestureRecognizer(panGesture)
         context.coordinator.panGesture = panGesture
 
-        // Store reference to arView in coordinator
         context.coordinator.arView = arView
 
-        // Add UIKit box selection rect overlay (never captures touches)
         let boxSelectionRectView = BoxSelectionRectView(frame: arView.bounds)
         boxSelectionRectView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         arView.addSubview(boxSelectionRectView)
@@ -486,30 +371,28 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
     func updateUIView(_ uiView: ARView, context: Context) {
         context.coordinator.measurementMode = measurementMode
         context.coordinator.selectionMode = selectionMode
+        context.coordinator.isLabelMode = isLabelMode
 
-        // Both gestures always enabled; handler logic determines behavior
         context.coordinator.tapGesture?.isEnabled = true
         context.coordinator.panGesture?.isEnabled = true
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel, measurementMode: measurementMode, selectionMode: selectionMode)
+        Coordinator(viewModel: viewModel, measurementMode: measurementMode, selectionMode: selectionMode, isLabelMode: isLabelMode)
     }
 
     class Coordinator: NSObject {
         let viewModel: ARMeasurementViewModel
         var measurementMode: MeasurementMode
         var selectionMode: SelectionMode
+        var isLabelMode: Bool
         weak var arView: ARView?
 
-        // Gesture references for enabling/disabling
         weak var tapGesture: UITapGestureRecognizer?
         weak var panGesture: UIPanGestureRecognizer?
 
-        // UIKit box selection overlay
         var boxSelectionRectView: BoxSelectionRectView?
 
-        // Drag state
         private var activeDragType: DragType?
         private var lastPanLocation: CGPoint?
 
@@ -519,10 +402,11 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
             case boxSelection(startPoint: CGPoint)
         }
 
-        init(viewModel: ARMeasurementViewModel, measurementMode: MeasurementMode, selectionMode: SelectionMode) {
+        init(viewModel: ARMeasurementViewModel, measurementMode: MeasurementMode, selectionMode: SelectionMode, isLabelMode: Bool) {
             self.viewModel = viewModel
             self.measurementMode = measurementMode
             self.selectionMode = selectionMode
+            self.isLabelMode = isLabelMode
         }
 
         @MainActor @objc func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -540,7 +424,6 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
             for result in results {
                 var entity: Entity? = result.entity
                 while let current = entity {
-                    // 1. Check for action icon tap
                     if ActionIconBuilder.isActionEntity(current.name),
                        let actionType = ActionIconBuilder.parseActionType(entityName: current.name) {
 #if DEBUG
@@ -550,9 +433,7 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
                         return
                     }
 
-                    // 2. Check for completed billboard background tap
                     if current.name == "completed_billboard_bg" {
-                        // Find which completed box this belongs to
                         if let boxId = viewModel.findCompletedBoxId(for: current) {
 #if DEBUG
                             print("[Tap] Completed billboard tapped, boxId: \(boxId)")
@@ -566,32 +447,26 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
                 }
             }
 
-            // 3. If a completed box has action icons showing, dismiss them on empty tap
             if viewModel.selectedCompletedBoxId != nil {
                 viewModel.dismissCompletedBoxActions()
                 return
             }
 
-            // 4. If editing, ignore taps (handle dragging is via pan)
             if viewModel.isEditing { return }
 
-            // 4.5. If refining, route to refinement handler
             if viewModel.isRefining {
                 Task { await viewModel.handleRefinementTap(at: location, mode: measurementMode) }
                 return
             }
 
-            // 5. Handle label mode taps
-            // Read effective selection mode directly from viewModel to avoid stale
-            // coordinator state (updateUIView may lag behind @Published changes)
-            let effectiveMode = (viewModel.appMode == .labelOnly || viewModel.isWorkflowActive) ? viewModel.effectiveSelectionMode : selectionMode
-            guard effectiveMode != .label else {
+            // Label mode: route to label handler
+            if isLabelMode {
                 Task { await viewModel.handleLabelTap(at: location) }
                 return
             }
 
-            // 6. Only handle new measurement taps in tap mode
-            guard effectiveMode == .tap else { return }
+            // Only handle measurement taps in tap mode
+            guard selectionMode == .tap else { return }
 
             Task {
                 await viewModel.handleTap(at: location, mode: measurementMode)
@@ -606,7 +481,6 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
             switch gesture.state {
             case .began:
                 if viewModel.isEditing {
-                    // Editing mode: hit test for handle or rotation ring
                     if let dragType = hitTest(at: location, in: arView) {
                         activeDragType = dragType
                         lastPanLocation = location
@@ -615,7 +489,6 @@ struct ARMeasurementViewRepresentable: UIViewRepresentable {
 #endif
                     }
                 } else if selectionMode == .box && !viewModel.isProcessing {
-                    // Box selection mode: start drawing selection rectangle
                     activeDragType = .boxSelection(startPoint: location)
                     boxSelectionRectView?.clearSelection()
 #if DEBUG
