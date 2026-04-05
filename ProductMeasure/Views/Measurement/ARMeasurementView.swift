@@ -51,6 +51,25 @@ struct ARMeasurementView: View {
                     }
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
+
+                    // Measurement preview (shown when reticle locked)
+                    if let preview = viewModel.previewDimensions, viewModel.currentMeasurement == nil && !viewModel.hasPendingFirstTap {
+                        VStack {
+                            Spacer()
+                            Text(preview)
+                                .font(PMTheme.mono(12))
+                                .foregroundColor(PMTheme.green.opacity(0.9))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(PMTheme.surfaceDark.opacity(0.7))
+                                .clipShape(Capsule())
+                            Spacer()
+                                .frame(height: 44)
+                        }
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.3), value: viewModel.previewDimensions)
+                    }
                 } else if isLabelMode {
                     GeometryReader { geometry in
                         LabelScanBracketsView(

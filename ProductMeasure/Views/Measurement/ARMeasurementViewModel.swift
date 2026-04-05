@@ -89,10 +89,13 @@ class ARMeasurementViewModel: ObservableObject {
     // Reticle lock-on state
     @Published var reticleTargetState: ReticleTargetState = .noTarget
     @Published var reticleCenterDepth: Float = 0
+    @Published var previewDimensions: String? = nil
     private var smoothedCenterDepth: Float = 0
     private var targetDetectedFrameCount: Int = 0
     private var cachedSegmentation: CachedSegmentation?
     private var backgroundSegmentationTask: Task<Void, Never>?
+    private var backgroundMeasureTask: Task<Void, Never>?
+    private var lastPreviewTime: TimeInterval = 0
     private var lastBackgroundSegTime: TimeInterval = 0
 
     private struct CachedSegmentation {
@@ -396,9 +399,15 @@ class ARMeasurementViewModel: ObservableObject {
             }
         }
 
-        // EMA smoothing
+        // Use median of all samples for robust depth (reduces noise from reflections)
+        var allSamples = surroundingDepths
+        allSamples.append(centerDepthValue)
+        allSamples.sort()
+        let medianDepth = allSamples[allSamples.count / 2]
+
+        // EMA smoothing on median depth
         let alpha = AppConstants.reticleDepthEMAAlpha
-        smoothedCenterDepth = alpha * centerDepthValue + (1.0 - alpha) * smoothedCenterDepth
+        smoothedCenterDepth = alpha * medianDepth + (1.0 - alpha) * smoothedCenterDepth
 
         // Determine new state
         let newState: ReticleTargetState
@@ -428,8 +437,10 @@ class ARMeasurementViewModel: ObservableObject {
         // Background segmentation management
         if reticleTargetState == .targetLocked {
             startBackgroundSegmentationIfNeeded(frame: frame, cameraPosition: cameraPosition)
+            startBackgroundMeasurePreviewIfNeeded(frame: frame)
         } else if reticleTargetState == .noTarget {
             stopBackgroundSegmentation()
+            previewDimensions = nil
         }
     }
 
@@ -521,6 +532,51 @@ class ARMeasurementViewModel: ObservableObject {
         backgroundSegmentationTask?.cancel()
         backgroundSegmentationTask = nil
         cachedSegmentation = nil
+        backgroundMeasureTask?.cancel()
+        backgroundMeasureTask = nil
+    }
+
+    private func startBackgroundMeasurePreviewIfNeeded(frame: ARFrame) {
+        // Run preview at most once per 0.5s, only when idle
+        let now = frame.timestamp
+        guard now - lastPreviewTime >= 0.5 else { return }
+        guard backgroundMeasureTask == nil else { return }
+        guard !isProcessing && currentMeasurement == nil && !hasPendingFirstTap else { return }
+
+        let viewSize = sessionManager.arView.bounds.size
+        let center = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+        let mode = currentMeasurementMode
+
+        lastPreviewTime = now
+        backgroundMeasureTask = Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let result = try await self.measurementCalculator.measure(
+                    frame: frame,
+                    tapPoint: center,
+                    viewSize: viewSize,
+                    mode: mode
+                )
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    if let r = result {
+                        let unit = self.currentUnit
+                        let l = unit.formatDimension(meters: r.length)
+                        let w = unit.formatDimension(meters: r.width)
+                        let h = unit.formatDimension(meters: r.height)
+                        self.previewDimensions = "\(l) × \(w) × \(h)"
+                    } else {
+                        self.previewDimensions = nil
+                    }
+                    self.backgroundMeasureTask = nil
+                }
+            } catch {
+                await MainActor.run {
+                    self.previewDimensions = nil
+                    self.backgroundMeasureTask = nil
+                }
+            }
+        }
     }
 
     private func clearReticleState() {
@@ -711,7 +767,7 @@ class ARMeasurementViewModel: ObservableObject {
                 captureDiagnostics()
                 #endif
                 isProcessing = false
-                showTemporaryError(String(localized: "Measurement failed. Try again."))
+                showTemporaryError(guidedErrorMessage())
             }
         } catch {
             #if DEBUG
@@ -719,7 +775,7 @@ class ARMeasurementViewModel: ObservableObject {
             captureDiagnostics()
             #endif
             isProcessing = false
-            showTemporaryError(String(localized: "Measurement failed. Try again."))
+            showTemporaryError(guidedErrorMessage())
         }
     }
 
@@ -742,8 +798,12 @@ class ARMeasurementViewModel: ObservableObject {
                 existingBox: firstResult.boundingBox,
                 raycastHitPosition: raycastHitPosition
             ) {
-                // Merge point clouds from both taps
-                accumulatedPointClouds.append(refinement.points)
+                // Merge point clouds from both taps with centroid alignment
+                let alignedNewPoints = Self.alignPointClouds(
+                    existing: accumulatedPointClouds.flatMap { $0 },
+                    incoming: refinement.points
+                )
+                accumulatedPointClouds.append(alignedNewPoints)
                 accumulatedQualities.append(refinement.quality)
                 refinementCount = 1
 
@@ -1747,8 +1807,12 @@ class ARMeasurementViewModel: ObservableObject {
                 existingBox: result.boundingBox,
                 raycastHitPosition: raycastHitPosition
             ) {
-                // Success: merge point clouds and re-estimate
-                accumulatedPointClouds.append(refinement.points)
+                // Success: merge point clouds with centroid alignment and re-estimate
+                let alignedNewPoints = Self.alignPointClouds(
+                    existing: accumulatedPointClouds.flatMap { $0 },
+                    incoming: refinement.points
+                )
+                accumulatedPointClouds.append(alignedNewPoints)
                 accumulatedQualities.append(refinement.quality)
                 refinementCount += 1
 
@@ -2158,6 +2222,67 @@ class ARMeasurementViewModel: ObservableObject {
     }
 
     // MARK: - Error Feedback
+
+    // MARK: - Point Cloud Alignment
+
+    /// Align incoming point cloud to existing by shifting overlapping region centroids
+    static func alignPointClouds(existing: [SIMD3<Float>], incoming: [SIMD3<Float>]) -> [SIMD3<Float>] {
+        guard !existing.isEmpty, !incoming.isEmpty else { return incoming }
+
+        // Compute bounding box of existing points
+        var minE = existing[0], maxE = existing[0]
+        for p in existing { minE = min(minE, p); maxE = max(maxE, p) }
+
+        // Expand by 20% to find overlapping region
+        let margin = (maxE - minE) * 0.2
+        let overlapMin = minE - margin
+        let overlapMax = maxE + margin
+
+        // Find incoming points that fall within the expanded existing bounds
+        var overlapExisting = SIMD3<Float>.zero
+        var overlapExistingCount: Float = 0
+        for p in existing {
+            overlapExisting += p
+            overlapExistingCount += 1
+        }
+
+        var overlapIncoming = SIMD3<Float>.zero
+        var overlapIncomingCount: Float = 0
+        for p in incoming {
+            if p.x >= overlapMin.x && p.x <= overlapMax.x &&
+               p.y >= overlapMin.y && p.y <= overlapMax.y &&
+               p.z >= overlapMin.z && p.z <= overlapMax.z {
+                overlapIncoming += p
+                overlapIncomingCount += 1
+            }
+        }
+
+        // If insufficient overlap, return as-is (ARKit tracking should handle alignment)
+        guard overlapIncomingCount >= 10 else { return incoming }
+
+        let centroidExisting = overlapExisting / overlapExistingCount
+        let centroidIncoming = overlapIncoming / overlapIncomingCount
+        let shift = centroidExisting - centroidIncoming
+
+        // Only apply shift if it's small (< 3cm) — larger shifts indicate tracking error
+        guard simd_length(shift) < 0.03 else { return incoming }
+
+        return incoming.map { $0 + shift }
+    }
+
+    private func guidedErrorMessage() -> String {
+        // Provide specific guidance based on current conditions
+        if smoothedCenterDepth > 2.5 {
+            return String(localized: "Too far. Move closer to the object.")
+        }
+        if smoothedCenterDepth < 0.2 {
+            return String(localized: "Too close. Move back a little.")
+        }
+        if !isTrackingReady {
+            return String(localized: "Tracking unstable. Hold steady and try again.")
+        }
+        return String(localized: "Measurement failed. Try a different angle.")
+    }
 
     private func showTemporaryError(_ message: String) {
         UINotificationFeedbackGenerator().notificationOccurred(.error)
