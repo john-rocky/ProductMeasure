@@ -480,7 +480,7 @@ class CompletedBoxVisualization {
             DataLine(label: "LENGTH", value: "\(lVal) \(unitStr)"),
             DataLine(label: "VOLUME", value: volStr),
             DataLine(label: "VOL.WT", value: unit.formatVolumetricWeight(cubicMeters: vol)),
-            DataLine(label: "SIZE", value: SizeClass.classify(volumeCubicMeters: vol).rawValue),
+            DataLine(label: "SIZE", value: ShippingSize.classify(boundingBox: boundingBox).rawValue),
         ]
 
         // -- Build label data sections --

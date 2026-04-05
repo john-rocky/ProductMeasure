@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage("roundingPrecision") private var roundingPrecision: RoundingPrecision = .millimeter1
     @AppStorage("measurementMode") private var measurementMode: MeasurementMode = .boxPriority
     @AppStorage("showQualityIndicators") private var showQualityIndicators = true
+    @AppStorage("showShippingSize") private var showShippingSize = true
     @AppStorage("showScanningTips") private var showScanningTips = true
     @AppStorage("sendEndpointURL") private var sendEndpointURL = ""
     #if DEBUG
@@ -72,6 +73,7 @@ struct SettingsView: View {
                 // Display section
                 Section {
                     Toggle("Show Quality Indicators", isOn: $showQualityIndicators)
+                    Toggle("Show Shipping Size", isOn: $showShippingSize)
                 } header: {
                     Text("DISPLAY")
                         .font(PMTheme.mono(11, weight: .bold))

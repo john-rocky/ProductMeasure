@@ -583,7 +583,7 @@ class LabelBillboard {
             DataLine(label: "LENGTH", value: "\(lVal) \(unitStr)"),
             DataLine(label: "VOLUME", value: volStr),
             DataLine(label: "VOL.WT", value: storedUnit.formatVolumetricWeight(cubicMeters: storedVolume)),
-            DataLine(label: "SIZE", value: SizeClass.classify(volumeCubicMeters: storedVolume).rawValue),
+            DataLine(label: "SIZE", value: ShippingSize.classify(lengthMeters: storedLength, widthMeters: storedWidth, heightMeters: storedHeight).rawValue),
         ]
 
         // -- Pre-generate check status banner --

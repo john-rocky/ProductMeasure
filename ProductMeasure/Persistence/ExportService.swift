@@ -79,7 +79,7 @@ class ExportService {
         let h = String(format: "%.2f", unit.convert(meters: height))
         let vol = String(format: "%.2f", unit.convertVolume(cubicMeters: volumeCubicMeters))
         let volWeight = unit.formatVolumetricWeight(cubicMeters: volumeCubicMeters)
-        let sizeClass = SizeClass.classify(volumeCubicMeters: volumeCubicMeters).rawValue
+        let sizeClass = ShippingSize.classify(lengthMeters: length, widthMeters: width, heightMeters: height).rawValue
         let qualityStr = quality.overallQuality.rawValue
         let modeStr = mode.rawValue
 

@@ -412,27 +412,39 @@ enum MeasurementMode: String, CaseIterable, Codable {
     }
 }
 
-enum SizeClass: String, CaseIterable {
-    case xs = "XS"
-    case small = "SMALL"
-    case medium = "MEDIUM"
-    case large = "LARGE"
-    case xl = "XL"
-    case xxl = "XXL"
+enum ShippingSize: String, CaseIterable {
+    case s60 = "60"
+    case s80 = "80"
+    case s100 = "100"
+    case s120 = "120"
+    case s140 = "140"
+    case s160 = "160"
+    case s170 = "170"
+    case s200 = "200"
+    case oversize = "200+"
 
     var displayName: String { rawValue }
 
-    /// Classify based on volume in cubic meters (thresholds in cubic inches)
-    static func classify(volumeCubicMeters: Float) -> SizeClass {
-        let cubicInches = volumeCubicMeters * 61023.7
-        switch cubicInches {
-        case ...100: return .xs
-        case 101...250: return .small
-        case 251...650: return .medium
-        case 651...1050: return .large
-        case 1051...1728: return .xl
-        default: return .xxl
+    /// Classify based on sum of 3 dimensions in cm (Japanese domestic shipping standard)
+    static func classify(lengthMeters: Float, widthMeters: Float, heightMeters: Float) -> ShippingSize {
+        let sumCm = Double(lengthMeters + widthMeters + heightMeters) * 100.0
+        switch sumCm {
+        case ...60: return .s60
+        case ...80: return .s80
+        case ...100: return .s100
+        case ...120: return .s120
+        case ...140: return .s140
+        case ...160: return .s160
+        case ...170: return .s170
+        case ...200: return .s200
+        default: return .oversize
         }
+    }
+
+    /// Classify from a BoundingBox3D
+    static func classify(boundingBox: BoundingBox3D) -> ShippingSize {
+        let e = boundingBox.extents
+        return classify(lengthMeters: e.x, widthMeters: e.y, heightMeters: e.z)
     }
 }
 

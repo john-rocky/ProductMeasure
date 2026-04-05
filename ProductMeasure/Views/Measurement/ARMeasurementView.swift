@@ -144,25 +144,46 @@ struct ARMeasurementView: View {
 
                         Spacer()
 
-                        // Action button when result is showing
-                        if viewModel.workflowStep == .showingResult {
-                            Button(action: {
-                                viewModel.saveAndReset(mode: measurementMode, unit: measurementUnit)
-                            }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "arrow.counterclockwise")
+                        // Action buttons when result is showing
+                        if viewModel.workflowStep == .showingResult, let result = viewModel.currentMeasurement {
+                            HStack(spacing: 12) {
+                                // Copy dimensions button
+                                Button(action: {
+                                    let dims = measurementUnit.formatDimension(meters: result.length)
+                                        + " × " + measurementUnit.formatDimension(meters: result.width)
+                                        + " × " + measurementUnit.formatDimension(meters: result.height)
+                                    UIPasteboard.general.string = dims
+                                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                }) {
+                                    Image(systemName: "doc.on.doc")
                                         .font(.system(size: 14))
-                                    Text("NEW")
-                                        .font(PMTheme.mono(14, weight: .bold))
+                                        .foregroundColor(PMTheme.cyan)
+                                        .frame(width: 44, height: 44)
+                                        .background(PMTheme.surfaceDark.opacity(0.85))
+                                        .clipShape(Circle())
+                                        .overlay(Circle().strokeBorder(PMTheme.cyan.opacity(0.20), lineWidth: 0.5))
                                 }
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 32)
-                                .padding(.vertical, 12)
-                                .background(PMTheme.green)
-                                .clipShape(Capsule())
-                                .shadow(color: PMTheme.green.opacity(0.4), radius: 8, x: 0, y: 2)
+                                .accessibilityLabel("Copy Dimensions")
+
+                                // NEW button
+                                Button(action: {
+                                    viewModel.saveAndReset(mode: measurementMode, unit: measurementUnit)
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "arrow.counterclockwise")
+                                            .font(.system(size: 14))
+                                        Text("NEW")
+                                            .font(PMTheme.mono(14, weight: .bold))
+                                    }
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 32)
+                                    .padding(.vertical, 12)
+                                    .background(PMTheme.green)
+                                    .clipShape(Capsule())
+                                    .shadow(color: PMTheme.green.opacity(0.4), radius: 8, x: 0, y: 2)
+                                }
+                                .accessibilityLabel("Save and New Measurement")
                             }
-                            .accessibilityLabel("Save and New Measurement")
                         }
 
                         // Error message

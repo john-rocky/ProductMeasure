@@ -845,7 +845,7 @@ class BoxVisualization {
                 DataLine(label: "LENGTH", value: "\(lVal) \(unit)"),
                 DataLine(label: "VOLUME", value: volStr),
                 DataLine(label: "VOL.WT", value: storedUnit.formatVolumetricWeight(cubicMeters: boundingBox.volume)),
-                DataLine(label: "SIZE", value: SizeClass.classify(volumeCubicMeters: boundingBox.volume).rawValue),
+                DataLine(label: "SIZE", value: ShippingSize.classify(boundingBox: boundingBox).rawValue),
             ])
         ]
         if !animateLabelSection, let ld = storedLabelData, !ld.displayFields.isEmpty {
