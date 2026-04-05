@@ -1147,7 +1147,7 @@ class ARMeasurementViewModel: ObservableObject {
                                 let qualityLabel = adjustedResult.quality.overallQuality.rawValue
                                 let pointCount = adjustedResult.quality.pointCount
                                 // Trigger status vignette flash at banner reveal
-                                self.statusVignetteIsNG = self.nextBoxId == 2
+                                self.statusVignetteIsNG = false
                                 self.showStatusVignette = true
 
                                 lb.expandWithDimensions(
@@ -1958,7 +1958,7 @@ class ARMeasurementViewModel: ObservableObject {
             pendingLabelData = labelData
 
             // Trigger status vignette flash
-            statusVignetteIsNG = nextBoxId == 2
+            statusVignetteIsNG = false
             showStatusVignette = true
 
             // Phase B: Expand box billboard with label data at 0.3s delay

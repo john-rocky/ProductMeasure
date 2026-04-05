@@ -21,13 +21,9 @@ struct StatusVignetteView: View {
         isNG ? PMTheme.red : PMTheme.cyan
     }
 
-    private var statusText: String {
-        isNG ? "CHECK REQUIRED" : "CHECK OK"
-    }
+    private var statusText: String { "\u{2713}" }
 
-    private var statusIcon: String {
-        isNG ? "\u{26A0}" : "\u{2713}"
-    }
+    private var statusIcon: String { "" }
 
     var body: some View {
         ZStack {

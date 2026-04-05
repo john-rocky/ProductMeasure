@@ -1,2478 +1,2665 @@
 {
-  "sourceLanguage": "en",
-  "strings": {
-    "--": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "--"
+  "sourceLanguage" : "en",
+  "strings" : {
+    "--" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "--"
           }
         }
       }
     },
-    "(Estimated)": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "（推定値）"
+    "(Estimated)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（推定値）"
           }
         }
       }
     },
-    "%lld": {},
-    "%lld measurement(s)": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld 件の計測"
+    "%lld" : {
+
+    },
+    "%lld BARCODE(S) DETECTED" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld件のバーコードを検出"
+          }
+        }
+      }
+    },
+    "%lld measurement(s)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 件の計測"
+          }
+        }
+      }
+    },
+    "±5-10mm (typical)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "±5-10mm（標準的）"
+          }
+        }
+      }
+    },
+    "3D POINT CLOUD" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3D 点群"
+          }
+        }
+      }
+    },
+    "ABOUT" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアプリについて"
+          }
+        }
+      }
+    },
+    "Accuracy" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "精度"
+          }
+        }
+      }
+    },
+    "ACTION" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アクション"
+          }
+        }
+      }
+    },
+    "Advanced" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "詳細設定"
+          }
+        }
+      }
+    },
+    "ADVANCED" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "詳細設定"
+          }
+        }
+      }
+    },
+    "App Mode" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリモード"
+          }
+        }
+      }
+    },
+    "APP MODE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリモード"
+          }
+        }
+      }
+    },
+    "Are you sure you want to delete this measurement? This action cannot be undone." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この計測を削除しますか？この操作は取り消せません。"
+          }
+        }
+      }
+    },
+    "ARKit" : {
+
+    },
+    "ARKit is not supported on this device" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このデバイスではARKitがサポートされていません"
+          }
+        }
+      }
+    },
+    "Available" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "利用可能"
+          }
+        }
+      }
+    },
+    "Avoid transparent or reflective surfaces" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "透明・反射面を避ける"
+          }
+        }
+      }
+    },
+    "Awaiting..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待機中..."
+          }
+        }
+      }
+    },
+    "BODY" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ボディ"
+          }
+        }
+      }
+    },
+    "Bounding Box Volume" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バウンディングボックス体積"
+          }
+        }
+      }
+    },
+    "Box" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ボックス"
+          }
+        }
+      }
+    },
+    "Box Priority" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ボックス優先"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャンセル"
+          }
+        }
+      }
+    },
+    "Cancel Label Scan" : {
+
+    },
+    "Centimeters (cm)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "センチメートル (cm)"
+          }
+        }
+      }
+    },
+    "CHECK" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認"
+          }
+        }
+      }
+    },
+    "Checking..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認中..."
+          }
+        }
+      }
+    },
+    "Choose your mode" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "モードを選択"
+          }
+        }
+      }
+    },
+    "CLEAR" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "クリア"
+          }
+        }
+      }
+    },
+    "Clear All Measurements" : {
+
+    },
+    "Close" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閉じる"
+          }
+        }
+      }
+    },
+    "CLOSE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "閉じる"
+          }
+        }
+      }
+    },
+    "COMPLETE" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完了"
+          }
+        }
+      }
+    },
+    "CONNECT" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接続"
+          }
+        }
+      }
+    },
+    "Connecting..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接続中..."
+          }
+        }
+      }
+    },
+    "COPIED" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コピー済み"
+          }
+        }
+      }
+    },
+    "COPY" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コピー"
+          }
+        }
+      }
+    },
+    "Copy Dimensions" : {
+
+    },
+    "CSV EXPORT" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CSVエクスポート"
+          }
+        }
+      }
+    },
+    "Data" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データ"
+          }
+        }
+      }
+    },
+    "Date" : {
+      "comment" : "Label for a metadata field displaying the date of a measurement.",
+      "isCommentAutoGenerated" : true
+    },
+    "DEBUG" : {
+
+    },
+    "Debug View" : {
+
+    },
+    "Default Mode" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトモード"
+          }
+        }
+      }
+    },
+    "Delete" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除"
+          }
+        }
+      }
+    },
+    "Delete Measurement" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測の削除"
+          }
+        }
+      }
+    },
+    "Depth Confidence" : {
+      "comment" : "Label for a quality metric indicating the confidence level in the depth of the measured object.",
+      "isCommentAutoGenerated" : true
+    },
+    "Depth Coverage" : {
+      "comment" : "Label for a quality metric indicating the percentage of the object that was detected at a depth of 0.",
+      "isCommentAutoGenerated" : true
+    },
+    "DETAILS" : {
+      "comment" : "Title for the section that displays metadata information about a history entry.",
+      "isCommentAutoGenerated" : true
+    },
+    "DETECTED" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "検出済"
+          }
+        }
+      }
+    },
+    "DEVICE CAPABILITIES" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デバイス機能"
+          }
+        }
+      }
+    },
+    "DIMENSIONS" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "寸法"
+          }
+        }
+      }
+    },
+    "DISPLAY" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示"
+          }
+        }
+      }
+    },
+    "Display Unit" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示単位"
+          }
+        }
+      }
+    },
+    "Distance" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "距離"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完了"
+          }
+        }
+      }
+    },
+    "DONE" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完了"
+          }
+        }
+      }
+    },
+    "Draw a box to select" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ボックスをドラッグして選択"
+          }
+        }
+      }
+    },
+    "Encoding..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エンコード中..."
+          }
+        }
+      }
+    },
+    "Ensure good lighting for accurate depth sensing" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正確な深度センシングのため十分な照明を確保"
+          }
+        }
+      }
+    },
+    "Evaluating..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "評価中..."
+          }
+        }
+      }
+    },
+    "Export" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エクスポート"
+          }
+        }
+      }
+    },
+    "Export All" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてエクスポート"
+          }
+        }
+      }
+    },
+    "EXPORT CSV" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CSVエクスポート"
+          }
+        }
+      }
+    },
+    "Export Format" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エクスポート形式"
+          }
+        }
+      }
+    },
+    "FAILED" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失敗"
+          }
+        }
+      }
+    },
+    "FAILED AT: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "失敗: %@"
+          }
+        }
+      }
+    },
+    "Find the best-fit shipping box for a measured object." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測結果に最適な配送箱を検索します。"
+          }
+        }
+      }
+    },
+    "For irregularly shaped or tilted objects. Full 3D rotation." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不規則な形状や傾いたオブジェクト向け。3D回転対応。"
+          }
+        }
+      }
+    },
+    "Format" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "形式"
+          }
+        }
+      }
+    },
+    "Free Object" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フリーオブジェクト"
+          }
+        }
+      }
+    },
+    "Full workflow: measure → label scan → WMS integration" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測 → ラベルスキャン → WMS連携のフルワークフロー"
+          }
+        }
+      }
+    },
+    "Generating..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成中..."
+          }
+        }
+      }
+    },
+    "Get Started" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "始める"
+          }
+        }
+      }
+    },
+    "Good Lighting" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "十分な照明"
+          }
+        }
+      }
+    },
+    "Height" : {
+      "comment" : "Label for a dimension card in the history detail view.",
+      "isCommentAutoGenerated" : true
+    },
+    "HEIGHT" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高さ"
+          }
+        }
+      }
+    },
+    "High confidence measurement" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高精度計測"
+          }
+        }
+      }
+    },
+    "History" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "履歴"
+          }
+        }
+      }
+    },
+    "https://example.com/api/measurements" : {
+
+    },
+    "ID" : {
+      "comment" : "Label for a metadata field displaying a unique identifier for a measurement.",
+      "isCommentAutoGenerated" : true
+    },
+    "Inches (in)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "インチ (in)"
+          }
+        }
+      }
+    },
+    "Initializing AR..." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AR初期化中..."
+          }
+        }
+      }
+    },
+    "Initializing..." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "初期化中..."
+          }
+        }
+      }
+    },
+    "Invalid URL (requires http or https)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無効なURL（httpまたはhttpsが必要）"
+          }
+        }
+      }
+    },
+    "Keep 0.5-3m distance from objects" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対象物から0.5〜3mの距離を保つ"
+          }
+        }
+      }
+    },
+    "Label" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ラベル"
+          }
+        }
+      }
+    },
+    "LABEL DATA" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ラベルデータ"
+          }
+        }
+      }
+    },
+    "Label sent to printer" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ラベルをプリンターに送信"
+          }
+        }
+      }
+    },
+    "Label sent to printer ✓" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ラベルをプリンターに送信 ✓"
+          }
+        }
+      }
+    },
+    "Length" : {
+      "comment" : "Label for a dimension card in the history detail view.",
+      "isCommentAutoGenerated" : true
+    },
+    "LENGTH" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "長さ"
           }
         }
       }
     },
-    "±5-10mm (typical)": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "±5-10mm（標準的）"
+    "LiDAR Not Available" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LiDARが利用できません"
           }
         }
       }
     },
-    "3D POINT CLOUD": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "3D 点群"
+    "LiDAR One-Tap 3D Measurement" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LiDAR ワンタップ 3D 計測"
           }
         }
       }
     },
-    "ABOUT": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このアプリについて"
+    "LiDAR Sensor" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LiDARセンサー"
           }
         }
       }
     },
-    "Accuracy": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "精度"
+    "Limited tracking" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "トラッキング制限中"
           }
         }
       }
     },
-    "Advanced": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "詳細設定"
+    "LOADING..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込み中..."
           }
         }
       }
     },
-    "ADVANCED": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "詳細設定"
+    "Low confidence - remeasure recommended" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "低精度 - 再計測してください"
           }
         }
       }
     },
-    "App Mode": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "アプリモード"
+    "Make it bigger" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もっと大きく"
           }
         }
       }
     },
-    "APP MODE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "アプリモード"
+    "Mask Preview" : {
+
+    },
+    "Measure" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測"
           }
         }
       }
     },
-    "Are you sure you want to delete this measurement? This action cannot be undone.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "この計測を削除しますか？この操作は取り消せません。"
+    "MEASUREMENT CONSOLE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測コンソール"
           }
         }
       }
     },
-    "ARKit": {},
-    "Available": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "利用可能"
+    "Measurement data will be sent as JSON via HTTP POST to this URL." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測データはJSON形式でこのURLにHTTP POSTで送信されます。"
           }
         }
       }
     },
-    "Bounding Box Volume": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "バウンディングボックス体積"
+    "Measurement Details" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測の詳細"
           }
         }
       }
     },
-    "Cancel": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "キャンセル"
+    "Measurement failed. Try again." : {
+
+    },
+    "MEASUREMENT MODE" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測モード"
           }
         }
       }
     },
-    "CHECK": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "確認"
+    "Measurement:\n%@\nVolume: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測:\n%@\n体積: %@"
           }
         }
       }
     },
-    "Choose your mode": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "モードを選択"
+    "Measurements are estimates based on LiDAR depth sensing. Actual accuracy may vary based on lighting, surface properties, and distance." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測値はLiDAR深度センシングに基づく推定値です。照明、表面特性、距離により精度は異なります。"
           }
         }
       }
     },
-    "CLEAR": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "クリア"
+    "Measurements you take will appear here" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測結果がここに表示されます"
           }
         }
       }
     },
-    "Close": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "閉じる"
+    "Measuring..." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測中..."
           }
         }
       }
     },
-    "CLOSE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "閉じる"
+    "Medium confidence - consider remeasuring" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中精度 - 再計測を推奨"
           }
         }
       }
     },
-    "COMPLETE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "完了"
+    "Millimeters (mm)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ミリメートル (mm)"
           }
         }
       }
+    },
+    "Mode" : {
+
     },
-    "COPIED": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "コピー済み"
+    "Move device slower" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デバイスをゆっくり動かしてください"
           }
         }
       }
     },
-    "COPY": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "コピー"
+    "Move device slowly for better tracking" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "トラッキング向上のためゆっくり動かす"
           }
         }
       }
     },
-    "CSV EXPORT": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CSVエクスポート"
+    "NEW" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NEW"
           }
         }
       }
     },
-    "Data": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "データ"
+    "Next" : {
+      "comment" : "A button label that says \"Next\" when onboarding.",
+      "isCommentAutoGenerated" : true
+    },
+    "No image available" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画像がありません"
           }
         }
       }
     },
-    "DEBUG": {},
-    "Debug View": {},
-    "Default Mode": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "デフォルトモード"
+    "No label detected. Try again." : {
+      "comment" : "Error message shown when the label reader fails to detect a label near the user's tap.",
+      "isCommentAutoGenerated" : true
+    },
+    "No Measurements" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測データなし"
           }
         }
       }
     },
-    "Delete": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "削除"
+    "No suitable box" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "適切な箱がありません"
           }
         }
       }
     },
-    "Delete Measurement": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測の削除"
+    "Not Available" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "利用不可"
           }
         }
       }
     },
-    "DEVICE CAPABILITIES": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "デバイス機能"
+    "Not Supported" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非対応"
           }
         }
       }
+    },
+    "NOTES" : {
+      "comment" : "Title for the section that allows the user to add or edit notes about a measurement.",
+      "isCommentAutoGenerated" : true
     },
-    "DISPLAY": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "表示"
+    "Object Surface" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "物体の表面"
           }
         }
       }
     },
-    "Display Unit": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "表示単位"
+    "OK" : {
+
+    },
+    "Optimized for box-shaped objects on surfaces. Locks vertical axis." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平面上の箱状オブジェクトに最適化。垂直軸を固定。"
           }
         }
       }
     },
-    "Done": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "完了"
+    "OUT OF SPEC" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "規格外"
           }
         }
       }
     },
-    "DONE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "完了"
+    "Overall Quality" : {
+      "comment" : "Label for a quality metric indicating the overall quality of the measured object.",
+      "isCommentAutoGenerated" : true
+    },
+    "Pipeline" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パイプライン"
           }
         }
       }
     },
-    "Export": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "エクスポート"
+    "Pipeline Diagnostics" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パイプライン診断"
           }
         }
       }
     },
-    "Export All": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "すべてエクスポート"
+    "PIPELINE VERSION" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パイプラインバージョン"
           }
         }
       }
     },
-    "EXPORT CSV": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CSVエクスポート"
+    "Pipeline: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パイプライン: %@"
           }
         }
       }
     },
-    "Export Format": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "エクスポート形式"
+    "Point at a label and tap" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ラベルに向けてタップ"
           }
         }
       }
     },
-    "FAILED": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "失敗"
+    "Point at an object and tap to measure its dimensions" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対象物に向けてタップすると寸法を計測できます"
           }
         }
       }
+    },
+    "Point at any object and tap to instantly measure its dimensions with LiDAR." : {
+      "comment" : "Subtitle for the first onboarding step, describing how to use the app.",
+      "isCommentAutoGenerated" : true
     },
-    "FAILED AT: %@": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "失敗: %@"
+    "Point at more textured surfaces" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テクスチャのある面に向けてください"
           }
         }
       }
     },
-    "Format": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "形式"
+    "Point Count" : {
+      "comment" : "Label describing the number of points in a 3D model.",
+      "isCommentAutoGenerated" : true
+    },
+    "POINTS" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポイント数"
           }
         }
       }
     },
-    "Get Started": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "始める"
+    "PRINT" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "印刷"
           }
         }
       }
+    },
+    "Privacy Policy" : {
+
     },
-    "Good Lighting": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "十分な照明"
+    "Processing..." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "処理中..."
           }
         }
       }
     },
-    "History": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "履歴"
+    "QUALITY" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "品質"
           }
         }
       }
     },
-    "https://example.com/api/measurements": {},
-    "Invalid URL (requires http or https)": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "無効なURL（httpまたはhttpsが必要）"
+    "QUALITY METRICS" : {
+      "comment" : "Title for a section that displays quality metrics related to a measured object.",
+      "isCommentAutoGenerated" : true
+    },
+    "Quick measurement with AR visualization. Tap to measure, results saved to history." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AR計測。タップで計測、結果は履歴に保存。"
           }
         }
       }
     },
-    "LABEL DATA": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ラベルデータ"
+    "RE-MEASURE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再計測"
           }
         }
       }
     },
-    "LiDAR Not Available": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "LiDARが利用できません"
+    "Re-measure required" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再計測が必要"
           }
         }
       }
     },
-    "LiDAR One-Tap 3D Measurement": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "LiDAR ワンタップ 3D 計測"
+    "Read barcodes and shipping labels — attach label data to measurements." : {
+
+    },
+    "Read labels only. No measurement or history." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ラベル読取のみ。計測・履歴なし。"
           }
         }
       }
     },
-    "LiDAR Sensor": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "LiDARセンサー"
+    "READING..." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み取り中..."
           }
         }
       }
     },
-    "LOADING...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "読み込み中..."
+    "Ready to measure" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測準備完了"
           }
         }
       }
     },
-    "Mask Preview": {},
-    "Measure": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測"
+    "REASON" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原因"
           }
         }
       }
     },
-    "MEASUREMENT CONSOLE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測コンソール"
+    "RECEIPT" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "受領証"
           }
         }
       }
     },
-    "Measurement data will be sent as JSON via HTTP POST to this URL.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測データはJSON形式でこのURLにHTTP POSTで送信されます。"
+    "Refine" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "精密化"
           }
         }
       }
     },
-    "Measurement Details": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測の詳細"
+    "Refine from a different angle" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の角度から精密化"
           }
         }
       }
     },
-    "MEASUREMENT MODE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測モード"
+    "Refinement failed — tap again (%lld left)" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "精密化に失敗 — もう一度タップ（残り%lld回）"
           }
         }
       }
     },
-    "Measurements are estimates based on LiDAR depth sensing. Actual accuracy may vary based on lighting, surface properties, and distance.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測値はLiDAR深度センシングに基づく推定値です。照明、表面特性、距離により精度は異なります。"
+    "REGISTRATION FAILED" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登録失敗"
           }
         }
       }
     },
-    "Measurements you take will appear here": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測結果がここに表示されます"
+    "Release to select" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "離して選択"
           }
         }
       }
     },
-    "Measuring...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測中..."
+    "Relocalizing..." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再ローカライズ中..."
           }
         }
       }
     },
-    "NEW": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "NEW"
+    "REQUEST" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リクエスト"
           }
         }
       }
     },
-    "No image available": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "画像がありません"
+    "RESCAN" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再スキャン"
           }
         }
       }
     },
-    "No Measurements": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測データなし"
+    "Resolving..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解決中..."
           }
         }
       }
     },
-    "Not Available": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "利用不可"
+    "RESPONSE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レスポンス"
           }
         }
       }
     },
-    "Not Supported": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "非対応"
+    "Result" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結果"
           }
         }
       }
     },
-    "OK": {},
-    "Pipeline": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "パイプライン"
+    "Review" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認"
           }
         }
       }
+    },
+    "Review your measurements, add notes, and export as CSV or JSON." : {
+      "comment" : "Description of the \"Save & Export\" step in the onboarding flow.",
+      "isCommentAutoGenerated" : true
     },
-    "Pipeline Diagnostics": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "パイプライン診断"
+    "Rounding" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "丸め"
           }
         }
       }
     },
-    "PIPELINE VERSION": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "パイプラインバージョン"
+    "Save" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
           }
         }
       }
     },
-    "Pipeline: %@": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "パイプライン: %@"
+    "SAVE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
           }
         }
       }
     },
-    "Point at an object and tap to measure its dimensions": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "対象物に向けてタップすると寸法を計測できます"
+    "Save & Export" : {
+      "comment" : "Title of a section in the onboarding view related to saving and exporting measurements.",
+      "isCommentAutoGenerated" : true
+    },
+    "Save and New Measurement" : {
+
+    },
+    "Scan" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スキャン"
           }
         }
       }
+    },
+    "Scan Label" : {
+
     },
-    "Processing...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "処理中..."
+    "Scan Labels" : {
+
+    },
+    "Scanning Tips" : {
+
+    },
+    "SCANNING TIPS" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スキャンのコツ"
           }
         }
       }
     },
-    "RE-MEASURE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "再計測"
+    "SCANNING..." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スキャン中..."
           }
         }
       }
     },
-    "READING...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "読み取り中..."
+    "Search measurements" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測データを検索"
           }
         }
       }
+    },
+    "Segmentation Mask (Green) + Tap Point (Red)" : {
+
     },
-    "RESCAN": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "再スキャン"
+    "Send" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信"
           }
         }
       }
     },
-    "Rounding": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "丸め"
+    "Send All" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべて送信"
           }
         }
       }
     },
-    "Save": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存"
+    "SEND ENDPOINT" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信先"
           }
         }
       }
     },
-    "SAVE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存"
+    "Send failed: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信に失敗しました: %@"
           }
         }
       }
     },
-    "SCANNING TIPS": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スキャンのコツ"
+    "Sending..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信中..."
           }
         }
       }
     },
-    "Search measurements": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測データを検索"
+    "Sent %lld measurement(s) successfully (HTTP %lld)." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld件の計測を送信しました（HTTP %lld）。"
           }
         }
       }
     },
-    "Segmentation Mask (Green) + Tap Point (Red)": {},
-    "Send": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "送信"
+    "Sent successfully (HTTP %lld)." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信しました（HTTP %lld）。"
           }
         }
       }
     },
-    "Send All": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "すべて送信"
+    "Session failed: %@" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "セッションエラー: %@"
           }
         }
       }
     },
-    "SEND ENDPOINT": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "送信先"
+    "Session interrupted" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "セッションが中断されました"
           }
         }
       }
     },
-    "setting.showScanningTips": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Scanning Tips Button"
+    "setting.showScanningTips" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Scanning Tips Button"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スキャンのコツボタンを表示"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スキャンのコツボタンを表示"
           }
         }
       }
     },
-    "Settings": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "設定"
+    "Settings" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定"
           }
         }
       }
     },
-    "Share": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "共有"
+    "Share" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有"
           }
         }
       }
     },
-    "SHARE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "共有"
+    "SHARE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有"
           }
         }
       }
     },
-    "Share Measurement": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測データの共有"
+    "Share Measurement" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "計測データの共有"
           }
         }
       }
     },
-    "Show Mask Preview": {},
-    "Show Quality Indicators": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "品質インジケータを表示"
+    "Shipping" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配送"
           }
         }
       }
     },
-    "SIZE ALERT": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "サイズアラート"
+    "Show Mask Preview" : {
+
+    },
+    "Show Quality Indicators" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "品質インジケータを表示"
           }
         }
       }
     },
-    "SKIP": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スキップ"
+    "Show Shipping Size" : {
+
+    },
+    "SIZE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サイズ"
           }
         }
       }
     },
-    "SnapMeasure": {},
-    "Steady Movement": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ゆっくり動かす"
+    "SIZE ALERT" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サイズアラート"
           }
         }
       }
     },
-    "SUCCESS": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "成功"
+    "Size error detected" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サイズエラー検出"
           }
         }
       }
     },
-    "Supported": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "対応"
+    "SKIP" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スキップ"
           }
         }
       }
     },
-    "Tap 1": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "タップ 1"
+    "SnapMeasure" : {
+
+    },
+    "Spooling..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スプール中..."
           }
         }
       }
     },
-    "Tap 2": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "タップ 2"
+    "STATUS" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ステータス"
           }
         }
       }
     },
-    "Tap to Measure": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "タップして計測"
+    "Steady Movement" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゆっくり動かす"
           }
         }
       }
     },
-    "This app requires a device with a LiDAR sensor for accurate 3D measurements. Please use an iPhone Pro or iPad Pro with LiDAR.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正確な3D計測にはLiDARセンサー搭載デバイスが必要です。iPhone ProまたはLiDAR搭載のiPad Proをご使用ください。"
+    "SUCCESS" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成功"
           }
         }
       }
     },
-    "tip.avoid.above.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Poor height estimation without side faces"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "側面がなく高さの推定精度が低い"
+    "Supported" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対応"
           }
         }
       }
     },
-    "tip.avoid.above.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Directly Above"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "真上から"
+    "Tap" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップ"
           }
         }
       }
     },
-    "tip.avoid.distance.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stay within 20cm-2m range for small objects"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "小さい物体は20cm〜2mの範囲内で"
+    "Tap 1" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップ 1"
           }
         }
       }
     },
-    "tip.avoid.distance.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Distance Limits"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "距離の制限"
+    "Tap 2" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップ 2"
           }
         }
       }
     },
-    "tip.avoid.moving.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Point density drops with excessive movement between taps"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "タップ間の移動が大きいと点群密度が低下"
+    "Tap again from a different angle" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の角度からもう一度タップ"
           }
         }
       }
     },
-    "tip.avoid.moving.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Moving Too Far"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "大きく動く"
+    "Tap on an object to measure" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オブジェクトをタップして計測"
           }
         }
       }
     },
-    "tip.avoid.opposite.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "May fail the 30% overlap check"
+    "Tap to Measure" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして計測"
+          }
+        }
+      }
+    },
+    "This app requires a device with a LiDAR sensor for accurate 3D measurements. Please use an iPhone Pro or iPad Pro with LiDAR." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正確な3D計測にはLiDARセンサー搭載デバイスが必要です。iPhone ProまたはLiDAR搭載のiPad Proをご使用ください。"
+          }
+        }
+      }
+    },
+    "tip.avoid.above.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Poor height estimation without side faces"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "30%の重複検証に失敗する可能性がある"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "側面がなく高さの推定精度が低い"
           }
         }
       }
     },
-    "tip.avoid.opposite.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Opposite Side (180°)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "真反対側 (180°)"
-          }
-        }
-      }
-    },
-    "tip.avoid.sameangle.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No new point cloud data if both taps are identical"
+    "tip.avoid.above.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Directly Above"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同じ角度では新しい点群が得られない"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "真上から"
           }
         }
       }
     },
-    "tip.avoid.sameangle.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Same Angle Twice"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同じ角度で2回"
-          }
-        }
-      }
-    },
-    "tip.avoid.surface.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Transparent or reflective surfaces cause poor depth"
+    "tip.avoid.distance.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stay within 20cm-2m range for small objects"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "透明・反射面は深度精度を低下させる"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小さい物体は20cm〜2mの範囲内で"
           }
         }
       }
     },
-    "tip.avoid.surface.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bad Surfaces"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "悪い表面"
-          }
-        }
-      }
-    },
-    "tip.general.angle.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hold device at 15-30° downward from horizontal"
+    "tip.avoid.distance.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Distance Limits"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "水平から15〜30°下向きに端末を構える"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "距離の制限"
           }
         }
       }
     },
-    "tip.general.angle.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Optimal Angle"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最適な角度"
-          }
-        }
-      }
-    },
-    "tip.general.distance.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stay 30-60cm from the object"
+    "tip.avoid.moving.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Point density drops with excessive movement between taps"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "対象から30〜60cmの距離を保つ"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップ間の移動が大きいと点群密度が低下"
           }
         }
       }
     },
-    "tip.general.distance.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keep Distance"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "距離を保つ"
-          }
-        }
-      }
-    },
-    "tip.general.face.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keep 0-30° angle of incidence to surfaces for best accuracy"
+    "tip.avoid.moving.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moving Too Far"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "面への入射角を0〜30°に保つと精度が高い"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大きく動く"
           }
         }
       }
     },
-    "tip.general.face.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Face Surfaces"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "面に正対する"
-          }
-        }
-      }
-    },
-    "tip.general.steady.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wait 2-3 seconds before tapping for depth accumulation"
+    "tip.avoid.opposite.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "May fail the 30% overlap check"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "タップ前に2〜3秒静止して深度を蓄積"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30%の重複検証に失敗する可能性がある"
           }
         }
       }
     },
-    "tip.general.steady.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hold Steady"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "静止する"
-          }
-        }
-      }
-    },
-    "tip.general.steep.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Angles over 60° significantly reduce depth confidence"
+    "tip.avoid.opposite.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opposite Side (180°)"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "60°以上の角度は深度の信頼性が大きく低下する"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "真反対側 (180°)"
           }
         }
       }
     },
-    "tip.general.steep.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Avoid Steep Angles"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "急角度を避ける"
-          }
-        }
-      }
-    },
-    "tip.nav.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Scanning Tips"
+    "tip.avoid.sameangle.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No new point cloud data if both taps are identical"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スキャンのコツ"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ角度では新しい点群が得られない"
           }
         }
       }
     },
-    "tip.section.avoid": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "What to Avoid"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "避けるべきこと"
-          }
-        }
-      }
-    },
-    "tip.section.general": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "General Scanning Tips"
+    "tip.avoid.sameangle.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Same Angle Twice"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "基本的なスキャンのコツ"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ角度で2回"
           }
         }
       }
     },
-    "tip.section.twotap": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Two-Tap Strategy"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "2タップ戦略"
-          }
-        }
-      }
-    },
-    "tip.twotap.first.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Capture front + top faces from front, slightly above"
+    "tip.avoid.surface.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transparent or reflective surfaces cause poor depth"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正面やや上から前面＋上面を捉える"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "透明・反射面は深度精度を低下させる"
           }
         }
       }
     },
-    "tip.twotap.first.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "First Tap"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1回目のタップ"
-          }
-        }
-      }
-    },
-    "tip.twotap.overlap.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Top face visible in both taps ensures overlap validation passes"
+    "tip.avoid.surface.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bad Surfaces"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "両タップで上面が見えることで重複検証をクリア"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悪い表面"
           }
         }
       }
     },
-    "tip.twotap.overlap.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Top Face Overlap"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上面の重なり"
-          }
-        }
-      }
-    },
-    "tip.twotap.sameangle.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keep the same 15-30° downward angle for both taps"
+    "tip.general.angle.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold device at 15-30° downward from horizontal"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "両タップとも15〜30°の見下ろし角度を維持"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "水平から15〜30°下向きに端末を構える"
           }
         }
       }
     },
-    "tip.twotap.sameangle.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Same Vertical Angle"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同じ垂直角度"
-          }
-        }
-      }
-    },
-    "tip.twotap.samedist.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Maintain the same distance for consistent point density"
+    "tip.general.angle.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optimal Angle"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同じ距離を保ち点群密度を一定に"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最適な角度"
           }
         }
       }
     },
-    "tip.twotap.samedist.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Same Distance"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同じ距離"
-          }
-        }
-      }
-    },
-    "tip.twotap.second.desc": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Move 60-90° around the object to capture side + top"
+    "tip.general.distance.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stay 30-60cm from the object"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "60〜90°横に回り込み側面＋上面を捉える"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対象から30〜60cmの距離を保つ"
           }
         }
       }
     },
-    "tip.twotap.second.title": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Second Tap"
+    "tip.general.distance.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep Distance"
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "2回目のタップ"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "距離を保つ"
           }
         }
       }
     },
-    "TIPS FOR ACCURATE MEASUREMENTS": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正確な計測のコツ"
+    "tip.general.face.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep 0-30° angle of incidence to surfaces for best accuracy"
           }
-        }
-      }
-    },
-    "UNITS": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "単位"
-          }
-        }
-      }
-    },
-    "Valid URL": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有効なURL"
-          }
-        }
-      }
-    },
-    "Version": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "バージョン"
-          }
-        }
-      }
-    },
-    "Volume": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "体積"
-          }
-        }
-      }
-    },
-    "Ensure good lighting for accurate depth sensing": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正確な深度センシングのため十分な照明を確保"
-          }
-        }
-      }
-    },
-    "Move device slowly for better tracking": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "トラッキング向上のためゆっくり動かす"
-          }
-        }
-      }
-    },
-    "Object Surface": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "物体の表面"
-          }
-        }
-      }
-    },
-    "Avoid transparent or reflective surfaces": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "透明・反射面を避ける"
-          }
-        }
-      }
-    },
-    "Distance": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "距離"
-          }
-        }
-      }
-    },
-    "Keep 0.5-3m distance from objects": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "対象物から0.5〜3mの距離を保つ"
-          }
-        }
-      }
-    },
-    "Initializing...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "初期化中..."
-          }
-        }
-      }
-    },
-    "ARKit is not supported on this device": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このデバイスではARKitがサポートされていません"
-          }
-        }
-      }
-    },
-    "Session failed: %@": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "セッションエラー: %@"
-          }
-        }
-      }
-    },
-    "Session interrupted": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "セッションが中断されました"
-          }
-        }
-      }
-    },
-    "Tracking not available": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "トラッキング利用不可"
-          }
-        }
-      }
-    },
-    "Initializing AR...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "AR初期化中..."
-          }
-        }
-      }
-    },
-    "Move device slower": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "デバイスをゆっくり動かしてください"
-          }
-        }
-      }
-    },
-    "Point at more textured surfaces": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "テクスチャのある面に向けてください"
-          }
-        }
-      }
-    },
-    "Relocalizing...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "再ローカライズ中..."
-          }
-        }
-      }
-    },
-    "Limited tracking": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "トラッキング制限中"
-          }
-        }
-      }
-    },
-    "Ready to measure": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測準備完了"
-          }
-        }
-      }
-    },
-    "Warehouse": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "倉庫"
-          }
-        }
-      }
-    },
-    "Shipping": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "配送"
-          }
-        }
-      }
-    },
-    "Label": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ラベル"
-          }
-        }
-      }
-    },
-    "Full workflow: measure → label scan → WMS integration": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測 → ラベルスキャン → WMS連携のフルワークフロー"
-          }
-        }
-      }
-    },
-    "Find the best-fit shipping box for a measured object.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測結果に最適な配送箱を検索します。"
-          }
-        }
-      }
-    },
-    "Quick measurement with AR visualization. Tap to measure, results saved to history.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "AR計測。タップで計測、結果は履歴に保存。"
-          }
-        }
-      }
-    },
-    "Read labels only. No measurement or history.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ラベル読取のみ。計測・履歴なし。"
-          }
-        }
-      }
-    },
-    "Millimeters (mm)": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ミリメートル (mm)"
-          }
-        }
-      }
-    },
-    "Centimeters (cm)": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "センチメートル (cm)"
-          }
-        }
-      }
-    },
-    "Inches (in)": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "インチ (in)"
-          }
-        }
-      }
-    },
-    "Box Priority": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ボックス優先"
-          }
-        }
-      }
-    },
-    "Free Object": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "フリーオブジェクト"
-          }
-        }
-      }
-    },
-    "Optimized for box-shaped objects on surfaces. Locks vertical axis.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "平面上の箱状オブジェクトに最適化。垂直軸を固定。"
-          }
-        }
-      }
-    },
-    "For irregularly shaped or tilted objects. Full 3D rotation.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "不規則な形状や傾いたオブジェクト向け。3D回転対応。"
-          }
-        }
-      }
-    },
-    "Tap": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "タップ"
-          }
-        }
-      }
-    },
-    "Box": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ボックス"
-          }
-        }
-      }
-    },
-    "High confidence measurement": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "高精度計測"
-          }
-        }
-      }
-    },
-    "Medium confidence - consider remeasuring": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "中精度 - 再計測を推奨"
-          }
-        }
-      }
-    },
-    "Low confidence - remeasure recommended": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "低精度 - 再計測してください"
-          }
-        }
-      }
-    },
-    "Tap on an object to measure": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "オブジェクトをタップして計測"
-          }
-        }
-      }
-    },
-    "Draw a box to select": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ボックスをドラッグして選択"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "面への入射角を0〜30°に保つと精度が高い"
           }
         }
       }
     },
-    "Refine from a different angle": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "別の角度から精密化"
+    "tip.general.face.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Face Surfaces"
           }
-        }
-      }
-    },
-    "Tap again from a different angle": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "別の角度からもう一度タップ"
-          }
-        }
-      }
-    },
-    "Point at a label and tap": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ラベルに向けてタップ"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "面に正対する"
           }
         }
       }
     },
-    "Release to select": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "離して選択"
+    "tip.general.steady.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wait 2-3 seconds before tapping for depth accumulation"
           }
-        }
-      }
-    },
-    "Make it bigger": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "もっと大きく"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップ前に2〜3秒静止して深度を蓄積"
           }
         }
       }
     },
-    "Refinement failed — tap again (%lld left)": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "精密化に失敗 — もう一度タップ（残り%lld回）"
+    "tip.general.steady.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold Steady"
           }
-        }
-      }
-    },
-    "Sent %lld measurement(s) successfully (HTTP %lld).": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld件の計測を送信しました（HTTP %lld）。"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静止する"
           }
         }
       }
     },
-    "Send failed: %@": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "送信に失敗しました: %@"
+    "tip.general.steep.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angles over 60° significantly reduce depth confidence"
           }
-        }
-      }
-    },
-    "Sent successfully (HTTP %lld).": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "送信しました（HTTP %lld）。"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60°以上の角度は深度の信頼性が大きく低下する"
           }
         }
       }
     },
-    "Measurement:\n%@\nVolume: %@": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "計測:\n%@\n体積: %@"
+    "tip.general.steep.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avoid Steep Angles"
           }
-        }
-      }
-    },
-    "Refine": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "精密化"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "急角度を避ける"
           }
         }
       }
     },
-    "Review": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "確認"
+    "tip.nav.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scanning Tips"
           }
-        }
-      }
-    },
-    "Result": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "結果"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スキャンのコツ"
           }
         }
       }
     },
-    "Scan": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スキャン"
+    "tip.section.avoid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What to Avoid"
           }
-        }
-      }
-    },
-    "SCANNING...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スキャン中..."
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "避けるべきこと"
           }
         }
       }
     },
-    "DETECTED": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "検出済"
+    "tip.section.general" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "General Scanning Tips"
           }
-        }
-      }
-    },
-    "%lld BARCODE(S) DETECTED": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld件のバーコードを検出"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "基本的なスキャンのコツ"
           }
         }
       }
     },
-    "No suitable box": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "適切な箱がありません"
+    "tip.section.twotap" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Two-Tap Strategy"
           }
-        }
-      }
-    },
-    "WMS REGISTRATION": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "WMS登録"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2タップ戦略"
           }
         }
       }
     },
-    "DIMENSIONS": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "寸法"
+    "tip.twotap.first.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Capture front + top faces from front, slightly above"
           }
-        }
-      }
-    },
-    "QUALITY": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "品質"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正面やや上から前面＋上面を捉える"
           }
         }
       }
     },
-    "STATUS": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ステータス"
+    "tip.twotap.first.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First Tap"
           }
-        }
-      }
-    },
-    "REASON": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "原因"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1回目のタップ"
           }
         }
       }
     },
-    "ACTION": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "アクション"
+    "tip.twotap.overlap.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Top face visible in both taps ensures overlap validation passes"
           }
-        }
-      }
-    },
-    "CONNECT": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "接続"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "両タップで上面が見えることで重複検証をクリア"
           }
         }
       }
     },
-    "REQUEST": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "リクエスト"
+    "tip.twotap.overlap.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Top Face Overlap"
           }
-        }
-      }
-    },
-    "BODY": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ボディ"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上面の重なり"
           }
         }
       }
     },
-    "RESPONSE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "レスポンス"
+    "tip.twotap.sameangle.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep the same 15-30° downward angle for both taps"
           }
-        }
-      }
-    },
-    "RECEIPT": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "受領証"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "両タップとも15〜30°の見下ろし角度を維持"
           }
         }
       }
     },
-    "PRINT": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "印刷"
+    "tip.twotap.sameangle.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Same Vertical Angle"
           }
-        }
-      }
-    },
-    "WIDTH": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "幅"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ垂直角度"
           }
         }
       }
     },
-    "HEIGHT": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "高さ"
+    "tip.twotap.samedist.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maintain the same distance for consistent point density"
           }
-        }
-      }
-    },
-    "LENGTH": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "長さ"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ距離を保ち点群密度を一定に"
           }
         }
       }
     },
-    "VOLUME": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "体積"
+    "tip.twotap.samedist.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Same Distance"
           }
-        }
-      }
-    },
-    "SIZE": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "サイズ"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ距離"
           }
         }
       }
     },
-    "POINTS": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ポイント数"
+    "tip.twotap.second.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Move 60-90° around the object to capture side + top"
           }
-        }
-      }
-    },
-    "OUT OF SPEC": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "規格外"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "60〜90°横に回り込み側面＋上面を捉える"
           }
         }
       }
     },
-    "REGISTRATION FAILED": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "登録失敗"
+    "tip.twotap.second.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Second Tap"
           }
-        }
-      }
-    },
-    "Size error detected": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "サイズエラー検出"
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2回目のタップ"
           }
         }
       }
     },
-    "Re-measure required": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "再計測が必要"
+    "TIPS FOR ACCURATE MEASUREMENTS" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正確な計測のコツ"
           }
         }
       }
     },
-    "Checking...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "確認中..."
+    "Tracking not available" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "トラッキング利用不可"
           }
         }
       }
     },
-    "Evaluating...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "評価中..."
-          }
-        }
-      }
+    "Tracking State" : {
+      "comment" : "Label for the tracking state in the quality metrics section of the history detail view.",
+      "isCommentAutoGenerated" : true
     },
-    "Resolving...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "解決中..."
+    "UNITS" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "単位"
           }
         }
       }
     },
-    "Connecting...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "接続中..."
+    "Valid URL" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有効なURL"
           }
         }
       }
     },
-    "Sending...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "送信中..."
+    "Version" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バージョン"
           }
         }
       }
     },
-    "Encoding...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "エンコード中..."
+    "Volume" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "体積"
           }
         }
       }
     },
-    "Awaiting...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "待機中..."
+    "VOLUME" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "体積"
           }
         }
       }
     },
-    "Generating...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "生成中..."
+    "Warehouse" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "倉庫"
           }
         }
       }
     },
-    "Spooling...": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スプール中..."
-          }
-        }
-      }
+    "Width" : {
+      "comment" : "Label for the width dimension card in the history detail view.",
+      "isCommentAutoGenerated" : true
     },
-    "Label sent to printer": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ラベルをプリンターに送信"
+    "WIDTH" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "幅"
           }
         }
       }
     },
-    "Label sent to printer ✓": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ラベルをプリンターに送信 ✓"
+    "WMS REGISTRATION" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WMS登録"
           }
         }
       }
     }
   },
-  "version": "1.1"
+  "version" : "1.1"
 }

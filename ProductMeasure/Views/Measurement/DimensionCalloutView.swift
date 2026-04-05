@@ -17,7 +17,7 @@ struct DimensionCalloutView: View {
     let targetPosition: CGPoint
     let screenSize: CGSize
 
-    private var accentColor: Color { boxId == 2 ? PMTheme.red : PMTheme.cyan }
+    private var accentColor: Color { PMTheme.cyan }
 
     private let cardWidth: CGFloat = 160
 

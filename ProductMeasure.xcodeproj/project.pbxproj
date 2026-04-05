@@ -7,13 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		001000152 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 001000153 /* PrivacyInfo.xcprivacy */; };
-		001000154 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000155 /* OnboardingView.swift */; };
 		001000001 /* ProductMeasureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000002 /* ProductMeasureApp.swift */; };
 		001000003 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000004 /* MainTabView.swift */; };
 		001000005 /* ARMeasurementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000006 /* ARMeasurementView.swift */; };
-		001000138 /* ARMeasurementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000139 /* ARMeasurementViewModel.swift */; };
-		001000140 /* ARMeasurementHelperViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000141 /* ARMeasurementHelperViews.swift */; };
 		001000007 /* ARViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000008 /* ARViewContainer.swift */; };
 		001000009 /* BoxVisualization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000010 /* BoxVisualization.swift */; };
 		001000011 /* MeasurementOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000012 /* MeasurementOverlay.swift */; };
@@ -31,7 +27,6 @@
 		001000035 /* BoundingBoxEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000036 /* BoundingBoxEstimator.swift */; };
 		001000037 /* MeasurementCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000038 /* MeasurementCalculator.swift */; };
 		001000041 /* ExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000042 /* ExportService.swift */; };
-		001000150 /* MeasurementSendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000151 /* MeasurementSendService.swift */; };
 		001000043 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000044 /* Constants.swift */; };
 		001000045 /* LiDARChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000046 /* LiDARChecker.swift */; };
 		001000047 /* simd+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000048 /* simd+Extensions.swift */; };
@@ -52,29 +47,30 @@
 		001000102 /* DimensionCalloutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000103 /* DimensionCalloutView.swift */; };
 		001000104 /* LabelData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000105 /* LabelData.swift */; };
 		001000106 /* LabelReaderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000107 /* LabelReaderService.swift */; };
-		001000126 /* ShareActivityItemSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000127 /* ShareActivityItemSource.swift */; };
 		001000108 /* LabelLiftAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000109 /* LabelLiftAnimation.swift */; };
-		001000122 /* LabelBillboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000123 /* LabelBillboard.swift */; };
 		001000110 /* LabelResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000111 /* LabelResultView.swift */; };
 		001000112 /* LabelScanBracketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000113 /* LabelScanBracketsView.swift */; };
 		001000120 /* BarcodeScanEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000121 /* BarcodeScanEffectView.swift */; };
+		001000122 /* LabelBillboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000123 /* LabelBillboard.swift */; };
 		001000124 /* StatusVignetteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000125 /* StatusVignetteView.swift */; };
+		001000126 /* ShareActivityItemSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000127 /* ShareActivityItemSource.swift */; };
 		001000134 /* ScanningTipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000135 /* ScanningTipsView.swift */; };
 		001000136 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 001000137 /* Localizable.xcstrings */; };
+		001000138 /* ARMeasurementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000139 /* ARMeasurementViewModel.swift */; };
+		001000140 /* ARMeasurementHelperViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000141 /* ARMeasurementHelperViews.swift */; };
 		001000143 /* PipelineDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000142 /* PipelineDiagnostics.swift */; };
 		001000145 /* PipelineDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000144 /* PipelineDiagnosticsView.swift */; };
 		001000146 /* PipelinePointCloudCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000147 /* PipelinePointCloudCapture.swift */; };
 		001000148 /* StagePointCloudRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000149 /* StagePointCloudRenderer.swift */; };
+		001000150 /* MeasurementSendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000151 /* MeasurementSendService.swift */; };
+		001000152 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 001000153 /* PrivacyInfo.xcprivacy */; };
+		001000154 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000155 /* OnboardingView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		001000153 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		001000155 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		001000002 /* ProductMeasureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductMeasureApp.swift; sourceTree = "<group>"; };
 		001000004 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		001000006 /* ARMeasurementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementView.swift; sourceTree = "<group>"; };
-		001000139 /* ARMeasurementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementViewModel.swift; sourceTree = "<group>"; };
-		001000141 /* ARMeasurementHelperViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementHelperViews.swift; sourceTree = "<group>"; };
 		001000008 /* ARViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARViewContainer.swift; sourceTree = "<group>"; };
 		001000010 /* BoxVisualization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxVisualization.swift; sourceTree = "<group>"; };
 		001000012 /* MeasurementOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementOverlay.swift; sourceTree = "<group>"; };
@@ -92,7 +88,6 @@
 		001000036 /* BoundingBoxEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundingBoxEstimator.swift; sourceTree = "<group>"; };
 		001000038 /* MeasurementCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementCalculator.swift; sourceTree = "<group>"; };
 		001000042 /* ExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportService.swift; sourceTree = "<group>"; };
-		001000151 /* MeasurementSendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementSendService.swift; sourceTree = "<group>"; };
 		001000044 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		001000046 /* LiDARChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiDARChecker.swift; sourceTree = "<group>"; };
 		001000048 /* simd+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "simd+Extensions.swift"; sourceTree = "<group>"; };
@@ -115,19 +110,24 @@
 		001000103 /* DimensionCalloutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DimensionCalloutView.swift; sourceTree = "<group>"; };
 		001000105 /* LabelData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelData.swift; sourceTree = "<group>"; };
 		001000107 /* LabelReaderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelReaderService.swift; sourceTree = "<group>"; };
-		001000127 /* ShareActivityItemSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareActivityItemSource.swift; sourceTree = "<group>"; };
 		001000109 /* LabelLiftAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelLiftAnimation.swift; sourceTree = "<group>"; };
-		001000123 /* LabelBillboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelBillboard.swift; sourceTree = "<group>"; };
 		001000111 /* LabelResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelResultView.swift; sourceTree = "<group>"; };
 		001000113 /* LabelScanBracketsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelScanBracketsView.swift; sourceTree = "<group>"; };
 		001000121 /* BarcodeScanEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScanEffectView.swift; sourceTree = "<group>"; };
+		001000123 /* LabelBillboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelBillboard.swift; sourceTree = "<group>"; };
 		001000125 /* StatusVignetteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusVignetteView.swift; sourceTree = "<group>"; };
+		001000127 /* ShareActivityItemSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareActivityItemSource.swift; sourceTree = "<group>"; };
 		001000135 /* ScanningTipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanningTipsView.swift; sourceTree = "<group>"; };
 		001000137 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		001000139 /* ARMeasurementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementViewModel.swift; sourceTree = "<group>"; };
+		001000141 /* ARMeasurementHelperViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARMeasurementHelperViews.swift; sourceTree = "<group>"; };
 		001000142 /* PipelineDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineDiagnostics.swift; sourceTree = "<group>"; };
 		001000144 /* PipelineDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineDiagnosticsView.swift; sourceTree = "<group>"; };
 		001000147 /* PipelinePointCloudCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelinePointCloudCapture.swift; sourceTree = "<group>"; };
 		001000149 /* StagePointCloudRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagePointCloudRenderer.swift; sourceTree = "<group>"; };
+		001000151 /* MeasurementSendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementSendService.swift; sourceTree = "<group>"; };
+		001000153 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		001000155 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -199,14 +199,6 @@
 				001000156 /* Onboarding */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		001000156 /* Onboarding */ = {
-			isa = PBXGroup;
-			children = (
-				001000155 /* OnboardingView.swift */,
-			);
-			path = Onboarding;
 			sourceTree = "<group>";
 		};
 		001000061 /* Services */ = {
@@ -301,6 +293,14 @@
 				001000050 /* ARFrame+Extensions.swift */,
 			);
 			path = Extensions;
+			sourceTree = "<group>";
+		};
+		001000156 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				001000155 /* OnboardingView.swift */,
+			);
+			path = Onboarding;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -571,8 +571,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to measure objects using AR and LiDAR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiredDeviceCapabilities = arkit;
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = "arkit lidar";
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = NO;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -581,7 +580,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.snapmeasure.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.daisukemajima.snapmeasure;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -607,8 +606,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to measure objects using AR and LiDAR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiredDeviceCapabilities = arkit;
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = "arkit lidar";
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = NO;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -617,7 +615,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.snapmeasure.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.daisukemajima.snapmeasure;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;

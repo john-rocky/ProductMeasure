@@ -595,15 +595,7 @@ class LabelBillboard {
         var bannerBgColor: UIColor?
         var bannerTotalHeight: Float = 0
 
-        if storedBoxId == 1 || storedBoxId == 2 {
-            let isOK = storedBoxId == 1
-            let bannerText = isOK ? "\u{2713}  CHECK OK" : "\u{26A0}  CHECK REQUIRED (SIZE)"
-            bannerBgColor = isOK
-                ? PMTheme.uiCyan.withAlphaComponent(0.85)
-                : PMTheme.uiRed.withAlphaComponent(0.85)
-            let bannerTextColor = UIColor(white: 0.05, alpha: 1.0)
-            bannerTextResult = textMesh(bannerText, size: headerFontSize, weight: .bold, color: bannerTextColor)
-            bannerTotalHeight = bannerTextResult!.size.y + bannerPadV * 2 + bannerGap
+        if false { // Banner removed (was warehouse CHECK OK/NG)
         }
 
         // -- Pre-generate dimension text entities --

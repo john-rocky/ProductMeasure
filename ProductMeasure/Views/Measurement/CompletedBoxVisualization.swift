@@ -45,30 +45,22 @@ class CompletedBoxVisualization {
 
     // MARK: - Constants
 
-    // Dual-layer edges (dimmer than active box; red for boxId==2)
-    private var innerEdgeColor: UIColor {
-        boxId == 2 ? PMTheme.uiEdgeInnerRed : PMTheme.uiEdgeInnerDim
-    }
-    private var outerEdgeColor: UIColor {
-        boxId == 2 ? PMTheme.uiEdgeOuterRed : PMTheme.uiEdgeOuterDim
-    }
+    // Dual-layer edges (dimmer than active box)
+    private let innerEdgeColor: UIColor = PMTheme.uiEdgeInnerDim
+    private let outerEdgeColor: UIColor = PMTheme.uiEdgeOuterDim
     private let innerEdgeRadius: Float = PMTheme.innerEdgeRadius
     private let outerEdgeRadius: Float = PMTheme.outerEdgeRadius
 
-    // Corner markers (smaller, dimmer; red for boxId==2)
+    // Corner markers (smaller, dimmer)
     private let cornerMarkerRadius: Float = PMTheme.cornerMarkerRadiusSmall
-    private var cornerMarkerColor: UIColor {
-        boxId == 2 ? PMTheme.uiCornerMarkerRed : PMTheme.uiCornerMarkerDim
-    }
+    private let cornerMarkerColor: UIColor = PMTheme.uiCornerMarkerDim
 
     // Label styling
     private let billboardIdFontSize: CGFloat = 0.014
     private let billboardBodyFontSize: CGFloat = 0.010
     private let labelTextColor: UIColor = PMTheme.uiBillboardText
     private let labelBackgroundColor: UIColor = PMTheme.uiBillboardBg
-    private var billboardAccentColor: UIColor {
-        boxId == 2 ? PMTheme.uiRed : PMTheme.uiBillboardAccent
-    }
+    private let billboardAccentColor: UIColor = PMTheme.uiBillboardAccent
     private let billboardTopBorderColor: UIColor = PMTheme.uiBillboardTopBorder
 
     // MARK: - Initialization
@@ -511,16 +503,6 @@ class CompletedBoxVisualization {
         var bannerBgColor: UIColor?
         var bannerTotalHeight: Float = 0
 
-        if boxId == 1 || boxId == 2 {
-            let isOK = boxId == 1
-            let bannerText = isOK ? "\u{2713}  CHECK OK" : "\u{26A0}  CHECK REQUIRED (SIZE)"
-            bannerBgColor = isOK
-                ? PMTheme.uiCyan.withAlphaComponent(0.85)
-                : PMTheme.uiRed.withAlphaComponent(0.85)
-            let bannerTextColor = UIColor(white: 0.05, alpha: 1.0)
-            bannerTextResult = textMesh(bannerText, size: headerFontSize, weight: .bold, color: bannerTextColor)
-            bannerTotalHeight = bannerTextResult!.size.y + bannerPadV * 2 + bannerGap
-        }
 
         // -- Pre-generate all text entities --
         let idResult = textMesh(String(format: "#%03d", boxId), size: headerFontSize, weight: .bold, color: dimAccent)
@@ -535,7 +517,6 @@ class CompletedBoxVisualization {
             let lColor = isHighlight ? dimAccent.withAlphaComponent(0.85) : dimLabelColor
             var vColor = isHighlight ? dimAccent : dimValueColor
             let vWeight: UIFont.Weight = isHighlight ? .bold : .medium
-            if dl.label == "SIZE" && boxId == 2 { vColor = PMTheme.uiRed }
             let l = textMesh(dl.label, size: primaryFontSize, weight: .semibold, color: lColor)
             let v = textMesh(dl.value, size: primaryFontSize, weight: vWeight, color: vColor)
             maxLabelWidth = max(maxLabelWidth, l.size.x)

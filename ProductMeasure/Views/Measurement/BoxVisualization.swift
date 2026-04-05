@@ -904,16 +904,6 @@ class BoxVisualization {
             let bannerGap: Float = 0.004
 
             // Banner
-            if boxId == 1 || boxId == 2 {
-                let isOK = boxId == 1
-                let bannerText = isOK ? "\u{2713}  CHECK OK" : "\u{26A0}  CHECK REQUIRED (SIZE)"
-                labelAnimBannerBgColor = isOK
-                    ? PMTheme.uiCyan.withAlphaComponent(0.85)
-                    : PMTheme.uiRed.withAlphaComponent(0.85)
-                let bannerTextColor = UIColor(white: 0.05, alpha: 1.0)
-                labelAnimBannerText = textMesh(bannerText, size: billboardIdFontSize, weight: .bold, color: bannerTextColor)
-                labelAnimBannerTotalHeight = labelAnimBannerText!.size.y + bannerPadV * 2 + bannerGap
-            }
 
             // LABEL header
             labelAnimMainHeader = textMesh("LABEL", size: billboardIdFontSize, weight: .bold, color: labelAccent)
