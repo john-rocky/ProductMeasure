@@ -521,8 +521,7 @@ class LabelBillboard {
         placeholderGroup?.removeFromParent()
         placeholderGroup = nil
 
-        // Accent color based on boxId: green for 1st measurement, red for 2nd
-        let dimAccent = storedBoxId == 2 ? PMTheme.uiRed : PMTheme.uiCyan
+        let dimAccent = PMTheme.uiCyan
         let dimBorder = dimAccent.withAlphaComponent(0.40)
 
         // Layout constants (match buildBillboard)
@@ -610,10 +609,6 @@ class LabelBillboard {
             let lColor = isHighlight ? dimHighlightLabelColor : dimLabelColor
             var vColor = isHighlight ? dimHighlightValueColor : dimValueColor
             let vWeight: UIFont.Weight = isHighlight ? .bold : .medium
-            // Override SIZE value color to red for boxId==2
-            if dl.label == "SIZE" && storedBoxId == 2 {
-                vColor = PMTheme.uiRed
-            }
             let l = textMesh(dl.label, size: primaryFontSize, weight: .semibold, color: lColor)
             let v = textMesh(dl.value, size: primaryFontSize, weight: vWeight, color: vColor)
             dimMaxLabelWidth = max(dimMaxLabelWidth, l.size.x)

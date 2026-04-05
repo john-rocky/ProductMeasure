@@ -558,23 +558,19 @@ class ARMeasurementViewModel: ObservableObject {
                     mode: mode
                 )
                 guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    if let r = result {
-                        let unit = self.currentUnit
-                        let l = unit.formatDimension(meters: r.length)
-                        let w = unit.formatDimension(meters: r.width)
-                        let h = unit.formatDimension(meters: r.height)
-                        self.previewDimensions = "\(l) × \(w) × \(h)"
-                    } else {
-                        self.previewDimensions = nil
-                    }
-                    self.backgroundMeasureTask = nil
-                }
-            } catch {
-                await MainActor.run {
+                if let r = result {
+                    let unit = self.currentUnit
+                    let l = unit.formatDimension(meters: r.length)
+                    let w = unit.formatDimension(meters: r.width)
+                    let h = unit.formatDimension(meters: r.height)
+                    self.previewDimensions = "\(l) × \(w) × \(h)"
+                } else {
                     self.previewDimensions = nil
-                    self.backgroundMeasureTask = nil
                 }
+                self.backgroundMeasureTask = nil
+            } catch {
+                self.previewDimensions = nil
+                self.backgroundMeasureTask = nil
             }
         }
     }

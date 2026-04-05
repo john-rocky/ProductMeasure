@@ -280,30 +280,9 @@ class BoxVisualization {
         rotationRingEntity?.scale = SIMD3<Float>(repeating: 1.0)
     }
 
-    /// Recolor edge and corner entities to red when boxId==2 (check required)
+    /// Recolor edge and corner entities (no-op, kept for API compatibility)
     func recolorEdges(forBoxId id: Int) {
-        guard id == 2 else { return }
-
-        let redInner = PMTheme.uiEdgeInnerRed
-        let redOuter = PMTheme.uiEdgeOuterRed
-        let redCorner = PMTheme.uiCornerMarkerRed
-
-        for edgeGroup in edgeEntities {
-            for child in edgeGroup.children {
-                guard let model = child as? ModelEntity else { continue }
-                if child.name.contains("outer") {
-                    var mat = UnlitMaterial(color: redOuter)
-                    mat.blending = .transparent(opacity: .init(floatLiteral: 0.35))
-                    model.model?.materials = [mat]
-                } else if child.name.contains("inner") {
-                    model.model?.materials = [UnlitMaterial(color: redInner)]
-                }
-            }
-        }
-
-        for corner in cornerMarkerEntities {
-            corner.model?.materials = [UnlitMaterial(color: redCorner)]
-        }
+        // No recoloring needed — all boxes use the default color scheme
     }
 
     // MARK: - Private Methods
