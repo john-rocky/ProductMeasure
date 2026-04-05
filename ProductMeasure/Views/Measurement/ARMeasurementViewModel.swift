@@ -16,6 +16,7 @@ class ARMeasurementViewModel: ObservableObject {
     @Published var isTrackingReady = false
     @Published var isTrackingError = false
     @Published var isProcessing = false
+    @Published var measurementError: String? = nil
     @Published var currentMeasurement: MeasurementCalculator.MeasurementResult?
     @Published var isEditing = false
     @Published var isDragging = false
@@ -122,10 +123,6 @@ class ARMeasurementViewModel: ObservableObject {
     // Guided workflow state
     @Published var workflowStep: WorkflowStep = .idle
 
-    /// Returns the user's selection mode (.tap or .box)
-    var effectiveSelectionMode: SelectionMode {
-        return .tap
-    }
 
     var isWorkflowActive: Bool {
         workflowStep != .idle
@@ -714,6 +711,7 @@ class ARMeasurementViewModel: ObservableObject {
                 captureDiagnostics()
                 #endif
                 isProcessing = false
+                showTemporaryError(String(localized: "Measurement failed. Try again."))
             }
         } catch {
             #if DEBUG
@@ -721,6 +719,7 @@ class ARMeasurementViewModel: ObservableObject {
             captureDiagnostics()
             #endif
             isProcessing = false
+            showTemporaryError(String(localized: "Measurement failed. Try again."))
         }
     }
 
@@ -1000,6 +999,7 @@ class ARMeasurementViewModel: ObservableObject {
                 captureDiagnostics()
                 #endif
                 isProcessing = false
+                showTemporaryError(String(localized: "Measurement failed. Try again."))
             }
         } catch {
             #if DEBUG
@@ -1007,6 +1007,7 @@ class ARMeasurementViewModel: ObservableObject {
             captureDiagnostics()
             #endif
             isProcessing = false
+            showTemporaryError(String(localized: "Measurement failed. Try again."))
         }
     }
 
@@ -1162,6 +1163,7 @@ class ARMeasurementViewModel: ObservableObject {
                                     guard let self = self else { return }
                                     self.animationPhase = .complete
                                     self.isProcessing = false
+                                    UINotificationFeedbackGenerator().notificationOccurred(.success)
 
                                     if self.workflowStep == .awaitingSecondTap {
                                         self.workflowStep = .showingResult
@@ -1335,6 +1337,7 @@ class ARMeasurementViewModel: ObservableObject {
         }
         boxVisualization = nil
         boxVisualizationAnchor = nil
+        pointCloudEntity?.removeFromParent()
         pointCloudEntity = nil
 
         // Remove animation anchor if exists
@@ -1846,6 +1849,7 @@ class ARMeasurementViewModel: ObservableObject {
                 #endif
                 isProcessing = false
                 isReadingLabel = false
+                showTemporaryError(String(localized: "No label detected. Try again."))
                 return
             }
 
@@ -1912,6 +1916,7 @@ class ARMeasurementViewModel: ObservableObject {
                 self.labelLiftAnimation?.setVisible(false)
                 self.isProcessing = false
                 self.showBarcodeScanEffect = true
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
             }
         } catch {
             #if DEBUG
@@ -2150,6 +2155,19 @@ class ARMeasurementViewModel: ObservableObject {
     func resetForNewMeasurement() {
         clearActiveBoxOnly()
         workflowStep = .idle
+    }
+
+    // MARK: - Error Feedback
+
+    private func showTemporaryError(_ message: String) {
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+        measurementError = message
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            if self.measurementError == message {
+                self.measurementError = nil
+            }
+        }
     }
 
     func saveAndReset(mode: MeasurementMode, unit: MeasurementUnit) {
@@ -2439,6 +2457,7 @@ class ARMeasurementViewModel: ObservableObject {
         animatedBoxAnchor = nil
         animatedBoxVisualization = nil
 
+        pointCloudEntity?.removeFromParent()
         pointCloudEntity = nil
         #if DEBUG
         print("[ViewModel] Completed boxes preserved: \(completedBoxAnchors.count)")

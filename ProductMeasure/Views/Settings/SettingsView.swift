@@ -161,6 +161,15 @@ struct SettingsView: View {
                         Text("±5-10mm (typical)")
                             .foregroundColor(PMTheme.textSecondary)
                     }
+
+                    Link(destination: URL(string: "https://snapmeasure.app/privacy")!) {
+                        HStack {
+                            Text("Privacy Policy")
+                            Spacer()
+                            Image(systemName: "arrow.up.right.square")
+                                .foregroundColor(PMTheme.textSecondary)
+                        }
+                    }
                 } header: {
                     Text("ABOUT")
                         .font(PMTheme.mono(11, weight: .bold))

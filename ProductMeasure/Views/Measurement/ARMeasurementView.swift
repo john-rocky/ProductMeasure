@@ -77,6 +77,7 @@ struct ARMeasurementView: View {
                                         .clipShape(Circle())
                                         .overlay(Circle().strokeBorder(PMTheme.cyan.opacity(0.20), lineWidth: 0.5))
                                 }
+                                .accessibilityLabel("Scanning Tips")
                             }
 
                             #if DEBUG
@@ -107,6 +108,7 @@ struct ARMeasurementView: View {
                                         .clipShape(Circle())
                                         .overlay(Circle().strokeBorder(PMTheme.labelBlue.opacity(0.20), lineWidth: 0.5))
                                 }
+                                .accessibilityLabel("Scan Label")
                             } else if isLabelMode {
                                 Button(action: { isLabelMode = false }) {
                                     Image(systemName: "xmark")
@@ -117,6 +119,7 @@ struct ARMeasurementView: View {
                                         .clipShape(Circle())
                                         .overlay(Circle().strokeBorder(PMTheme.textSecondary.opacity(0.20), lineWidth: 0.5))
                                 }
+                                .accessibilityLabel("Cancel Label Scan")
                             }
 
                             // Clear all button
@@ -135,6 +138,7 @@ struct ARMeasurementView: View {
                                     .background(PMTheme.red.opacity(0.8))
                                     .clipShape(Capsule())
                                 }
+                                .accessibilityLabel("Clear All Measurements")
                             }
                         }
 
@@ -158,6 +162,19 @@ struct ARMeasurementView: View {
                                 .clipShape(Capsule())
                                 .shadow(color: PMTheme.green.opacity(0.4), radius: 8, x: 0, y: 2)
                             }
+                            .accessibilityLabel("Save and New Measurement")
+                        }
+
+                        // Error message
+                        if let error = viewModel.measurementError {
+                            Text(error)
+                                .font(PMTheme.mono(13))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(PMTheme.red.opacity(0.85))
+                                .clipShape(Capsule())
+                                .transition(.opacity)
                         }
 
                         // Instruction / status prompt (bottom)
@@ -193,6 +210,11 @@ struct ARMeasurementView: View {
                             } else {
                                 InstructionCard(mode: .ready(viewModel.trackingMessage), isTrackingReady: viewModel.isTrackingReady, isTrackingError: viewModel.isTrackingError)
                             }
+                        }
+
+                        // Selection mode toggle (Tap/Box)
+                        if !viewModel.isWorkflowActive && !viewModel.isProcessing && !isLabelMode && !viewModel.isReadingLabel {
+                            SelectionModeToggle(selectionMode: $selectionMode)
                         }
                     }
                     .padding()
