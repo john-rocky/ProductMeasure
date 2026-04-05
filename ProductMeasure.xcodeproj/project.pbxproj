@@ -50,6 +50,7 @@
 		001000108 /* LabelLiftAnimation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000109 /* LabelLiftAnimation.swift */; };
 		001000110 /* LabelResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000111 /* LabelResultView.swift */; };
 		001000112 /* LabelScanBracketsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000113 /* LabelScanBracketsView.swift */; };
+		009900010 /* TapIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009900011 /* TapIndicatorView.swift */; };
 		001000120 /* BarcodeScanEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000121 /* BarcodeScanEffectView.swift */; };
 		001000122 /* LabelBillboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000123 /* LabelBillboard.swift */; };
 		001000124 /* StatusVignetteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000125 /* StatusVignetteView.swift */; };
@@ -113,6 +114,7 @@
 		001000109 /* LabelLiftAnimation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelLiftAnimation.swift; sourceTree = "<group>"; };
 		001000111 /* LabelResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelResultView.swift; sourceTree = "<group>"; };
 		001000113 /* LabelScanBracketsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelScanBracketsView.swift; sourceTree = "<group>"; };
+		009900011 /* TapIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapIndicatorView.swift; sourceTree = "<group>"; };
 		001000121 /* BarcodeScanEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScanEffectView.swift; sourceTree = "<group>"; };
 		001000123 /* LabelBillboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelBillboard.swift; sourceTree = "<group>"; };
 		001000125 /* StatusVignetteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusVignetteView.swift; sourceTree = "<group>"; };
@@ -261,6 +263,7 @@
 				001000123 /* LabelBillboard.swift */,
 				001000111 /* LabelResultView.swift */,
 				001000113 /* LabelScanBracketsView.swift */,
+				009900011 /* TapIndicatorView.swift */,
 				001000121 /* BarcodeScanEffectView.swift */,
 				001000125 /* StatusVignetteView.swift */,
 				001000144 /* PipelineDiagnosticsView.swift */,
@@ -422,6 +425,7 @@
 				001000122 /* LabelBillboard.swift in Sources */,
 				001000110 /* LabelResultView.swift in Sources */,
 				001000112 /* LabelScanBracketsView.swift in Sources */,
+				009900010 /* TapIndicatorView.swift in Sources */,
 				001000120 /* BarcodeScanEffectView.swift in Sources */,
 				001000124 /* StatusVignetteView.swift in Sources */,
 				001000134 /* ScanningTipsView.swift in Sources */,

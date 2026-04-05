@@ -155,20 +155,8 @@ class PointCloudGenerator {
         pcCapture.capture(points: filteredPoints, at: .after3DOutlierRemoval)
         #endif
 
-        // Adaptive grid-based downsampling in 3D
-        // Small objects (< ~10cm span) use finer grid to preserve detail
-        let adaptiveGridSize: Float = {
-            guard filteredPoints.count >= 10 else { return AppConstants.pointCloudGridSize }
-            var minP = filteredPoints[0], maxP = filteredPoints[0]
-            for p in filteredPoints {
-                minP = min(minP, p)
-                maxP = max(maxP, p)
-            }
-            let span = max(maxP.x - minP.x, max(maxP.y - minP.y, maxP.z - minP.z))
-            // Scale: 0.1m span → 1.5mm, 0.3m+ span → 3mm
-            return max(0.0015, min(AppConstants.pointCloudGridSize, span * 0.01))
-        }()
-        let downsampledPoints = downsample3D(filteredPoints, gridSize: adaptiveGridSize)
+        // Grid-based downsampling in 3D
+        let downsampledPoints = downsample3D(filteredPoints, gridSize: AppConstants.pointCloudGridSize)
         #if DEBUG
         print("[PointCloud] Final point count: \(downsampledPoints.count)")
         genDetails.finalCount = downsampledPoints.count

@@ -43,12 +43,12 @@ enum AppConstants {
 
     // MARK: - Box Refinement
     static let boxRefinementMargin: Float = 0.015
-    static let boxRefinementMinRetainRatio: Float = 0.65
+    static let boxRefinementMinRetainRatio: Float = 0.5
     static let boxRefinementIterations: Int = 2
 
     // MARK: - MABR Fine Angle Search
     static let mabrFineSearchRange: Float = 5.0 * .pi / 180.0
-    static let mabrFineSearchStep: Float = 0.2 * .pi / 180.0
+    static let mabrFineSearchStep: Float = 0.5 * .pi / 180.0
     static let mabrFineSearchStepEnhanced: Float = 0.2 * .pi / 180.0
 
     // MARK: - Enhanced Pipeline
@@ -81,7 +81,7 @@ enum AppConstants {
     static let depthConnectivityCellSize: Int = 15             // Spatial hash cell size (px)
 
     // MARK: - Extent Trimming
-    static let extentsTrimPercent: Float = 0.015
+    static let extentsTrimPercent: Float = 0.01
 
     // MARK: - Stability Detection
     static let stabilityPositionThreshold: Float = 0.007  // 7mm (accommodates hand tremor)

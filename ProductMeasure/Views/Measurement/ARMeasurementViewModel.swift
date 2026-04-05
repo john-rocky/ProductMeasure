@@ -89,13 +89,11 @@ class ARMeasurementViewModel: ObservableObject {
     // Reticle lock-on state
     @Published var reticleTargetState: ReticleTargetState = .noTarget
     @Published var reticleCenterDepth: Float = 0
-    @Published var previewDimensions: String? = nil
+    @Published var tapIndicatorPosition: CGPoint? = nil
     private var smoothedCenterDepth: Float = 0
     private var targetDetectedFrameCount: Int = 0
     private var cachedSegmentation: CachedSegmentation?
     private var backgroundSegmentationTask: Task<Void, Never>?
-    private var backgroundMeasureTask: Task<Void, Never>?
-    private var lastPreviewTime: TimeInterval = 0
     private var lastBackgroundSegTime: TimeInterval = 0
 
     private struct CachedSegmentation {
@@ -155,6 +153,9 @@ class ARMeasurementViewModel: ObservableObject {
 
     // Stored point cloud for Fit functionality
     private var storedPointCloud: [SIMD3<Float>]?
+
+    // Ghost box: translucent wireframe shown after first tap while awaiting second
+    private var ghostBoxAnchor: AnchorEntity?
 
     // Current measurement unit (passed from view)
     var currentUnit: MeasurementUnit = .centimeters
@@ -399,15 +400,9 @@ class ARMeasurementViewModel: ObservableObject {
             }
         }
 
-        // Use median of all samples for robust depth (reduces noise from reflections)
-        var allSamples = surroundingDepths
-        allSamples.append(centerDepthValue)
-        allSamples.sort()
-        let medianDepth = allSamples[allSamples.count / 2]
-
-        // EMA smoothing on median depth
+        // EMA smoothing
         let alpha = AppConstants.reticleDepthEMAAlpha
-        smoothedCenterDepth = alpha * medianDepth + (1.0 - alpha) * smoothedCenterDepth
+        smoothedCenterDepth = alpha * centerDepthValue + (1.0 - alpha) * smoothedCenterDepth
 
         // Determine new state
         let newState: ReticleTargetState
@@ -437,10 +432,8 @@ class ARMeasurementViewModel: ObservableObject {
         // Background segmentation management
         if reticleTargetState == .targetLocked {
             startBackgroundSegmentationIfNeeded(frame: frame, cameraPosition: cameraPosition)
-            startBackgroundMeasurePreviewIfNeeded(frame: frame)
         } else if reticleTargetState == .noTarget {
             stopBackgroundSegmentation()
-            previewDimensions = nil
         }
     }
 
@@ -532,47 +525,6 @@ class ARMeasurementViewModel: ObservableObject {
         backgroundSegmentationTask?.cancel()
         backgroundSegmentationTask = nil
         cachedSegmentation = nil
-        backgroundMeasureTask?.cancel()
-        backgroundMeasureTask = nil
-    }
-
-    private func startBackgroundMeasurePreviewIfNeeded(frame: ARFrame) {
-        // Run preview at most once per 0.5s, only when idle
-        let now = frame.timestamp
-        guard now - lastPreviewTime >= 0.5 else { return }
-        guard backgroundMeasureTask == nil else { return }
-        guard !isProcessing && currentMeasurement == nil && !hasPendingFirstTap else { return }
-
-        let viewSize = sessionManager.arView.bounds.size
-        let center = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
-        let mode = currentMeasurementMode
-
-        lastPreviewTime = now
-        backgroundMeasureTask = Task { [weak self] in
-            guard let self = self else { return }
-            do {
-                let result = try await self.measurementCalculator.measure(
-                    frame: frame,
-                    tapPoint: center,
-                    viewSize: viewSize,
-                    mode: mode
-                )
-                guard !Task.isCancelled else { return }
-                if let r = result {
-                    let unit = self.currentUnit
-                    let l = unit.formatDimension(meters: r.length)
-                    let w = unit.formatDimension(meters: r.width)
-                    let h = unit.formatDimension(meters: r.height)
-                    self.previewDimensions = "\(l) × \(w) × \(h)"
-                } else {
-                    self.previewDimensions = nil
-                }
-                self.backgroundMeasureTask = nil
-            } catch {
-                self.previewDimensions = nil
-                self.backgroundMeasureTask = nil
-            }
-        }
     }
 
     private func clearReticleState() {
@@ -592,6 +544,9 @@ class ARMeasurementViewModel: ObservableObject {
         print("[ViewModel] handleTap called at \(location)")
         print("[ViewModel] isProcessing: \(isProcessing), trackingState: \(sessionManager.trackingState)")
         #endif
+
+        // Show tap indicator
+        showTapIndicator(at: location)
 
         guard !isProcessing else {
             #if DEBUG
@@ -733,11 +688,14 @@ class ARMeasurementViewModel: ObservableObject {
                 captureDiagnostics()
                 #endif
 
-                // Store as pending first-tap result (no animation, no box display)
+                // Store as pending first-tap result
                 pendingFirstTapResult = result
                 pendingFirstTapFloorY = result.detectedFloorY ?? raycastHitPosition?.y
                 pendingFirstTapFloorPlaneBacked = result.detectedFloorY != nil
                 hasPendingFirstTap = true
+
+                // Show ghost wireframe of first-tap measurement
+                showGhostBox(for: result.boundingBox)
 
                 // Start guided workflow
                 workflowStep = .awaitingSecondTap
@@ -794,12 +752,8 @@ class ARMeasurementViewModel: ObservableObject {
                 existingBox: firstResult.boundingBox,
                 raycastHitPosition: raycastHitPosition
             ) {
-                // Merge point clouds from both taps with centroid alignment
-                let alignedNewPoints = Self.alignPointClouds(
-                    existing: accumulatedPointClouds.flatMap { $0 },
-                    incoming: refinement.points
-                )
-                accumulatedPointClouds.append(alignedNewPoints)
+                // Merge point clouds from both taps
+                accumulatedPointClouds.append(refinement.points)
                 accumulatedQualities.append(refinement.quality)
                 refinementCount = 1
 
@@ -851,6 +805,7 @@ class ARMeasurementViewModel: ObservableObject {
 
                 // Clear pending state
                 pendingFirstTapResult = nil
+                removeGhostBox()
                 pendingFirstTapFloorY = nil
                 pendingFirstTapFloorPlaneBacked = false
                 hasPendingFirstTap = false
@@ -1803,12 +1758,8 @@ class ARMeasurementViewModel: ObservableObject {
                 existingBox: result.boundingBox,
                 raycastHitPosition: raycastHitPosition
             ) {
-                // Success: merge point clouds with centroid alignment and re-estimate
-                let alignedNewPoints = Self.alignPointClouds(
-                    existing: accumulatedPointClouds.flatMap { $0 },
-                    incoming: refinement.points
-                )
-                accumulatedPointClouds.append(alignedNewPoints)
+                // Success: merge point clouds and re-estimate
+                accumulatedPointClouds.append(refinement.points)
                 accumulatedQualities.append(refinement.quality)
                 refinementCount += 1
 
@@ -2219,51 +2170,59 @@ class ARMeasurementViewModel: ObservableObject {
 
     // MARK: - Error Feedback
 
-    // MARK: - Point Cloud Alignment
+    // MARK: - Ghost Box (first-tap preview)
 
-    /// Align incoming point cloud to existing by shifting overlapping region centroids
-    static func alignPointClouds(existing: [SIMD3<Float>], incoming: [SIMD3<Float>]) -> [SIMD3<Float>] {
-        guard !existing.isEmpty, !incoming.isEmpty else { return incoming }
+    private func showGhostBox(for boundingBox: BoundingBox3D) {
+        removeGhostBox()
 
-        // Compute bounding box of existing points
-        var minE = existing[0], maxE = existing[0]
-        for p in existing { minE = min(minE, p); maxE = max(maxE, p) }
+        let entity = Entity()
+        let edges = boundingBox.edges
+        let ghostColor = PMTheme.uiGreen.withAlphaComponent(0.25)
 
-        // Expand by 20% to find overlapping region
-        let margin = (maxE - minE) * 0.2
-        let overlapMin = minE - margin
-        let overlapMax = maxE + margin
+        for edge in edges {
+            let start = edge.0
+            let end = edge.1
+            let mid = (start + end) / 2.0
+            let length = simd_distance(start, end)
+            guard length > 0.0001 else { continue }
 
-        // Find incoming points that fall within the expanded existing bounds
-        var overlapExisting = SIMD3<Float>.zero
-        var overlapExistingCount: Float = 0
-        for p in existing {
-            overlapExisting += p
-            overlapExistingCount += 1
+            let mesh = MeshResource.generateBox(size: SIMD3<Float>(PMTheme.innerEdgeRadius, PMTheme.innerEdgeRadius, length))
+            var material = UnlitMaterial(color: ghostColor)
+            material.blending = .transparent(opacity: .init(floatLiteral: 0.25))
+            let edgeEntity = ModelEntity(mesh: mesh, materials: [material])
+
+            let direction = simd_normalize(end - start)
+            let defaultDir = SIMD3<Float>(0, 0, 1)
+            let rot = simd_quaternion(defaultDir, direction)
+            edgeEntity.position = mid
+            edgeEntity.orientation = rot
+            entity.addChild(edgeEntity)
         }
 
-        var overlapIncoming = SIMD3<Float>.zero
-        var overlapIncomingCount: Float = 0
-        for p in incoming {
-            if p.x >= overlapMin.x && p.x <= overlapMax.x &&
-               p.y >= overlapMin.y && p.y <= overlapMax.y &&
-               p.z >= overlapMin.z && p.z <= overlapMax.z {
-                overlapIncoming += p
-                overlapIncomingCount += 1
+        let anchor = AnchorEntity(world: .zero)
+        anchor.addChild(entity)
+        sessionManager.arView.scene.addAnchor(anchor)
+        ghostBoxAnchor = anchor
+    }
+
+    private func removeGhostBox() {
+        ghostBoxAnchor?.removeFromParent()
+        ghostBoxAnchor = nil
+    }
+
+    // MARK: - Tap Indicator
+
+    private func showTapIndicator(at point: CGPoint) {
+        tapIndicatorPosition = point
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            if self.tapIndicatorPosition == point {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    self.tapIndicatorPosition = nil
+                }
             }
         }
-
-        // If insufficient overlap, return as-is (ARKit tracking should handle alignment)
-        guard overlapIncomingCount >= 10 else { return incoming }
-
-        let centroidExisting = overlapExisting / overlapExistingCount
-        let centroidIncoming = overlapIncoming / overlapIncomingCount
-        let shift = centroidExisting - centroidIncoming
-
-        // Only apply shift if it's small (< 3cm) — larger shifts indicate tracking error
-        guard simd_length(shift) < 0.03 else { return incoming }
-
-        return incoming.map { $0 + shift }
     }
 
     private func guidedErrorMessage() -> String {
