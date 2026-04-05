@@ -649,11 +649,7 @@ class BoxVisualization {
     // MARK: - Floor Distance Indicator
 
     private func createFloorDistanceIndicator() {
-        let indicatorEntity = Entity()
-        indicatorEntity.name = "floor_distance"
-        entity.addChild(indicatorEntity)
-        floorDistanceEntity = indicatorEntity
-        updateFloorDistanceIndicator()
+        // Floor distance indicator disabled — not useful for end users
     }
 
     private func updateFloorDistanceIndicator() {

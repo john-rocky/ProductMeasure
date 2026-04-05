@@ -55,6 +55,7 @@ struct ARMeasurementView: View {
                     // Tap position indicator
                     if let tapPos = viewModel.tapIndicatorPosition {
                         TapIndicatorView(position: tapPos)
+                            .ignoresSafeArea()
                             .allowsHitTesting(false)
                     }
                 } else if isLabelMode {
