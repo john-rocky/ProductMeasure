@@ -96,6 +96,12 @@ class ARMeasurementViewModel: ObservableObject {
     private var backgroundSegmentationTask: Task<Void, Never>?
     private var lastBackgroundSegTime: TimeInterval = 0
 
+    // Auto-detection: live preview measurement
+    @Published private(set) var hasAutoPreview: Bool = false
+    private var autoPreviewResult: MeasurementCalculator.MeasurementResult?
+    private var autoPreviewTask: Task<Void, Never>?
+    private var lastAutoPreviewTime: TimeInterval = 0
+
     private struct CachedSegmentation {
         let mask: CVPixelBuffer
         let maskSize: CGSize
@@ -432,8 +438,10 @@ class ARMeasurementViewModel: ObservableObject {
         // Background segmentation management
         if reticleTargetState == .targetLocked {
             startBackgroundSegmentationIfNeeded(frame: frame, cameraPosition: cameraPosition)
+            startAutoPreviewIfNeeded(frame: frame)
         } else if reticleTargetState == .noTarget {
             stopBackgroundSegmentation()
+            clearAutoPreview()
         }
     }
 
@@ -527,12 +535,102 @@ class ARMeasurementViewModel: ObservableObject {
         cachedSegmentation = nil
     }
 
+    // MARK: - Auto Preview Measurement
+
+    private func startAutoPreviewIfNeeded(frame: ARFrame) {
+        // Skip if already processing or has active measurement
+        guard !isProcessing && currentMeasurement == nil && !hasPendingFirstTap else { return }
+        // Throttle: at most once per 1.0s
+        let now = frame.timestamp
+        guard now - lastAutoPreviewTime >= 1.0 else { return }
+        guard autoPreviewTask == nil else { return }
+
+        let viewSize = sessionManager.arView.bounds.size
+        let center = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+        let mode = currentMeasurementMode
+
+        lastAutoPreviewTime = now
+        autoPreviewTask = Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let result = try await self.measurementCalculator.measure(
+                    frame: frame,
+                    tapPoint: center,
+                    viewSize: viewSize,
+                    mode: mode
+                )
+                guard !Task.isCancelled else { return }
+                // Re-check state — user may have tapped during measurement
+                guard !self.isProcessing && self.currentMeasurement == nil && !self.hasPendingFirstTap else {
+                    self.autoPreviewTask = nil
+                    return
+                }
+                if let r = result {
+                    self.autoPreviewResult = r
+                    self.hasAutoPreview = true
+                    self.showGhostBox(for: r.boundingBox)
+                } else {
+                    self.clearAutoPreview()
+                }
+                self.autoPreviewTask = nil
+            } catch {
+                self.clearAutoPreview()
+                self.autoPreviewTask = nil
+            }
+        }
+    }
+
+    private func clearAutoPreview() {
+        autoPreviewTask?.cancel()
+        autoPreviewTask = nil
+        autoPreviewResult = nil
+        hasAutoPreview = false
+        // Only remove ghost if no pending first-tap result
+        if !hasPendingFirstTap {
+            removeGhostBox()
+        }
+    }
+
+    /// Promote auto-preview to active measurement (skip re-measuring)
+    private func confirmAutoPreview(_ result: MeasurementCalculator.MeasurementResult, mode: MeasurementMode) {
+        guard let frame = sessionManager.currentFrame else { return }
+        let viewSize = sessionManager.arView.bounds.size
+        let center = CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+        let floorY = result.detectedFloorY
+        isFloorPlaneBacked = result.detectedFloorY != nil
+        originalFloorY = floorY
+
+        // Clean up auto-preview state but keep ghost momentarily (animation will replace)
+        autoPreviewTask?.cancel()
+        autoPreviewTask = nil
+        autoPreviewResult = nil
+        hasAutoPreview = false
+        removeGhostBox()
+
+        // Reset pending state
+        pendingFirstTapResult = nil
+        pendingFirstTapFloorY = nil
+        pendingFirstTapFloorPlaneBacked = false
+        hasPendingFirstTap = false
+
+        // Show animated wireframe with the auto-preview result
+        startBoxAnimation(
+            at: center,
+            boundingBox: result.boundingBox,
+            frame: frame,
+            viewSize: viewSize,
+            result: result,
+            floorY: floorY
+        )
+    }
+
     private func clearReticleState() {
         reticleTargetState = .noTarget
         reticleCenterDepth = 0
         smoothedCenterDepth = 0
         targetDetectedFrameCount = 0
         stopBackgroundSegmentation()
+        clearAutoPreview()
     }
 
     func pauseSession() {
@@ -547,6 +645,15 @@ class ARMeasurementViewModel: ObservableObject {
 
         // Show tap indicator
         showTapIndicator(at: location)
+
+        // Auto-preview confirmation: if a ghost preview exists, promote it directly
+        if let preview = autoPreviewResult, !isProcessing && currentMeasurement == nil && !hasPendingFirstTap {
+            #if DEBUG
+            print("[ViewModel] Confirming auto-preview as active measurement")
+            #endif
+            confirmAutoPreview(preview, mode: mode)
+            return
+        }
 
         guard !isProcessing else {
             #if DEBUG

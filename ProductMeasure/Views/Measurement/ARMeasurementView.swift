@@ -231,6 +231,8 @@ struct ARMeasurementView: View {
                                             .overlay(Capsule().strokeBorder(PMTheme.textSecondary.opacity(0.3), lineWidth: 0.5))
                                     }
                                 }
+                            } else if activeSelectionMode == .tap && viewModel.hasAutoPreview {
+                                InstructionCard(mode: .confirm)
                             } else if activeSelectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
                                 InstructionCard(mode: .tap)
                             } else if activeSelectionMode == .box {
