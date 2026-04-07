@@ -101,6 +101,10 @@ class ARMeasurementViewModel: ObservableObject {
     private var autoPreviewResult: MeasurementCalculator.MeasurementResult?
     private var autoPreviewTask: Task<Void, Never>?
     private var lastAutoPreviewTime: TimeInterval = 0
+    // Accumulated points across multiple preview viewpoints
+    private var accumulatedPreviewPoints: [SIMD3<Float>] = []
+    private let autoPreviewMaxPoints = 30000
+    private let autoPreviewMergeGridSize: Float = 0.005  // 5mm voxel
 
     private struct CachedSegmentation {
         let mask: CVPixelBuffer
@@ -550,6 +554,8 @@ class ARMeasurementViewModel: ObservableObject {
         let mode = currentMeasurementMode
 
         lastAutoPreviewTime = now
+        let verticalPlanes = frame.anchors.compactMap { $0 as? ARPlaneAnchor }.filter { $0.alignment == .vertical }
+
         autoPreviewTask = Task { [weak self] in
             guard let self = self else { return }
             do {
@@ -560,21 +566,51 @@ class ARMeasurementViewModel: ObservableObject {
                     mode: mode
                 )
                 guard !Task.isCancelled else { return }
-                // Re-check state — user may have tapped during measurement
                 guard !self.isProcessing && self.currentMeasurement == nil && !self.hasPendingFirstTap else {
                     self.autoPreviewTask = nil
                     return
                 }
-                if let r = result {
-                    self.autoPreviewResult = r
-                    self.hasAutoPreview = true
-                    self.showGhostBox(for: r.boundingBox)
-                } else {
-                    self.clearAutoPreview()
+                guard let r = result, let newPoints = r.pointCloud, !newPoints.isEmpty else {
+                    self.autoPreviewTask = nil
+                    return
                 }
+
+                // Accumulate point cloud across viewpoints
+                self.accumulatedPreviewPoints.append(contentsOf: newPoints)
+                self.accumulatedPreviewPoints = Self.downsampleByVoxel(
+                    self.accumulatedPreviewPoints,
+                    gridSize: self.autoPreviewMergeGridSize
+                )
+                // FIFO cap: keep most recent points if over limit
+                if self.accumulatedPreviewPoints.count > self.autoPreviewMaxPoints {
+                    let drop = self.accumulatedPreviewPoints.count - self.autoPreviewMaxPoints
+                    self.accumulatedPreviewPoints.removeFirst(drop)
+                }
+
+                // Re-estimate bounding box from accumulated points
+                guard let mergedBox = BoundingBoxEstimator().estimateBoundingBox(
+                    points: self.accumulatedPreviewPoints,
+                    mode: mode,
+                    verticalPlaneAnchors: verticalPlanes
+                ) else {
+                    self.autoPreviewTask = nil
+                    return
+                }
+
+                // Recalculate with merged box, preserving latest result's axis mapping
+                var mergedResult = self.measurementCalculator.recalculate(
+                    boundingBox: mergedBox,
+                    quality: r.quality,
+                    axisMapping: r.axisMapping
+                )
+                mergedResult.pointCloud = self.accumulatedPreviewPoints
+                mergedResult.detectedFloorY = r.detectedFloorY
+
+                self.autoPreviewResult = mergedResult
+                self.hasAutoPreview = true
+                self.showGhostBox(for: mergedBox)
                 self.autoPreviewTask = nil
             } catch {
-                self.clearAutoPreview()
                 self.autoPreviewTask = nil
             }
         }
@@ -585,10 +621,28 @@ class ARMeasurementViewModel: ObservableObject {
         autoPreviewTask = nil
         autoPreviewResult = nil
         hasAutoPreview = false
+        accumulatedPreviewPoints.removeAll(keepingCapacity: false)
         // Only remove ghost if no pending first-tap result
         if !hasPendingFirstTap {
             removeGhostBox()
         }
+    }
+
+    /// Voxel-grid downsampling: 1 representative point per cell
+    static func downsampleByVoxel(_ points: [SIMD3<Float>], gridSize: Float) -> [SIMD3<Float>] {
+        guard gridSize > 0, !points.isEmpty else { return points }
+        let inv = 1.0 / gridSize
+        var seen: [SIMD3<Int32>: SIMD3<Float>] = [:]
+        seen.reserveCapacity(points.count)
+        for p in points {
+            let key = SIMD3<Int32>(
+                Int32((p.x * inv).rounded()),
+                Int32((p.y * inv).rounded()),
+                Int32((p.z * inv).rounded())
+            )
+            if seen[key] == nil { seen[key] = p }
+        }
+        return Array(seen.values)
     }
 
     /// Promote auto-preview to active measurement (skip re-measuring)
