@@ -575,6 +575,23 @@ class ARMeasurementViewModel: ObservableObject {
                     return
                 }
 
+                // Object continuity check: compare new centroid against accumulated centroid.
+                // If too far apart, the user has moved to a different object — reset accumulation.
+                let newCentroid = Self.centroid(newPoints)
+                let sameObject: Bool = {
+                    guard !self.accumulatedPreviewPoints.isEmpty else { return true }
+                    let prevCentroid = Self.centroid(self.accumulatedPreviewPoints)
+                    let distance = simd_distance(prevCentroid, newCentroid)
+                    // Allow drift up to half the diagonal of the existing box, capped at 25cm
+                    let span = Self.maxSpan(self.accumulatedPreviewPoints)
+                    let threshold = max(0.05, min(0.25, span * 0.5))
+                    return distance < threshold
+                }()
+
+                if !sameObject {
+                    self.accumulatedPreviewPoints.removeAll(keepingCapacity: true)
+                }
+
                 // Accumulate point cloud across viewpoints
                 self.accumulatedPreviewPoints.append(contentsOf: newPoints)
                 self.accumulatedPreviewPoints = Self.downsampleByVoxel(
@@ -626,6 +643,24 @@ class ARMeasurementViewModel: ObservableObject {
         if !hasPendingFirstTap {
             removeGhostBox()
         }
+    }
+
+    static func centroid(_ points: [SIMD3<Float>]) -> SIMD3<Float> {
+        guard !points.isEmpty else { return .zero }
+        var sum = SIMD3<Float>.zero
+        for p in points { sum += p }
+        return sum / Float(points.count)
+    }
+
+    static func maxSpan(_ points: [SIMD3<Float>]) -> Float {
+        guard let first = points.first else { return 0 }
+        var minP = first, maxP = first
+        for p in points {
+            minP = min(minP, p)
+            maxP = max(maxP, p)
+        }
+        let extents = maxP - minP
+        return max(extents.x, max(extents.y, extents.z))
     }
 
     /// Voxel-grid downsampling: 1 representative point per cell
