@@ -98,6 +98,7 @@ class ARMeasurementViewModel: ObservableObject {
 
     // Auto-detection: live preview measurement
     @Published private(set) var hasAutoPreview: Bool = false
+    @Published private(set) var autoPreviewCaptureCount: Int = 0
     private var autoPreviewResult: MeasurementCalculator.MeasurementResult?
     private var autoPreviewTask: Task<Void, Never>?
     private var lastAutoPreviewTime: TimeInterval = 0
@@ -440,8 +441,12 @@ class ARMeasurementViewModel: ObservableObject {
         }
 
         // Background segmentation management
+        // Allow auto-preview during motion (.targetDetected) so the user can scan
+        // around the object continuously, like Apple's Object Capture.
         if reticleTargetState == .targetLocked {
             startBackgroundSegmentationIfNeeded(frame: frame, cameraPosition: cameraPosition)
+            startAutoPreviewIfNeeded(frame: frame)
+        } else if reticleTargetState == .targetDetected {
             startAutoPreviewIfNeeded(frame: frame)
         } else if reticleTargetState == .noTarget {
             stopBackgroundSegmentation()
@@ -590,6 +595,7 @@ class ARMeasurementViewModel: ObservableObject {
 
                 if !sameObject {
                     self.accumulatedPreviewPoints.removeAll(keepingCapacity: true)
+                    self.autoPreviewCaptureCount = 0
                 }
 
                 // Accumulate point cloud across viewpoints
@@ -625,6 +631,7 @@ class ARMeasurementViewModel: ObservableObject {
 
                 self.autoPreviewResult = mergedResult
                 self.hasAutoPreview = true
+                self.autoPreviewCaptureCount += 1
                 self.showGhostBox(for: mergedBox)
                 self.autoPreviewTask = nil
             } catch {
@@ -638,6 +645,7 @@ class ARMeasurementViewModel: ObservableObject {
         autoPreviewTask = nil
         autoPreviewResult = nil
         hasAutoPreview = false
+        autoPreviewCaptureCount = 0
         accumulatedPreviewPoints.removeAll(keepingCapacity: false)
         // Only remove ghost if no pending first-tap result
         if !hasPendingFirstTap {
@@ -694,6 +702,8 @@ class ARMeasurementViewModel: ObservableObject {
         autoPreviewTask = nil
         autoPreviewResult = nil
         hasAutoPreview = false
+        autoPreviewCaptureCount = 0
+        accumulatedPreviewPoints.removeAll(keepingCapacity: false)
         removeGhostBox()
 
         // Reset pending state

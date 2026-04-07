@@ -88,6 +88,7 @@ struct ScanningIndicator: View {
 struct InstructionCard: View {
     enum Mode: Equatable {
         case tap, box, refine, secondTap, label, confirm
+        case holdSteady, scanAround
         case processing
         case ready(String)  // tracking message
         case refinementFailed(String)
@@ -110,6 +111,8 @@ struct InstructionCard: View {
         case .secondTap: return "arrow.triangle.2.circlepath"
         case .label: return "doc.text.viewfinder"
         case .confirm: return "checkmark.circle.fill"
+        case .holdSteady: return "hand.raised.fill"
+        case .scanAround: return "arrow.triangle.2.circlepath.camera"
         case .processing: return "circle.dotted"
         case .refinementFailed: return "exclamationmark.triangle.fill"
         case .ready:
@@ -127,6 +130,8 @@ struct InstructionCard: View {
         case .secondTap: return String(localized: "Tap again from a different angle")
         case .label: return String(localized: "Point at a label and tap")
         case .confirm: return String(localized: "Tap to confirm")
+        case .holdSteady: return String(localized: "Hold steady on the object")
+        case .scanAround: return String(localized: "Slowly scan around to refine")
         case .processing: return String(localized: "Processing...")
         case .refinementFailed(let msg): return msg
         case .ready(let msg): return msg

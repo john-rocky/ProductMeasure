@@ -232,7 +232,15 @@ struct ARMeasurementView: View {
                                     }
                                 }
                             } else if activeSelectionMode == .tap && viewModel.hasAutoPreview {
-                                InstructionCard(mode: .confirm)
+                                // First capture: encourage scanning around to refine
+                                // 2+ captures: prompt to tap confirm
+                                if viewModel.autoPreviewCaptureCount >= 2 {
+                                    InstructionCard(mode: .confirm)
+                                } else {
+                                    InstructionCard(mode: .scanAround)
+                                }
+                            } else if activeSelectionMode == .tap && viewModel.reticleTargetState != .noTarget {
+                                InstructionCard(mode: .holdSteady)
                             } else if activeSelectionMode == .tap && viewModel.animationPhase == .showingTargetBrackets {
                                 InstructionCard(mode: .tap)
                             } else if activeSelectionMode == .box {
