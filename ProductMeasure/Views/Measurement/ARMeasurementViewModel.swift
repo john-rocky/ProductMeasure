@@ -2284,7 +2284,9 @@ class ARMeasurementViewModel: ObservableObject {
 
         let entity = Entity()
         let edges = boundingBox.edges
-        let ghostColor = PMTheme.uiGreen.withAlphaComponent(0.25)
+        // Use full opacity bright green — RealityKit transparency on edges is hard to see
+        let edgeColor = PMTheme.uiGreen
+        let edgeRadius = PMTheme.innerEdgeRadius * 1.4
 
         for edge in edges {
             let start = edge.0
@@ -2293,9 +2295,8 @@ class ARMeasurementViewModel: ObservableObject {
             let length = simd_distance(start, end)
             guard length > 0.0001 else { continue }
 
-            let mesh = MeshResource.generateBox(size: SIMD3<Float>(PMTheme.innerEdgeRadius, PMTheme.innerEdgeRadius, length))
-            var material = UnlitMaterial(color: ghostColor)
-            material.blending = .transparent(opacity: .init(floatLiteral: 0.25))
+            let mesh = MeshResource.generateBox(size: SIMD3<Float>(edgeRadius, edgeRadius, length))
+            let material = UnlitMaterial(color: edgeColor)
             let edgeEntity = ModelEntity(mesh: mesh, materials: [material])
 
             let direction = simd_normalize(end - start)
@@ -2304,6 +2305,16 @@ class ARMeasurementViewModel: ObservableObject {
             edgeEntity.position = mid
             edgeEntity.orientation = rot
             entity.addChild(edgeEntity)
+        }
+
+        // Add corner spheres for stronger visibility
+        let cornerRadius = PMTheme.cornerMarkerRadiusSmall * 1.5
+        for corner in boundingBox.corners {
+            let sphereMesh = MeshResource.generateSphere(radius: cornerRadius)
+            let sphereMat = UnlitMaterial(color: PMTheme.uiGreen)
+            let sphereEntity = ModelEntity(mesh: sphereMesh, materials: [sphereMat])
+            sphereEntity.position = corner
+            entity.addChild(sphereEntity)
         }
 
         let anchor = AnchorEntity(world: .zero)
