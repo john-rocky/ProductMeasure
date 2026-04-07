@@ -351,14 +351,12 @@ class ARMeasurementViewModel: ObservableObject {
 
         if newLevel != stabilityLevel {
             stabilityLevel = newLevel
-            if newLevel == .locked && lastHapticLevel != .locked {
-                triggerStabilityHaptic()
-            }
             lastHapticLevel = newLevel
         }
     }
 
     private func triggerStabilityHaptic() {
+        // Disabled — felt too noisy when reticle locked frequently
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.prepare()
         generator.impactOccurred(intensity: 0.6)
@@ -544,9 +542,9 @@ class ARMeasurementViewModel: ObservableObject {
     private func startAutoPreviewIfNeeded(frame: ARFrame) {
         // Skip if already processing or has active measurement
         guard !isProcessing && currentMeasurement == nil && !hasPendingFirstTap else { return }
-        // Throttle: at most once per 1.0s
+        // Throttle: at most once per 1.5s
         let now = frame.timestamp
-        guard now - lastAutoPreviewTime >= 1.0 else { return }
+        guard now - lastAutoPreviewTime >= 1.5 else { return }
         guard autoPreviewTask == nil else { return }
 
         let viewSize = sessionManager.arView.bounds.size
@@ -2369,13 +2367,13 @@ class ARMeasurementViewModel: ObservableObject {
     // MARK: - Ghost Box (first-tap preview)
 
     private func showGhostBox(for boundingBox: BoundingBox3D) {
+        // If a ghost already exists, just rebuild geometry but skip the fade-in
+        let isFirstAppearance = (ghostBoxAnchor == nil)
         removeGhostBox()
 
         let entity = Entity()
         let edges = boundingBox.edges
-        // Use full opacity bright green — RealityKit transparency on edges is hard to see
-        let edgeColor = PMTheme.uiGreen
-        let edgeRadius = PMTheme.innerEdgeRadius * 1.4
+        let edgeRadius = PMTheme.innerEdgeRadius
 
         for edge in edges {
             let start = edge.0
@@ -2385,7 +2383,7 @@ class ARMeasurementViewModel: ObservableObject {
             guard length > 0.0001 else { continue }
 
             let mesh = MeshResource.generateBox(size: SIMD3<Float>(edgeRadius, edgeRadius, length))
-            let material = UnlitMaterial(color: edgeColor)
+            let material = UnlitMaterial(color: PMTheme.uiGreen)
             let edgeEntity = ModelEntity(mesh: mesh, materials: [material])
 
             let direction = simd_normalize(end - start)
@@ -2396,8 +2394,8 @@ class ARMeasurementViewModel: ObservableObject {
             entity.addChild(edgeEntity)
         }
 
-        // Add corner spheres for stronger visibility
-        let cornerRadius = PMTheme.cornerMarkerRadiusSmall * 1.5
+        // Subtle corner marks (smaller, fewer)
+        let cornerRadius = PMTheme.cornerMarkerRadiusSmall
         for corner in boundingBox.corners {
             let sphereMesh = MeshResource.generateSphere(radius: cornerRadius)
             let sphereMat = UnlitMaterial(color: PMTheme.uiGreen)
@@ -2410,6 +2408,14 @@ class ARMeasurementViewModel: ObservableObject {
         anchor.addChild(entity)
         sessionManager.arView.scene.addAnchor(anchor)
         ghostBoxAnchor = anchor
+
+        // Fade in only on first appearance
+        if isFirstAppearance {
+            entity.scale = SIMD3<Float>(repeating: 0.92)
+            var fadeInTransform = entity.transform
+            fadeInTransform.scale = SIMD3<Float>(repeating: 1.0)
+            entity.move(to: fadeInTransform, relativeTo: entity.parent, duration: 0.35, timingFunction: .easeOut)
+        }
     }
 
     private func removeGhostBox() {
