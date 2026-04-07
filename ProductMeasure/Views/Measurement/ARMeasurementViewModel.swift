@@ -547,8 +547,10 @@ class ARMeasurementViewModel: ObservableObject {
     // MARK: - Auto Preview Measurement
 
     private func startAutoPreviewIfNeeded(frame: ARFrame) {
-        // Skip if already processing or has active measurement
-        guard !isProcessing && currentMeasurement == nil && !hasPendingFirstTap else { return }
+        // Skip if already processing or pending first-tap state
+        guard !isProcessing && !hasPendingFirstTap else { return }
+        // Skip during editing/refining/label scanning
+        guard !isEditing && !isRefining && !isReadingLabel else { return }
         // Throttle: at most once per 1.5s
         let now = frame.timestamp
         guard now - lastAutoPreviewTime >= 1.5 else { return }
@@ -571,7 +573,7 @@ class ARMeasurementViewModel: ObservableObject {
                     mode: mode
                 )
                 guard !Task.isCancelled else { return }
-                guard !self.isProcessing && self.currentMeasurement == nil && !self.hasPendingFirstTap else {
+                guard !self.isProcessing && !self.hasPendingFirstTap else {
                     self.autoPreviewTask = nil
                     return
                 }
@@ -580,9 +582,25 @@ class ARMeasurementViewModel: ObservableObject {
                     return
                 }
 
+                let newCentroid = Self.centroid(newPoints)
+
+                // If a measurement is currently active, only show preview when pointing
+                // at a clearly different object. Otherwise the preview overlaps the
+                // active wireframe and creates visual noise.
+                if let active = self.currentMeasurement {
+                    let activeCenter = active.boundingBox.center
+                    let activeSpan = max(active.boundingBox.extents.x, max(active.boundingBox.extents.y, active.boundingBox.extents.z))
+                    let separation = simd_distance(activeCenter, newCentroid)
+                    // Require new centroid to be outside the active box (with margin)
+                    let minSeparation = activeSpan * 0.7 + 0.05
+                    if separation < minSeparation {
+                        self.autoPreviewTask = nil
+                        return
+                    }
+                }
+
                 // Object continuity check: compare new centroid against accumulated centroid.
                 // If too far apart, the user has moved to a different object — reset accumulation.
-                let newCentroid = Self.centroid(newPoints)
                 let sameObject: Bool = {
                     guard !self.accumulatedPreviewPoints.isEmpty else { return true }
                     let prevCentroid = Self.centroid(self.accumulatedPreviewPoints)
@@ -696,6 +714,14 @@ class ARMeasurementViewModel: ObservableObject {
         let floorY = result.detectedFloorY
         isFloorPlaneBacked = result.detectedFloorY != nil
         originalFloorY = floorY
+
+        // Auto-save existing measurement as completed (so the new one can take over)
+        if let existing = currentMeasurement {
+            convertActiveBoxToCompleted(result: existing, unit: currentUnit)
+            currentMeasurement = nil
+            animationCoordinator.cancelAnimation()
+            animationContext = nil
+        }
 
         // Clean up auto-preview state but keep ghost momentarily (animation will replace)
         autoPreviewTask?.cancel()
