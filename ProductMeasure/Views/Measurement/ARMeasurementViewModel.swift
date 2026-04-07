@@ -166,6 +166,8 @@ class ARMeasurementViewModel: ObservableObject {
 
     // Ghost box: translucent wireframe shown after first tap while awaiting second
     private var ghostBoxAnchor: AnchorEntity?
+    private var ghostEdgeEntities: [ModelEntity] = []
+    private var ghostCornerEntities: [ModelEntity] = []
 
     // Current measurement unit (passed from view)
     var currentUnit: MeasurementUnit = .centimeters
@@ -2367,13 +2369,58 @@ class ARMeasurementViewModel: ObservableObject {
     // MARK: - Ghost Box (first-tap preview)
 
     private func showGhostBox(for boundingBox: BoundingBox3D) {
-        // If a ghost already exists, just rebuild geometry but skip the fade-in
-        let isFirstAppearance = (ghostBoxAnchor == nil)
-        removeGhostBox()
-
-        let entity = Entity()
         let edges = boundingBox.edges
+        let corners = boundingBox.corners
         let edgeRadius = PMTheme.innerEdgeRadius
+        let cornerRadius = PMTheme.cornerMarkerRadiusSmall
+
+        // Reuse existing entities if box structure matches (always 12 edges, 8 corners)
+        let canReuse = ghostBoxAnchor != nil
+            && ghostEdgeEntities.count == edges.count
+            && ghostCornerEntities.count == corners.count
+
+        if canReuse {
+            // Animate existing entities to new transforms
+            for (i, edge) in edges.enumerated() {
+                let start = edge.0
+                let end = edge.1
+                let mid = (start + end) / 2.0
+                let length = simd_distance(start, end)
+                guard length > 0.0001 else { continue }
+
+                var newTransform = ghostEdgeEntities[i].transform
+                newTransform.translation = mid
+                let direction = simd_normalize(end - start)
+                let defaultDir = SIMD3<Float>(0, 0, 1)
+                newTransform.rotation = simd_quaternion(defaultDir, direction)
+                // Scale Z to match new length (mesh is unit-length)
+                newTransform.scale = SIMD3<Float>(1, 1, length)
+
+                ghostEdgeEntities[i].move(
+                    to: newTransform,
+                    relativeTo: ghostEdgeEntities[i].parent,
+                    duration: 0.35,
+                    timingFunction: .easeInOut
+                )
+            }
+            for (i, corner) in corners.enumerated() {
+                var newTransform = ghostCornerEntities[i].transform
+                newTransform.translation = corner
+                ghostCornerEntities[i].move(
+                    to: newTransform,
+                    relativeTo: ghostCornerEntities[i].parent,
+                    duration: 0.35,
+                    timingFunction: .easeInOut
+                )
+            }
+            return
+        }
+
+        // First appearance: build fresh hierarchy
+        removeGhostBox()
+        let container = Entity()
+        let unitMesh = MeshResource.generateBox(size: SIMD3<Float>(edgeRadius, edgeRadius, 1.0))
+        let edgeMaterial = UnlitMaterial(color: PMTheme.uiGreen)
 
         for edge in edges {
             let start = edge.0
@@ -2382,45 +2429,42 @@ class ARMeasurementViewModel: ObservableObject {
             let length = simd_distance(start, end)
             guard length > 0.0001 else { continue }
 
-            let mesh = MeshResource.generateBox(size: SIMD3<Float>(edgeRadius, edgeRadius, length))
-            let material = UnlitMaterial(color: PMTheme.uiGreen)
-            let edgeEntity = ModelEntity(mesh: mesh, materials: [material])
-
+            let edgeEntity = ModelEntity(mesh: unitMesh, materials: [edgeMaterial])
+            edgeEntity.position = mid
             let direction = simd_normalize(end - start)
             let defaultDir = SIMD3<Float>(0, 0, 1)
-            let rot = simd_quaternion(defaultDir, direction)
-            edgeEntity.position = mid
-            edgeEntity.orientation = rot
-            entity.addChild(edgeEntity)
+            edgeEntity.orientation = simd_quaternion(defaultDir, direction)
+            edgeEntity.scale = SIMD3<Float>(1, 1, length)
+            container.addChild(edgeEntity)
+            ghostEdgeEntities.append(edgeEntity)
         }
 
-        // Subtle corner marks (smaller, fewer)
-        let cornerRadius = PMTheme.cornerMarkerRadiusSmall
-        for corner in boundingBox.corners {
-            let sphereMesh = MeshResource.generateSphere(radius: cornerRadius)
-            let sphereMat = UnlitMaterial(color: PMTheme.uiGreen)
+        let sphereMesh = MeshResource.generateSphere(radius: cornerRadius)
+        let sphereMat = UnlitMaterial(color: PMTheme.uiGreen)
+        for corner in corners {
             let sphereEntity = ModelEntity(mesh: sphereMesh, materials: [sphereMat])
             sphereEntity.position = corner
-            entity.addChild(sphereEntity)
+            container.addChild(sphereEntity)
+            ghostCornerEntities.append(sphereEntity)
         }
 
         let anchor = AnchorEntity(world: .zero)
-        anchor.addChild(entity)
+        anchor.addChild(container)
         sessionManager.arView.scene.addAnchor(anchor)
         ghostBoxAnchor = anchor
 
-        // Fade in only on first appearance
-        if isFirstAppearance {
-            entity.scale = SIMD3<Float>(repeating: 0.92)
-            var fadeInTransform = entity.transform
-            fadeInTransform.scale = SIMD3<Float>(repeating: 1.0)
-            entity.move(to: fadeInTransform, relativeTo: entity.parent, duration: 0.35, timingFunction: .easeOut)
-        }
+        // Subtle scale fade-in on first appearance
+        container.scale = SIMD3<Float>(repeating: 0.92)
+        var fadeInTransform = container.transform
+        fadeInTransform.scale = SIMD3<Float>(repeating: 1.0)
+        container.move(to: fadeInTransform, relativeTo: container.parent, duration: 0.35, timingFunction: .easeOut)
     }
 
     private func removeGhostBox() {
         ghostBoxAnchor?.removeFromParent()
         ghostBoxAnchor = nil
+        ghostEdgeEntities.removeAll(keepingCapacity: false)
+        ghostCornerEntities.removeAll(keepingCapacity: false)
     }
 
     // MARK: - Tap Indicator
