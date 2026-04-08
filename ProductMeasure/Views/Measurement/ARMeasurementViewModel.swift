@@ -450,7 +450,14 @@ class ARMeasurementViewModel: ObservableObject {
             startAutoPreviewIfNeeded(frame: frame)
         } else if reticleTargetState == .noTarget {
             stopBackgroundSegmentation()
-            clearAutoPreview()
+            // Keep accumulated preview data during momentary reticle drops
+            // so the instruction card doesn't flicker between holdSteady/scanAround
+            if autoPreviewCaptureCount == 0 {
+                clearAutoPreview()
+            } else {
+                autoPreviewTask?.cancel()
+                autoPreviewTask = nil
+            }
         }
     }
 

@@ -153,7 +153,35 @@ struct ARMeasurementView: View {
 
                         // Action buttons when result is showing
                         if viewModel.workflowStep == .showingResult, let result = viewModel.currentMeasurement {
-                            HStack(spacing: 12) {
+                            HStack(spacing: 10) {
+                                // Discard button
+                                Button(action: {
+                                    viewModel.handleActionTap(.discard, mode: measurementMode)
+                                }) {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(PMTheme.red)
+                                        .frame(width: 44, height: 44)
+                                        .background(PMTheme.surfaceDark.opacity(0.85))
+                                        .clipShape(Circle())
+                                        .overlay(Circle().strokeBorder(PMTheme.red.opacity(0.20), lineWidth: 0.5))
+                                }
+                                .accessibilityLabel("Discard Measurement")
+
+                                // Edit button
+                                Button(action: {
+                                    viewModel.handleActionTap(.edit, mode: measurementMode)
+                                }) {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(PMTheme.amber)
+                                        .frame(width: 44, height: 44)
+                                        .background(PMTheme.surfaceDark.opacity(0.85))
+                                        .clipShape(Circle())
+                                        .overlay(Circle().strokeBorder(PMTheme.amber.opacity(0.20), lineWidth: 0.5))
+                                }
+                                .accessibilityLabel("Edit Measurement")
+
                                 // Copy dimensions button
                                 Button(action: {
                                     let dims = measurementUnit.formatDimension(meters: result.length)

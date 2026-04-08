@@ -1,0 +1,4 @@
+• Improved scanning guidance prompts for better user experience
+• Auto-detection flow with real-time object preview
+• Multi-angle scanning for enhanced measurement accuracy
+• Various stability and performance improvements

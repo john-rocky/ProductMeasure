@@ -1,0 +1,1 @@
+This app requires a device with a LiDAR sensor (iPhone 12 Pro or later, iPad Pro 2020 or later). The app uses the LiDAR sensor to measure real-world objects in 3D. Without a LiDAR-equipped device, the app will display a notice that the sensor is not available.

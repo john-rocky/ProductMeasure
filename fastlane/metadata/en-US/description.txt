@@ -1,0 +1,17 @@
+Instantly measure any object in 3D using your iPhone's LiDAR sensor.
+
+ProductMeasure uses advanced AR technology to detect objects and generate precise bounding box measurements — length, width, and height — in seconds.
+
+KEY FEATURES:
+
+• Auto-Detection: Simply point your camera at an object. ProductMeasure automatically detects it and shows a live preview.
+• Multi-Angle Scanning: Move around the object for improved accuracy. Each new angle refines the measurement.
+• Tap or Box Selection: Tap directly on an object or draw a selection box for precise control.
+• Interactive Editing: Drag faces, rotate, and fine-tune measurements after capture.
+• Label Reader: Scan shipping labels to extract carton IDs, barcodes, tracking numbers, and more.
+• Export & Share: Save measurements with annotated photos. Export as CSV or JSON.
+• Multiple Units: Switch between centimeters, inches, and meters.
+
+REQUIREMENTS:
+• iPhone 12 Pro or later (LiDAR-equipped device required)
+• iOS 17.0 or later

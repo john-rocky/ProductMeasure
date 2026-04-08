@@ -124,14 +124,14 @@ struct InstructionCard: View {
 
     private var title: String {
         switch mode {
-        case .tap: return String(localized: "Point camera at an object")
+        case .tap: return String(localized: "Center the object on screen")
         case .box: return String(localized: "Draw a box to select")
         case .refine: return String(localized: "Refine from a different angle")
         case .secondTap: return String(localized: "Tap again from a different angle")
         case .label: return String(localized: "Point at a label and tap")
-        case .confirm: return String(localized: "Tap to confirm")
-        case .holdSteady: return String(localized: "Hold steady on the object")
-        case .scanAround: return String(localized: "Slowly scan around to refine")
+        case .confirm: return String(localized: "Tap to confirm measurement")
+        case .holdSteady: return String(localized: "Hold steady — detecting object")
+        case .scanAround: return String(localized: "Scan from different angles for accuracy")
         case .processing: return String(localized: "Processing...")
         case .refinementFailed(let msg): return msg
         case .ready(let msg): return msg

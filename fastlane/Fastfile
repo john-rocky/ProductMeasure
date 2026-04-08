@@ -1,0 +1,56 @@
+default_platform(:ios)
+
+platform :ios do
+
+  desc "Build and upload to App Store Connect for review"
+  lane :release do
+    # Increment build number (uses latest from App Store Connect)
+    increment_build_number(
+      build_number: latest_testflight_build_number + 1
+    )
+
+    # Build the app
+    build_app(
+      scheme: "ProductMeasure",
+      export_method: "app-store",
+      export_options: {
+        signingStyle: "automatic",
+        teamID: "MFN25KNUGJ"
+      }
+    )
+
+    # Upload to App Store Connect
+    upload_to_app_store(
+      skip_screenshots: true,
+      skip_metadata: false,
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        add_id_info_uses_idfa: false
+      }
+    )
+  end
+
+  desc "Build and upload to TestFlight only"
+  lane :beta do
+    increment_build_number(
+      build_number: latest_testflight_build_number + 1
+    )
+
+    build_app(
+      scheme: "ProductMeasure",
+      export_method: "app-store",
+      export_options: {
+        signingStyle: "automatic",
+        teamID: "MFN25KNUGJ"
+      }
+    )
+
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+end
