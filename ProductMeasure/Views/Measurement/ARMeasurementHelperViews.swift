@@ -187,20 +187,67 @@ struct InstructionCard: View {
 
 struct LiDARNotAvailableView: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "sensor.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer().frame(height: 40)
 
-            Text("LiDAR Not Available")
-                .font(.title2)
-                .fontWeight(.semibold)
+                Image(systemName: "sensor.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.secondary)
 
-            Text("This app requires a device with a LiDAR sensor for accurate 3D measurements. Please use an iPhone Pro or iPad Pro with LiDAR.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
+                Text("LiDAR Not Available")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Text("This app requires a LiDAR sensor for 3D measurements. Please use one of the following devices:")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
+
+                VStack(alignment: .leading, spacing: 16) {
+                    DeviceGroupView(
+                        title: String(localized: "iPhone"),
+                        devices: [
+                            "iPhone 12 Pro / Pro Max",
+                            "iPhone 13 Pro / Pro Max",
+                            "iPhone 14 Pro / Pro Max",
+                            "iPhone 15 Pro / Pro Max",
+                            "iPhone 16 Pro / Pro Max",
+                        ]
+                    )
+                    DeviceGroupView(
+                        title: String(localized: "iPad"),
+                        devices: [
+                            "iPad Pro 11\" (2nd gen〜)",
+                            "iPad Pro 12.9\" (4th gen〜)",
+                        ]
+                    )
+                }
+                .padding(.horizontal, 32)
+            }
+            .padding()
         }
-        .padding()
+    }
+}
+
+private struct DeviceGroupView: View {
+    let title: String
+    let devices: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.headline)
+            ForEach(devices, id: \.self) { device in
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.green)
+                    Text(device)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
     }
 }

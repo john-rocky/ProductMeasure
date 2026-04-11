@@ -29,7 +29,7 @@ struct ARMeasurementView: View {
     var body: some View {
         ZStack {
             // AR Camera View
-            if LiDARChecker.isLiDARAvailable {
+            if LiDARChecker.isARKitSupported {
                 ARMeasurementViewRepresentable(
                     viewModel: viewModel,
                     measurementMode: measurementMode,
@@ -66,6 +66,26 @@ struct ARMeasurementView: View {
                         )
                     }
                     .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                }
+
+                // ML depth mode warning
+                if viewModel.sessionManager.depthMode == .mlFallback {
+                    VStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11))
+                            Text(String(localized: "ML Depth — accuracy may be lower than LiDAR"))
+                                .font(PMTheme.mono(11))
+                        }
+                        .foregroundColor(PMTheme.amber)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(PMTheme.surfaceDark.opacity(0.85))
+                        .clipShape(Capsule())
+                        .padding(.top, 50)
+                        Spacer()
+                    }
                     .allowsHitTesting(false)
                 }
 

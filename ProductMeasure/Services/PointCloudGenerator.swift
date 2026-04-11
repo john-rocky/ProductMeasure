@@ -53,11 +53,13 @@ class PointCloudGenerator {
     ///   - frame: ARFrame with depth data
     ///   - mask: Segmentation mask
     ///   - imageSize: Camera image size
+    ///   - depthSource: Depth source (LiDAR or ML fallback)
     /// - Returns: PointCloud with 3D world coordinates
     func generatePointCloud(
         frame: ARFrame,
         maskedPixels: [(x: Int, y: Int)],
-        imageSize: CGSize
+        imageSize: CGSize,
+        depthSource: DepthSource? = nil
     ) -> PointCloud {
         #if DEBUG
         print("[PointCloud] Starting with \(maskedPixels.count) masked pixels")
@@ -70,7 +72,8 @@ class PointCloudGenerator {
         var depthData = depthProcessor.extractDepthForMask(
             frame: frame,
             maskedPixels: maskedPixels,
-            imageSize: imageSize
+            imageSize: imageSize,
+            depthSource: depthSource
         )
 
         let totalMaskedPixels = maskedPixels.count
@@ -116,7 +119,8 @@ class PointCloudGenerator {
         #endif
 
         // Get depth map size
-        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
+        let depthMapForSize = depthSource?.depthMap(for: frame) ?? frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
+        guard let depthMap = depthMapForSize else {
             return PointCloud(
                 points: [],
                 quality: MeasurementQuality(

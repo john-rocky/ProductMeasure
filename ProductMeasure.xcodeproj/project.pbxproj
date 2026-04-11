@@ -23,6 +23,8 @@
 		001000027 /* ARSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000028 /* ARSessionManager.swift */; };
 		001000029 /* InstanceSegmentationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000030 /* InstanceSegmentationService.swift */; };
 		001000031 /* DepthProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000032 /* DepthProcessor.swift */; };
+		001000160 /* DepthSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000161 /* DepthSource.swift */; };
+		001000162 /* MLDepthEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000163 /* MLDepthEstimator.swift */; };
 		001000033 /* PointCloudGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000034 /* PointCloudGenerator.swift */; };
 		001000035 /* BoundingBoxEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000036 /* BoundingBoxEstimator.swift */; };
 		001000037 /* MeasurementCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000038 /* MeasurementCalculator.swift */; };
@@ -64,6 +66,7 @@
 		001000148 /* StagePointCloudRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000149 /* StagePointCloudRenderer.swift */; };
 		001000150 /* MeasurementSendService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000151 /* MeasurementSendService.swift */; };
 		001000152 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 001000153 /* PrivacyInfo.xcprivacy */; };
+		001000164 /* DepthAnythingV2SmallF16.mlmodelc in Resources */ = {isa = PBXBuildFile; fileRef = 001000165 /* DepthAnythingV2SmallF16.mlmodelc */; };
 		001000154 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001000155 /* OnboardingView.swift */; };
 		009900010 /* TapIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009900011 /* TapIndicatorView.swift */; };
 /* End PBXBuildFile section */
@@ -85,6 +88,8 @@
 		001000028 /* ARSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARSessionManager.swift; sourceTree = "<group>"; };
 		001000030 /* InstanceSegmentationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstanceSegmentationService.swift; sourceTree = "<group>"; };
 		001000032 /* DepthProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepthProcessor.swift; sourceTree = "<group>"; };
+		001000161 /* DepthSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepthSource.swift; sourceTree = "<group>"; };
+		001000163 /* MLDepthEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLDepthEstimator.swift; sourceTree = "<group>"; };
 		001000034 /* PointCloudGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointCloudGenerator.swift; sourceTree = "<group>"; };
 		001000036 /* BoundingBoxEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundingBoxEstimator.swift; sourceTree = "<group>"; };
 		001000038 /* MeasurementCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementCalculator.swift; sourceTree = "<group>"; };
@@ -128,6 +133,7 @@
 		001000149 /* StagePointCloudRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagePointCloudRenderer.swift; sourceTree = "<group>"; };
 		001000151 /* MeasurementSendService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeasurementSendService.swift; sourceTree = "<group>"; };
 		001000153 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		001000165 /* DepthAnythingV2SmallF16.mlmodelc */ = {isa = PBXFileReference; lastKnownFileType = folder; path = DepthAnythingV2SmallF16.mlmodelc; sourceTree = "<group>"; };
 		001000155 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		009900011 /* TapIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapIndicatorView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -157,6 +163,7 @@
 				001000002 /* ProductMeasureApp.swift */,
 				001000053 /* Info.plist */,
 				001000153 /* PrivacyInfo.xcprivacy */,
+				001000165 /* DepthAnythingV2SmallF16.mlmodelc */,
 				001000052 /* Assets.xcassets */,
 				001000137 /* Localizable.xcstrings */,
 				001000059 /* Models */,
@@ -209,6 +216,8 @@
 				001000028 /* ARSessionManager.swift */,
 				001000030 /* InstanceSegmentationService.swift */,
 				001000032 /* DepthProcessor.swift */,
+				001000161 /* DepthSource.swift */,
+				001000163 /* MLDepthEstimator.swift */,
 				001000034 /* PointCloudGenerator.swift */,
 				001000036 /* BoundingBoxEstimator.swift */,
 				001000038 /* MeasurementCalculator.swift */,
@@ -368,6 +377,7 @@
 				001000051 /* Assets.xcassets in Resources */,
 				001000136 /* Localizable.xcstrings in Resources */,
 				001000152 /* PrivacyInfo.xcprivacy in Resources */,
+				001000164 /* DepthAnythingV2SmallF16.mlmodelc in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -396,6 +406,8 @@
 				001000027 /* ARSessionManager.swift in Sources */,
 				001000029 /* InstanceSegmentationService.swift in Sources */,
 				001000031 /* DepthProcessor.swift in Sources */,
+				001000160 /* DepthSource.swift in Sources */,
+				001000162 /* MLDepthEstimator.swift in Sources */,
 				001000033 /* PointCloudGenerator.swift in Sources */,
 				001000035 /* BoundingBoxEstimator.swift in Sources */,
 				001000037 /* MeasurementCalculator.swift in Sources */,
@@ -565,7 +577,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = MFN25KNUGJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -575,7 +587,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to measure objects using AR and LiDAR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIRequiredDeviceCapabilities = "arkit lidar";
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = arkit;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = NO;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -600,7 +612,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = MFN25KNUGJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -610,7 +622,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is required to measure objects using AR and LiDAR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIRequiredDeviceCapabilities = "arkit lidar";
+				INFOPLIST_KEY_UIRequiredDeviceCapabilities = arkit;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = NO;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;

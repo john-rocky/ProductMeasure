@@ -64,6 +64,9 @@ class MeasurementCalculator {
     private let pointCloudGenerator = PointCloudGenerator()
     private let boundingBoxEstimator = BoundingBoxEstimator()
 
+    /// Depth source abstraction (LiDAR or ML fallback)
+    var depthSource: DepthSource?
+
     #if DEBUG
     /// Diagnostics from the last pipeline run (populated on both success and failure)
     private(set) var lastDiagnostics: PipelineDiagnostics?
@@ -130,7 +133,7 @@ class MeasurementCalculator {
         guard let segmentation = try await segmentationService.segmentInstance(
             in: frame.capturedImage,
             at: normalizedTap,
-            depthMap: frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
+            depthMap: depthSource?.depthMap(for: frame) ?? frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
         ) else {
 #if DEBUG
             print("[Calculator] Segmentation failed - no instance found")
@@ -282,7 +285,8 @@ class MeasurementCalculator {
             var pointCloud = pointCloudGenerator.generatePointCloud(
                 frame: frame,
                 maskedPixels: filteredPixels,
-                imageSize: imageSize
+                imageSize: imageSize,
+                depthSource: depthSource
             )
 
             guard !pointCloud.isEmpty else {
@@ -661,7 +665,8 @@ class MeasurementCalculator {
 
             // Point cloud generation
             var pointCloud = pointCloudGenerator.generatePointCloud(
-                frame: frame, maskedPixels: filteredPixels, imageSize: imageSize
+                frame: frame, maskedPixels: filteredPixels, imageSize: imageSize,
+                depthSource: depthSource
             )
             guard !pointCloud.isEmpty else {
 #if DEBUG
@@ -1055,7 +1060,8 @@ class MeasurementCalculator {
             var pointCloud = pointCloudGenerator.generatePointCloud(
                 frame: frame,
                 maskedPixels: depthFilteredPixels,
-                imageSize: imageSize
+                imageSize: imageSize,
+                depthSource: depthSource
             )
 
             guard !pointCloud.isEmpty else {
@@ -1440,7 +1446,7 @@ class MeasurementCalculator {
         guard let segmentation = try await segmentationService.segmentInstance(
             in: frame.capturedImage,
             at: normalizedTap,
-            depthMap: frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
+            depthMap: depthSource?.depthMap(for: frame) ?? frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
         ) else {
 #if DEBUG
             print("[Refine] Segmentation failed")
@@ -1498,7 +1504,8 @@ class MeasurementCalculator {
 
             // 4. Point cloud generation
             var pointCloud = pointCloudGenerator.generatePointCloud(
-                frame: frame, maskedPixels: filteredPixels, imageSize: imageSize
+                frame: frame, maskedPixels: filteredPixels, imageSize: imageSize,
+                depthSource: depthSource
             )
             guard !pointCloud.isEmpty else { return nil }
 #if DEBUG
@@ -1594,7 +1601,7 @@ class MeasurementCalculator {
         tapPoint: CGPoint,
         imageSize: CGSize
     ) -> [(x: Int, y: Int)] {
-        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
+        guard let depthMap = depthSource?.depthMap(for: frame) ?? frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
 #if DEBUG
             print("[DepthFilter] No depth map available, returning all pixels")
 #endif
@@ -1834,7 +1841,7 @@ class MeasurementCalculator {
         seedPoint: CGPoint,
         imageSize: CGSize
     ) -> [(x: Int, y: Int)] {
-        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
+        guard let depthMap = depthSource?.depthMap(for: frame) ?? frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
             return maskedPixels
         }
 

@@ -41,25 +41,40 @@ class DepthProcessor {
     ///   - frame: ARFrame containing depth data
     ///   - maskedPixels: Pixels in the segmentation mask (in image coordinates)
     ///   - imageSize: Size of the camera image
+    ///   - depthSource: Depth source abstraction (LiDAR or ML)
     /// - Returns: Array of depth data for valid pixels
     func extractDepthForMask(
         frame: ARFrame,
         maskedPixels: [(x: Int, y: Int)],
-        imageSize: CGSize
+        imageSize: CGSize,
+        depthSource: DepthSource? = nil
     ) -> [DepthData] {
-        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap,
-              let confidenceMap = frame.smoothedSceneDepth?.confidenceMap ?? frame.sceneDepth?.confidenceMap else {
+        let depthMap: CVPixelBuffer?
+        let confidenceMap: CVPixelBuffer?
+        let hasConfidence: Bool
+
+        if let source = depthSource {
+            depthMap = source.depthMap(for: frame)
+            confidenceMap = source.confidenceMap(for: frame)
+            hasConfidence = source.hasConfidenceMap
+        } else {
+            depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap
+            confidenceMap = frame.smoothedSceneDepth?.confidenceMap ?? frame.sceneDepth?.confidenceMap
+            hasConfidence = true
+        }
+
+        guard let depthMap else {
 #if DEBUG
-            print("[Depth] No depth or confidence map available")
+            print("[Depth] No depth map available")
 #endif
             return []
         }
 
         CVPixelBufferLockBaseAddress(depthMap, .readOnly)
-        CVPixelBufferLockBaseAddress(confidenceMap, .readOnly)
+        if let confidenceMap { CVPixelBufferLockBaseAddress(confidenceMap, .readOnly) }
         defer {
             CVPixelBufferUnlockBaseAddress(depthMap, .readOnly)
-            CVPixelBufferUnlockBaseAddress(confidenceMap, .readOnly)
+            if let confidenceMap { CVPixelBufferUnlockBaseAddress(confidenceMap, .readOnly) }
         }
 
         let depthWidth = CVPixelBufferGetWidth(depthMap)
@@ -70,20 +85,29 @@ class DepthProcessor {
         print("[Depth] Image size: \(imageSize)")
 #endif
 
-        guard let depthBase = CVPixelBufferGetBaseAddress(depthMap),
-              let confBase = CVPixelBufferGetBaseAddress(confidenceMap) else {
+        guard let depthBase = CVPixelBufferGetBaseAddress(depthMap) else {
             return []
         }
 
         let depthBytesPerRow = CVPixelBufferGetBytesPerRow(depthMap)
-        let confBytesPerRow = CVPixelBufferGetBytesPerRow(confidenceMap)
 
 #if DEBUG
         print("[Depth] Depth bytes per row: \(depthBytesPerRow) (elements per row: \(depthBytesPerRow / 4))")
 #endif
 
         let depthPtr = depthBase.assumingMemoryBound(to: Float32.self)
-        let confPtr = confBase.assumingMemoryBound(to: UInt8.self)
+
+        // Confidence map pointers (optional)
+        let confPtr: UnsafeMutablePointer<UInt8>?
+        let confBytesPerRow: Int
+        if hasConfidence, let confidenceMap,
+           let confBase = CVPixelBufferGetBaseAddress(confidenceMap) {
+            confPtr = confBase.assumingMemoryBound(to: UInt8.self)
+            confBytesPerRow = CVPixelBufferGetBytesPerRow(confidenceMap)
+        } else {
+            confPtr = nil
+            confBytesPerRow = 0
+        }
 
         // Scale factors from image to depth coordinates
         let scaleX = CGFloat(depthWidth) / imageSize.width
@@ -110,19 +134,25 @@ class DepthProcessor {
             let depthIndex = depthY * (depthBytesPerRow / MemoryLayout<Float32>.size) + depthX
             let depth = depthPtr[depthIndex]
 
-            let confIndex = depthY * confBytesPerRow + depthX
-            let confValue = confPtr[confIndex]
-            let confidence = ARConfidenceLevel(rawValue: Int(confValue)) ?? .low
+            let confidence: ARConfidenceLevel
+            if let confPtr {
+                let confIndex = depthY * confBytesPerRow + depthX
+                let confValue = confPtr[confIndex]
+                confidence = ARConfidenceLevel(rawValue: Int(confValue)) ?? .low
+            } else {
+                // ML depth: no confidence, treat as medium
+                confidence = .medium
+            }
 
 #if DEBUG
-            // Debug first few samples
             if debugCount < 5 {
-                print("[Depth] Sample \(debugCount): imagePx=(\(pixel.x),\(pixel.y)) -> depthPx=(\(depthX),\(depthY)), depth=\(depth)m, conf=\(confValue)")
+                print("[Depth] Sample \(debugCount): imagePx=(\(pixel.x),\(pixel.y)) -> depthPx=(\(depthX),\(depthY)), depth=\(depth)m, conf=\(confidence.rawValue)")
                 debugCount += 1
             }
 #endif
 
-            if depth.isFinite && depth > 0 && confidence.rawValue >= ARConfidenceLevel.medium.rawValue {
+            let minConfidence = hasConfidence ? ARConfidenceLevel.medium.rawValue : 0
+            if depth.isFinite && depth > 0 && confidence.rawValue >= minConfidence {
                 results.append(DepthData(
                     depth: depth,
                     confidence: confidence,

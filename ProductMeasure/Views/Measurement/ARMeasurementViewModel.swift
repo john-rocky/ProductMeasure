@@ -156,6 +156,7 @@ class ARMeasurementViewModel: ObservableObject {
     let sessionManager = ARSessionManager()
     private let measurementCalculator = MeasurementCalculator()
     private let boxEditingService = BoxEditingService()
+    private var mlDepthEstimator: MLDepthEstimator?
     private var boxVisualization: BoxVisualization?
     private var boxVisualizationAnchor: AnchorEntity?
     private var pointCloudEntity: Entity?
@@ -205,6 +206,12 @@ class ARMeasurementViewModel: ObservableObject {
         // Configure animation coordinator with AR view
         if let arView = sessionManager.arView {
             animationCoordinator.configure(arView: arView)
+        }
+        // Setup depth source based on device capabilities
+        let depthSource = LiDARChecker.createDepthSource()
+        measurementCalculator.depthSource = depthSource
+        if let mlEstimator = depthSource as? MLDepthEstimator {
+            mlDepthEstimator = mlEstimator
         }
     }
 
@@ -368,7 +375,7 @@ class ARMeasurementViewModel: ObservableObject {
     // MARK: - Reticle Target Detection
 
     private func updateReticleTarget(frame: ARFrame, cameraPosition: SIMD3<Float>) {
-        guard let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
+        guard let depthMap = measurementCalculator.depthSource?.depthMap(for: frame) ?? frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap else {
             transitionReticleState(to: .noTarget)
             return
         }
@@ -873,6 +880,16 @@ class ARMeasurementViewModel: ObservableObject {
             print("[ViewModel] Raycast did not hit any surface")
         }
         #endif
+
+        // Calibrate ML depth estimator using raycast distance
+        if let mlEstimator = mlDepthEstimator, let hitPos = raycastHitPosition,
+           let frame = sessionManager.currentFrame {
+            let cameraPos = frame.camera.transform.columns.3
+            let distance = simd_length(SIMD3<Float>(hitPos.x - cameraPos.x, hitPos.y - cameraPos.y, hitPos.z - cameraPos.z))
+            let viewSize = sessionManager.arView.bounds.size
+            let normalizedPoint = CGPoint(x: location.x / viewSize.width, y: location.y / viewSize.height)
+            mlEstimator.calibrate(raycastDistance: distance, normalizedPoint: normalizedPoint, frame: frame)
+        }
 
         do {
             let viewSize = sessionManager.arView.bounds.size

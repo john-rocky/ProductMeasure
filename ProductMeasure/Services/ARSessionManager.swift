@@ -17,6 +17,7 @@ class ARSessionManager: NSObject, ObservableObject {
     @Published var isTrackingReady: Bool = false
     @Published var isTrackingError: Bool = false
     @Published var isDepthAvailable: Bool = false
+    @Published var depthMode: DepthMode = .none
     var currentFrame: ARFrame?
 
     // MARK: - AR Components
@@ -60,11 +61,15 @@ class ARSessionManager: NSObject, ObservableObject {
         let config = ARWorldTrackingConfiguration()
 
         // Enable depth if available
+        depthMode = LiDARChecker.depthMode
         if LiDARChecker.isSmoothedDepthAvailable {
             config.frameSemantics.insert(.smoothedSceneDepth)
             isDepthAvailable = true
         } else if LiDARChecker.isLiDARAvailable {
             config.frameSemantics.insert(.sceneDepth)
+            isDepthAvailable = true
+        } else if depthMode == .mlFallback {
+            // ML depth provides depth without LiDAR hardware
             isDepthAvailable = true
         }
 
